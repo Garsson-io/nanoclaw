@@ -115,7 +115,6 @@ function createSchema(database: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_api_usage_category ON api_usage(category);
     CREATE INDEX IF NOT EXISTS idx_api_usage_timestamp ON api_usage(timestamp);
     CREATE INDEX IF NOT EXISTS idx_api_usage_group ON api_usage(group_folder);
-    CREATE INDEX IF NOT EXISTS idx_api_usage_case ON api_usage(case_id);
   `);
 
   // Add context_mode column if it doesn't exist (migration for existing DBs)
@@ -177,12 +176,12 @@ function createSchema(database: Database.Database): void {
   // Add case_id column to api_usage (migration for existing DBs)
   try {
     database.exec(`ALTER TABLE api_usage ADD COLUMN case_id TEXT`);
-    database.exec(
-      `CREATE INDEX IF NOT EXISTS idx_api_usage_case ON api_usage(case_id)`,
-    );
   } catch {
     /* column already exists */
   }
+  database.exec(
+    `CREATE INDEX IF NOT EXISTS idx_api_usage_case ON api_usage(case_id)`,
+  );
 
   // Add usage_category column to registered_groups (migration for existing DBs)
   try {
@@ -207,6 +206,8 @@ function createSchema(database: Database.Database): void {
     seed.run('research', 'Research', 'Web research and information gathering', now);
     seed.run('communication', 'Communication', 'Customer emails, messages, and replies', now);
     seed.run('automation', 'Automation', 'Scheduled tasks and automated workflows', now);
+    seed.run('browser', 'Browser Use', 'Browser automation, web scraping, and browsing tasks', now);
+    seed.run('documents', 'Documents', 'PDF processing and document analysis', now);
   }
 }
 
