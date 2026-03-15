@@ -35,4 +35,7 @@ groups/global/*
 # Skills system (local per-installation state)
 .nanoclaw/
 
+# Case worktrees (created by cases skill for dev cases)
+.claude/worktrees/
+
 agents-sdk-docs

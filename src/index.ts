@@ -47,6 +47,7 @@ import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
 import { findChannel, formatMessages, formatOutbound } from './router.js';
 import {
+  addCaseCost,
   addCaseTime,
   Case,
   formatCaseStatus,
@@ -332,6 +333,18 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
           outputSentToUser = true;
         }
         resetIdleTimer();
+      }
+
+      // Integration point: if usage-tracking skill is merged, recordUsage()
+      // should be called here with targetCase?.id to attribute API costs.
+      // e.g. recordUsage(result.usage, group.folder, channel.name, sessionId, targetCase?.id)
+      if (result.usage && targetCase) {
+        try {
+          if (result.usage.totalCostUsd > 0) addCaseCost(targetCase.id, result.usage.totalCostUsd);
+          if (result.usage.durationMs) addCaseTime(targetCase.id, result.usage.durationMs);
+        } catch (err) {
+          logger.warn({ caseId: targetCase.id, err }, 'Failed to update case metrics from usage');
+        }
       }
 
       if (result.status === 'success') {

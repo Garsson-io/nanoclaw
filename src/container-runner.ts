@@ -53,6 +53,8 @@ export interface ContainerOutput {
   result: string | null;
   newSessionId?: string;
   error?: string;
+  /** Populated by usage-tracking skill when merged. Cases use this for per-case cost/time. */
+  usage?: { totalCostUsd: number; durationMs?: number; [key: string]: unknown };
 }
 
 interface VolumeMount {
