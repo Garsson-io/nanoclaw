@@ -359,7 +359,8 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       (m) =>
         // Standard trigger: @Andy prefix from an allowed sender
         (TRIGGER_PATTERN.test(m.content.trim()) &&
-          (m.is_from_me || isTriggerAllowed(chatJid, m.sender, allowlistCfg))) ||
+          (m.is_from_me ||
+            isTriggerAllowed(chatJid, m.sender, allowlistCfg))) ||
         // Auto-trigger: leads/trusted senders activate without prefix
         isAutoTriggerSender(m.sender, allowlistCfg),
     );

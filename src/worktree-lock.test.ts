@@ -135,30 +135,22 @@ describe('worktree lock files', () => {
 describe('pruneCaseWorkspace guards', () => {
   it('throws when case status is active', () => {
     const c = makeCase({ status: 'active' });
-    expect(() => pruneCaseWorkspace(c)).toThrow(
-      /status is 'active'/,
-    );
+    expect(() => pruneCaseWorkspace(c)).toThrow(/status is 'active'/);
   });
 
   it('throws when case status is blocked', () => {
     const c = makeCase({ status: 'blocked' });
-    expect(() => pruneCaseWorkspace(c)).toThrow(
-      /status is 'blocked'/,
-    );
+    expect(() => pruneCaseWorkspace(c)).toThrow(/status is 'blocked'/);
   });
 
   it('throws when case status is backlog', () => {
     const c = makeCase({ status: 'backlog' });
-    expect(() => pruneCaseWorkspace(c)).toThrow(
-      /status is 'backlog'/,
-    );
+    expect(() => pruneCaseWorkspace(c)).toThrow(/status is 'backlog'/);
   });
 
   it('throws when case status is suggested', () => {
     const c = makeCase({ status: 'suggested' });
-    expect(() => pruneCaseWorkspace(c)).toThrow(
-      /status is 'suggested'/,
-    );
+    expect(() => pruneCaseWorkspace(c)).toThrow(/status is 'suggested'/);
   });
 
   it('throws when worktree has active lock', () => {
