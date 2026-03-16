@@ -213,8 +213,8 @@ EOF
 Before ending a dev session, run through this checklist:
 
 1. **Dirty files** — `git status` on main and all verticals. Commit meaningful changes, discard noise.
-2. **Stale branches** — delete local branches for merged PRs (`git branch -d <branch>`).
-3. **Stale worktrees** — prune worktrees for completed/merged work (`git worktree remove <path>`).
+2. **Stale branches** — delete local branches for merged PRs (`git branch -d <branch>`). Use `-d` (not `-D`) to avoid deleting unmerged work.
+3. **Stale worktrees** — prune ONLY worktrees you created in this session. **NEVER force-remove worktrees you didn't create** — other Claude agents may be actively working in them. Check `git worktree list` and only remove worktrees whose branch names match your completed PRs. When in doubt, leave it.
 4. **Kaizen issues** — close any resolved issues in `Garsson-io/kaizen`.
 5. **Service health** — `systemctl --user status nanoclaw` — verify active and running.
 6. **Notify leads** if any pending action items remain for them.
