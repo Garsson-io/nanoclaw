@@ -1,0 +1,117 @@
+#!/bin/bash
+# kaizen-reflect.sh — Level 2 kaizen enforcement (Issue #9)
+# Triggers after `gh pr create` or `gh pr merge` to prompt structured
+# kaizen reflection. Outputs reflection prompts on stderr so the agent
+# sees them and acts on them.
+#
+# Runs as PostToolUse hook on Bash tool calls.
+# Always exits 0 — this is advisory, not blocking.
+
+INPUT=$(cat)
+COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
+STDOUT=$(echo "$INPUT" | jq -r '.tool_output.stdout // empty')
+STDERR=$(echo "$INPUT" | jq -r '.tool_output.stderr // empty')
+EXIT_CODE=$(echo "$INPUT" | jq -r '.tool_output.exit_code // "0"')
+
+# Only trigger on successful gh pr create or gh pr merge
+if [ "$EXIT_CODE" != "0" ]; then
+  exit 0
+fi
+
+IS_CREATE=false
+IS_MERGE=false
+if echo "$COMMAND" | grep -qE 'gh\s+pr\s+create'; then
+  IS_CREATE=true
+elif echo "$COMMAND" | grep -qE 'gh\s+pr\s+merge'; then
+  IS_MERGE=true
+else
+  exit 0
+fi
+
+# Extract PR URL from output
+PR_URL=$(echo "$STDOUT" | grep -oE 'https://github.com/[^ ]+/pull/[0-9]+' | head -1)
+if [ -z "$PR_URL" ]; then
+  PR_URL=$(echo "$STDERR" | grep -oE 'https://github.com/[^ ]+/pull/[0-9]+' | head -1)
+fi
+
+# Get current branch for context
+BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+
+# Get changed files for context
+CHANGED=$(git diff --name-only main...HEAD 2>/dev/null | head -20 || true)
+
+if [ "$IS_CREATE" = true ]; then
+  cat >&2 <<'REFLECT'
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 KAIZEN REFLECTION — Post-PR Creation
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Before moving on, reflect on the work that led to this PR:
+
+1. **What broke / what was the trigger?**
+   - Was this a bug fix, new feature, or process improvement?
+   - What was the root cause?
+
+2. **What level is this fix?**
+   - L1 (instructions only) → L2 (hooks/checks) → L3 (mechanistic)
+   - Is this the RIGHT level, or should it be escalated?
+
+3. **Has this type of failure happened before?**
+   - If yes → the previous level wasn't enough, escalate
+   - Check: https://github.com/Garsson-io/kaizen/issues
+
+4. **Process friction encountered?**
+   - What slowed you down? Missing docs? Unclear architecture?
+   - Would a hook, tool, or architectural change prevent this?
+
+5. **Action items:**
+   - File kaizen issues for any improvements identified
+   - Use: gh issue create --repo Garsson-io/kaizen --label kaizen
+
+Ensure the PR description includes the Kaizen section:
+  ## Kaizen
+  - **Root cause:** [what caused this]
+  - **Fix level:** L[1/2/3]
+  - **Repeat failure?** [yes/no]
+  - **Escalation needed?** [yes/no]
+  - **Backlog issue:** [link or N/A]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REFLECT
+fi
+
+if [ "$IS_MERGE" = true ]; then
+  cat >&2 <<'REFLECT'
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 KAIZEN REFLECTION — Post-Merge
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+The PR has been merged. Reflect on the outcome:
+
+1. **Was the fix at the right level?**
+   - L1 fixes often recur — should this be escalated to L2/L3?
+   - Did this fix address symptoms or root cause?
+
+2. **Are any kaizen issues now resolved?**
+   - Check: https://github.com/Garsson-io/kaizen/issues
+   - Close issues that this PR resolves
+
+3. **Deployment verification:**
+   - Follow the Post-Merge deployment procedure in CLAUDE.md
+   - Run the verification steps defined in the PR
+   - Report results to leads
+
+4. **Knowledge capture:**
+   - Should any learnings go into CLAUDE.md or docs/?
+   - Is there a pattern here that other agents should know?
+
+5. **Cleanup:**
+   - Delete the merged branch (local + remote)
+   - Remove the worktree if applicable
+   - Update any related kaizen issues
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REFLECT
+fi
+
+exit 0
