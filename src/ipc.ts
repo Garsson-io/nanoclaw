@@ -560,8 +560,10 @@ export async function processTaskIpc(
         )?.[0] ||
         '';
 
-      const { workspacePath, worktreePath, branchName } =
-        createCaseWorkspace(name, caseType);
+      const { workspacePath, worktreePath, branchName } = createCaseWorkspace(
+        name,
+        caseType,
+      );
 
       const newCase: Case = {
         id,

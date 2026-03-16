@@ -208,6 +208,17 @@ EOF
 **Known group JIDs:**
 - Garsson: `tg:-5128317012` (folder: `telegram_garsson`)
 
+## End-of-Session Cleanup
+
+Before ending a dev session, run through this checklist:
+
+1. **Dirty files** — `git status` on main and all verticals. Commit meaningful changes, discard noise.
+2. **Stale branches** — delete local branches for merged PRs (`git branch -d <branch>`).
+3. **Stale worktrees** — prune worktrees for completed/merged work (`git worktree remove <path>`).
+4. **Kaizen issues** — close any resolved issues in `Garsson-io/kaizen`.
+5. **Service health** — `systemctl --user status nanoclaw` — verify active and running.
+6. **Notify leads** if any pending action items remain for them.
+
 ## Git Remotes
 
 This is a fork of `qwibitai/nanoclaw`. Remotes:
