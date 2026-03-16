@@ -9,7 +9,9 @@ import {
   generateCaseId,
   generateCaseName,
   getCaseById,
+  getStaleDoneCases,
   insertCase,
+  pruneCaseWorkspace,
   suggestDevCase,
   updateCase,
 } from './cases.js';
@@ -161,6 +163,35 @@ export function startIpcWatcher(deps: IpcDeps): void {
 
   processIpcFiles();
   logger.info('IPC watcher started (per-group namespaces)');
+
+  // Auto-prune: every 10 minutes, prune cases that have been done for >24h
+  const AUTO_PRUNE_INTERVAL = 10 * 60 * 1000;
+  const AUTO_PRUNE_MAX_AGE = 24 * 60 * 60 * 1000;
+  setInterval(() => {
+    try {
+      const staleCases = getStaleDoneCases(AUTO_PRUNE_MAX_AGE);
+      for (const c of staleCases) {
+        logger.info(
+          { caseId: c.id, name: c.name, doneAt: c.done_at },
+          'Auto-pruning stale done case',
+        );
+        pruneCaseWorkspace(c);
+        updateCase(c.id, {
+          status: 'pruned',
+          pruned_at: new Date().toISOString(),
+          last_activity_at: new Date().toISOString(),
+        });
+      }
+      if (staleCases.length > 0) {
+        logger.info(
+          { count: staleCases.length },
+          'Auto-prune cycle complete',
+        );
+      }
+    } catch (err) {
+      logger.error({ err }, 'Auto-prune failed');
+    }
+  }, AUTO_PRUNE_INTERVAL);
 }
 
 export async function processTaskIpc(
@@ -515,6 +546,55 @@ export async function processTaskIpc(
             { caseId: data.caseId, sourceGroup },
             'Case marked active via IPC',
           );
+        }
+      }
+      break;
+
+    case 'case_mark_reviewed':
+      if (data.caseId) {
+        const caseItem = getCaseById(data.caseId);
+        if (caseItem && (isMain || caseItem.group_folder === sourceGroup)) {
+          if (caseItem.status !== 'done') {
+            logger.warn(
+              { caseId: data.caseId, status: caseItem.status },
+              'Cannot review case — not in done status',
+            );
+          } else {
+            updateCase(data.caseId, {
+              status: 'reviewed',
+              reviewed_at: new Date().toISOString(),
+              last_activity_at: new Date().toISOString(),
+            });
+            logger.info(
+              { caseId: data.caseId, sourceGroup },
+              'Case marked reviewed via IPC',
+            );
+          }
+        }
+      }
+      break;
+
+    case 'case_prune':
+      if (data.caseId) {
+        const caseItem = getCaseById(data.caseId);
+        if (caseItem && (isMain || caseItem.group_folder === sourceGroup)) {
+          if (caseItem.status !== 'done' && caseItem.status !== 'reviewed') {
+            logger.warn(
+              { caseId: data.caseId, status: caseItem.status },
+              'Cannot prune case — must be done or reviewed',
+            );
+          } else {
+            pruneCaseWorkspace(caseItem);
+            updateCase(data.caseId, {
+              status: 'pruned',
+              pruned_at: new Date().toISOString(),
+              last_activity_at: new Date().toISOString(),
+            });
+            logger.info(
+              { caseId: data.caseId, sourceGroup },
+              'Case pruned via IPC — workspace removed',
+            );
+          }
         }
       }
       break;
