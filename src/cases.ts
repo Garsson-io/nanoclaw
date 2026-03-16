@@ -218,7 +218,9 @@ export function getAllCases(): Case[] {
 
 export function getCasesByStatus(status: Case['status']): Case[] {
   return db
-    .prepare('SELECT * FROM cases WHERE status = ? ORDER BY last_activity_at ASC')
+    .prepare(
+      'SELECT * FROM cases WHERE status = ? ORDER BY last_activity_at ASC',
+    )
     .all(status) as Case[];
 }
 
@@ -423,9 +425,7 @@ export function removeWorktreeLock(worktreePath: string): void {
  * Check if a worktree has an active (non-stale) lock.
  * Returns the lock if active, null if no lock or stale.
  */
-export function checkWorktreeLock(
-  worktreePath: string,
-): WorktreeLock | null {
+export function checkWorktreeLock(worktreePath: string): WorktreeLock | null {
   const lockPath = path.join(worktreePath, LOCK_FILENAME);
   try {
     if (!fs.existsSync(lockPath)) return null;

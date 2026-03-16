@@ -192,10 +192,7 @@ export function startIpcWatcher(deps: IpcDeps): void {
         }
       }
       if (staleCases.length > 0) {
-        logger.info(
-          { count: staleCases.length },
-          'Auto-prune cycle complete',
-        );
+        logger.info({ count: staleCases.length }, 'Auto-prune cycle complete');
       }
     } catch (err) {
       logger.error({ err }, 'Auto-prune failed');

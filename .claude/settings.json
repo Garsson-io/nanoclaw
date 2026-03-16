@@ -19,6 +19,16 @@
             "type": "command",
             "command": "./.claude/hooks/enforce-case-worktree.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "./.claude/hooks/check-test-coverage.sh",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "./.claude/hooks/check-verification.sh",
+            "timeout": 15
           }
         ]
       },
@@ -28,6 +38,18 @@
           {
             "type": "command",
             "command": "./.claude/hooks/enforce-worktree-writes.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./.claude/hooks/kaizen-reflect.sh",
             "timeout": 10
           }
         ]
