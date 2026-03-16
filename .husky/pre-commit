@@ -9,3 +9,20 @@ npm run format:fix
 if [ -n "$STAGED_TS" ]; then
   echo "$STAGED_TS" | xargs git add
 fi
+
+# Advisory: warn if staged source files have no corresponding test changes (kaizen #15)
+STAGED_SRC=$(git diff --cached --name-only --diff-filter=d | \
+  grep -E '\.(ts|js|tsx|jsx)$' | \
+  grep -vE '(\.test\.|\.spec\.|__tests__|\.config\.|vitest\.|CLAUDE\.md|\.claude/|\.husky/)' || true)
+
+STAGED_TESTS=$(git diff --cached --name-only --diff-filter=d | \
+  grep -E '\.(test|spec)\.(ts|js|tsx|jsx)$' || true)
+
+if [ -n "$STAGED_SRC" ] && [ -z "$STAGED_TESTS" ]; then
+  SRC_COUNT=$(echo "$STAGED_SRC" | wc -l | tr -d ' ')
+  echo "" >&2
+  echo "⚠️  $SRC_COUNT source file(s) staged with no test changes:" >&2
+  echo "$STAGED_SRC" | sed 's/^/  - /' >&2
+  echo "  Consider adding tests before this reaches PR review." >&2
+  echo "" >&2
+fi
