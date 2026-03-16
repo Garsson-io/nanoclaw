@@ -216,6 +216,25 @@ export function getAllCases(): Case[] {
     .all() as Case[];
 }
 
+export function getCasesByStatus(status: Case['status']): Case[] {
+  return db
+    .prepare('SELECT * FROM cases WHERE status = ? ORDER BY last_activity_at ASC')
+    .all(status) as Case[];
+}
+
+/**
+ * Get done cases older than the given age (in milliseconds).
+ * Used by auto-prune to find stale completed work.
+ */
+export function getStaleDoneCases(maxAgeMs: number): Case[] {
+  const cutoff = new Date(Date.now() - maxAgeMs).toISOString();
+  return db
+    .prepare(
+      `SELECT * FROM cases WHERE status = 'done' AND done_at IS NOT NULL AND done_at < ? ORDER BY done_at ASC`,
+    )
+    .all(cutoff) as Case[];
+}
+
 export function updateCase(
   id: string,
   updates: Partial<
