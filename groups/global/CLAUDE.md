@@ -111,6 +111,24 @@ When marking a case done, reflect on:
 - What would make this type of work faster next time?
 - Suggest dev cases for any improvements needed
 
+## Verification Discipline
+
+### Path Tracing (dev cases)
+
+Before fixing anything, map the full execution path from trigger to outcome:
+1. Write down every link in the chain (e.g., policy file → mount → agent-runner reads it → SDK receives it → agent acts)
+2. After the fix, verify EVERY link — not just the one you changed
+3. The fix isn't done until the final user-visible outcome works
+
+### Test Invariants (dev cases)
+
+Before writing ANY test, state:
+- *INVARIANT:* what must be true
+- *SUT:* the exact system/function/artifact under test
+- *VERIFICATION:* how the test proves the invariant
+
+Never test mocks instead of real code. Never test the wrong artifact. Never declare "tests pass" when none cover your change.
+
 ## Your Workspace
 
 Files you create are saved in `/workspace/group/`. Use this for notes, research, or anything that should persist across cases.

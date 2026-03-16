@@ -105,6 +105,45 @@ These policies were learned from past mistakes. Follow them strictly.
     - **Affects humans directly?** → Must be Level 3 (humans should never wait on agent mistakes)
     - CLAUDE.md instructions are Level 1 — necessary but not sufficient. When they fail, escalate to hooks (Level 2) or architectural enforcement (Level 3).
 
+## Verification Discipline (Kaizen #11, #15, #17)
+
+### Path Tracing — MANDATORY before any fix
+
+Before writing ANY fix, map the full execution path from trigger to user-visible outcome:
+
+```
+1. MAP the chain: input → layer 1 → layer 2 → ... → user-visible outcome
+2. For each link: how to verify it works, what artifact/log/query proves it
+3. After the fix: verify EVERY link, not just the one you changed
+4. Self-review must trace the path — "I changed layer N, what happens at N+1...?"
+```
+
+**Never fix a single layer and declare done.** The fix isn't complete until the final outcome is verified end-to-end.
+
+### Invariant Statement — MANDATORY before writing tests
+
+Before writing ANY test, state explicitly:
+
+```
+INVARIANT: [what must be true]
+SUT: [exact system/function/artifact under test]
+VERIFICATION: [how the test proves the invariant holds]
+```
+
+**Anti-patterns to avoid:**
+- Testing mocks instead of real code (you're proving your mocks work, not your code)
+- Testing the wrong artifact (e.g., `/app/dist/` when runtime uses `/tmp/dist/`)
+- "All 275 tests pass" when none cover the actual change
+- Verifying implementation details (`cpSync was called`) instead of outcomes (`agent has the tool`)
+
+### Runtime Artifact Verification
+
+Always test the **actual deployed artifact**, not just source presence:
+- If code is compiled, test the compiled output
+- If code runs in a container, verify inside the container
+- If a mount provides a file, verify the mount exists AND the consumer reads it
+- "The file exists in the repo" is not verification — "the agent receives it at runtime" is
+
 ## Kaizen Backlog
 
 Future work, process improvements, and cross-repo engineering proposals are tracked as GitHub Issues in [`Garsson-io/kaizen`](https://github.com/Garsson-io/kaizen). When a dev agent identifies an improvement that's out of scope for the current PR, file it there with the `kaizen` label. Include: what, why, when, how, reproduction steps, and verification criteria.
