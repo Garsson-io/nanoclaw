@@ -316,7 +316,11 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         );
 
         // Prefix with case name for tracking in Telegram/chat
-        if (targetCase && text && !text.startsWith(`[case: ${targetCase.name}]`)) {
+        if (
+          targetCase &&
+          text &&
+          !text.startsWith(`[case: ${targetCase.name}]`)
+        ) {
           text = `[case: ${targetCase.name}]\n${text}`;
           updateCase(targetCase.id, {
             last_message: text.slice(0, 200),
@@ -336,10 +340,15 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       // e.g. recordUsage(result.usage, group.folder, channel.name, sessionId, targetCase?.id)
       if (result.usage && targetCase) {
         try {
-          if (result.usage.totalCostUsd > 0) addCaseCost(targetCase.id, result.usage.totalCostUsd);
-          if (result.usage.durationMs) addCaseTime(targetCase.id, result.usage.durationMs);
+          if (result.usage.totalCostUsd > 0)
+            addCaseCost(targetCase.id, result.usage.totalCostUsd);
+          if (result.usage.durationMs)
+            addCaseTime(targetCase.id, result.usage.durationMs);
         } catch (err) {
-          logger.warn({ caseId: targetCase.id, err }, 'Failed to update case metrics from usage');
+          logger.warn(
+            { caseId: targetCase.id, err },
+            'Failed to update case metrics from usage',
+          );
         }
       }
 

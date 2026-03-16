@@ -469,10 +469,16 @@ export async function processTaskIpc(
             status: 'done',
             done_at: new Date().toISOString(),
             last_activity_at: new Date().toISOString(),
-            conclusion: (data as Record<string, unknown>).conclusion as string || null,
-            last_message: (data as Record<string, unknown>).conclusion as string || caseItem.last_message,
+            conclusion:
+              ((data as Record<string, unknown>).conclusion as string) || null,
+            last_message:
+              ((data as Record<string, unknown>).conclusion as string) ||
+              caseItem.last_message,
           });
-          logger.info({ caseId: data.caseId, sourceGroup }, 'Case marked done via IPC');
+          logger.info(
+            { caseId: data.caseId, sourceGroup },
+            'Case marked done via IPC',
+          );
         }
       }
       break;
@@ -483,10 +489,15 @@ export async function processTaskIpc(
         if (caseItem && (isMain || caseItem.group_folder === sourceGroup)) {
           updateCase(data.caseId, {
             status: 'blocked',
-            blocked_on: (data as Record<string, unknown>).blocked_on as string || 'user',
+            blocked_on:
+              ((data as Record<string, unknown>).blocked_on as string) ||
+              'user',
             last_activity_at: new Date().toISOString(),
           });
-          logger.info({ caseId: data.caseId, sourceGroup }, 'Case marked blocked via IPC');
+          logger.info(
+            { caseId: data.caseId, sourceGroup },
+            'Case marked blocked via IPC',
+          );
         }
       }
       break;
@@ -500,7 +511,10 @@ export async function processTaskIpc(
             blocked_on: null,
             last_activity_at: new Date().toISOString(),
           });
-          logger.info({ caseId: data.caseId, sourceGroup }, 'Case marked active via IPC');
+          logger.info(
+            { caseId: data.caseId, sourceGroup },
+            'Case marked active via IPC',
+          );
         }
       }
       break;
@@ -509,9 +523,13 @@ export async function processTaskIpc(
       if (data.caseId) {
         const caseItem = getCaseById(data.caseId);
         if (caseItem && (isMain || caseItem.group_folder === sourceGroup)) {
-          const updates: Record<string, unknown> = { last_activity_at: new Date().toISOString() };
+          const updates: Record<string, unknown> = {
+            last_activity_at: new Date().toISOString(),
+          };
           if ((data as Record<string, unknown>).last_message) {
-            updates.last_message = (data as Record<string, unknown>).last_message;
+            updates.last_message = (
+              data as Record<string, unknown>
+            ).last_message;
           }
           updateCase(data.caseId, updates as Parameters<typeof updateCase>[1]);
         }
@@ -542,8 +560,10 @@ export async function processTaskIpc(
         )?.[0] ||
         '';
 
-      const { workspacePath, worktreePath, branchName } =
-        createCaseWorkspace(name, caseType);
+      const { workspacePath, worktreePath, branchName } = createCaseWorkspace(
+        name,
+        caseType,
+      );
 
       const newCase: Case = {
         id,
@@ -603,8 +623,15 @@ export async function processTaskIpc(
     }
 
     case 'case_suggest_dev':
-      if ((data as Record<string, unknown>).description && (data as Record<string, unknown>).sourceCaseId) {
-        const d = data as unknown as { description: string; sourceCaseId: string; chatJid?: string };
+      if (
+        (data as Record<string, unknown>).description &&
+        (data as Record<string, unknown>).sourceCaseId
+      ) {
+        const d = data as unknown as {
+          description: string;
+          sourceCaseId: string;
+          chatJid?: string;
+        };
         suggestDevCase({
           groupFolder: sourceGroup,
           chatJid: d.chatJid || '',
@@ -618,10 +645,14 @@ export async function processTaskIpc(
           ([, g]) => g.folder === sourceGroup,
         )?.[0];
         if (targetJid) {
-          deps.sendMessage(
-            targetJid,
-            `💡 Dev case suggested: ${d.description.slice(0, 200)}\n(from case ${d.sourceCaseId})\nReply "approve" to add to backlog.`,
-          ).catch(() => { /* non-critical */ });
+          deps
+            .sendMessage(
+              targetJid,
+              `💡 Dev case suggested: ${d.description.slice(0, 200)}\n(from case ${d.sourceCaseId})\nReply "approve" to add to backlog.`,
+            )
+            .catch(() => {
+              /* non-critical */
+            });
         }
       }
       break;
