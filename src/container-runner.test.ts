@@ -112,6 +112,64 @@ function emitOutputMarker(
   proc.stdout.push(`${OUTPUT_START_MARKER}\n${json}\n${OUTPUT_END_MARKER}\n`);
 }
 
+describe('global CLAUDE.md mount', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    fakeProc = createFakeProcess();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function runAndCaptureSpawnArgs(isMain: boolean): Promise<string[]> {
+    const fs = await import('fs');
+    const { spawn } = await import('child_process');
+
+    vi.spyOn(fs.default, 'existsSync').mockReturnValue(true);
+    vi.spyOn(fs.default, 'readdirSync').mockReturnValue([]);
+    vi.spyOn(fs.default, 'readFileSync').mockReturnValue('{}');
+
+    const input = { ...testInput, isMain };
+    const resultPromise = runContainerAgent(
+      testGroup,
+      input,
+      () => {},
+      async () => {},
+    );
+
+    await vi.advanceTimersByTimeAsync(10);
+    emitOutputMarker(fakeProc, { status: 'success', result: 'ok' });
+    await vi.advanceTimersByTimeAsync(10);
+    fakeProc.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+    await resultPromise;
+
+    // spawn is called with (command, args) — return the args
+    const spawnMock = spawn as unknown as ReturnType<typeof vi.fn>;
+    const lastCall = spawnMock.mock.calls[spawnMock.mock.calls.length - 1];
+    return lastCall[1] as string[];
+  }
+
+  it('mounts /workspace/global for main groups', async () => {
+    const args = await runAndCaptureSpawnArgs(true);
+    const globalMountArg = args.find(
+      (a: string) => typeof a === 'string' && a.includes('/workspace/global'),
+    );
+    expect(globalMountArg).toBeDefined();
+    expect(globalMountArg).toContain('groups/global');
+  });
+
+  it('mounts /workspace/global for non-main groups', async () => {
+    const args = await runAndCaptureSpawnArgs(false);
+    const globalMountArg = args.find(
+      (a: string) => typeof a === 'string' && a.includes('/workspace/global'),
+    );
+    expect(globalMountArg).toBeDefined();
+    expect(globalMountArg).toContain('groups/global');
+  });
+});
+
 describe('agent-runner source sync', () => {
   beforeEach(() => {
     vi.useFakeTimers();
