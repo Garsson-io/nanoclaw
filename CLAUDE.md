@@ -18,6 +18,43 @@ Every piece of work is a **case**. Cases provide isolated containers, sessions, 
 - **All dev work MUST be in a case with its own worktree.** Never modify code in main checkout.
 - Case naming: `YYMMDD-HHMM-kebab-description` (e.g., `260315-1430-fix-auth`)
 
+## Harness / Vertical Architecture
+
+NanoClaw is a **harness** — a platform that powers multiple private vertical business repos. Each vertical is a separate private repo under Garsson-io with its own domain workflows, tools, and data.
+
+```
+NanoClaw (harness, public)              Verticals (private repos)
+┌────────────────────────┐      ┌──────────────────────┐
+│ Channels (TG, WA, etc) │      │ garsson-insurance     │
+│ Container runtime      │─────▶│ garsson-prints        │
+│ Cases & routing        │      │ (future verticals)    │
+│ Skills system          │      └──────────────────────┘
+│ Base Dockerfile        │
+└────────────────────────┘
+```
+
+### Dependency placement rules
+
+| Dependency type | Where it goes | Example |
+|----------------|---------------|---------|
+| Universal system deps | Harness Dockerfile (`container/Dockerfile`) | `chromium`, `git`, `node` |
+| Vertical-specific system deps | Declared by vertical, installed in container | `poppler-utils` (insurance), `ghostscript` (prints) |
+| Vertical npm deps | Vertical's `package.json` | `sharp`, `pdfjs-dist` |
+| Domain tools/workflows | Vertical repo | `policy-cache-manager.js`, `workflows/` |
+| Harness infrastructure | This repo | `src/`, `container/`, skills |
+
+**Rules:**
+- **NEVER install packages on the host** — system deps go in Dockerfiles, npm deps in package.json
+- **Domain-specific code goes in the vertical repo**, not here
+- **Verticals are mounted into containers** at `/workspace/extra/{name}/`
+- **Work agents** get read-only tools, read-write data. **Dev agents** modify code in worktrees.
+
+### IP protection (future)
+
+- Vertical repos: private (domain knowledge, customer data)
+- Harness differentiators: move to private skills when needed
+- Base NanoClaw: stays open-source (the framework)
+
 ## Key Files
 
 | File | Purpose |
@@ -46,6 +83,17 @@ Every piece of work is a **case**. Cases provide isolated containers, sessions, 
 | `/contribute-skill` | Build and submit a new skill to the NanoClaw ecosystem |
 | `/qodo-pr-resolver` | Fetch and fix Qodo PR review issues interactively or in batch |
 | `/get-qodo-rules` | Load org- and repo-level coding rules from Qodo before code tasks |
+
+## Dev Agent Policies (Kaizen)
+
+These policies were learned from past mistakes. Follow them strictly.
+
+1. **Architecture decisions require explicit approval.** When choosing where code lives, what dependencies to use, or what tools to install — present options with tradeoffs and ask Aviad before proceeding. Don't assume.
+2. **NEVER install packages on the host machine.** System deps go in Dockerfiles. npm deps go in project package.json. The container is the runtime environment, not the host.
+3. **Research before installing.** Check existing NanoClaw skills first (some may already solve the problem). Search for modern, agent-compatible, container-friendly tools. Don't impulsively install the first package that comes to mind — evaluate alternatives. Present findings before proceeding.
+4. **Ask "harness or vertical?"** before writing any code. Domain-specific code (workflows, tools, business data) belongs in the vertical repo. Infrastructure code (channels, routing, containers) belongs here.
+5. **Put durable knowledge in CLAUDE.md and docs/, not just local memory.** `~/.claude/` memory is local to one machine and not synced to git. Any knowledge that future agents need must be in repo files.
+6. **Work agents get read-only tools.** They can USE tools but not modify them. Dev agents modify in worktrees.
 
 ## Development
 
