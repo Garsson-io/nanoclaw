@@ -1,5 +1,17 @@
 {
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./.claude/hooks/enforce-case-worktree.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [
@@ -7,6 +19,11 @@
             "type": "command",
             "command": "./.claude/hooks/verify-before-stop.sh",
             "timeout": 60
+          },
+          {
+            "type": "command",
+            "command": "./.claude/hooks/check-cleanup-on-stop.sh",
+            "timeout": 10
           }
         ]
       }
