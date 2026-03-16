@@ -9,8 +9,11 @@ import {
   generateCaseId,
   generateCaseName,
   getCaseById,
+  heartbeatCase,
   insertCase,
+  lockCase,
   suggestDevCase,
+  unlockCase,
   updateCase,
 } from './cases.js';
 import type { Case } from './cases.js';
@@ -589,6 +592,8 @@ export async function processTaskIpc(
         total_cost_usd: 0,
         token_source: null,
         time_spent_ms: 0,
+        locked_by: null,
+        last_heartbeat: null,
       };
 
       insertCase(newCase);
@@ -618,6 +623,114 @@ export async function processTaskIpc(
           .catch(() => {
             /* non-critical */
           });
+      }
+      break;
+    }
+
+    case 'case_lock': {
+      const d = data as unknown as {
+        caseId: string;
+        agentSession: string;
+      };
+      if (!d.caseId || !d.agentSession) {
+        logger.warn({ sourceGroup }, 'case_lock missing caseId or agentSession');
+        break;
+      }
+      const caseItem = getCaseById(d.caseId);
+      if (!caseItem || (!isMain && caseItem.group_folder !== sourceGroup)) {
+        logger.warn(
+          { caseId: d.caseId, sourceGroup },
+          'Unauthorized case_lock attempt',
+        );
+        break;
+      }
+      const lockResult = lockCase(d.caseId, d.agentSession);
+      if (!lockResult.success) {
+        logger.warn(
+          { caseId: d.caseId, error: lockResult.error },
+          'case_lock failed',
+        );
+      }
+      // Write result file
+      const lockResultDir = path.join(
+        DATA_DIR,
+        'ipc',
+        sourceGroup,
+        'case_results',
+      );
+      fs.mkdirSync(lockResultDir, { recursive: true });
+      const lockRequestId = (data as Record<string, unknown>).requestId;
+      const lockResultFile = lockRequestId
+        ? `${lockRequestId}.json`
+        : `lock-${d.caseId}.json`;
+      fs.writeFileSync(
+        path.join(lockResultDir, lockResultFile),
+        JSON.stringify(lockResult),
+      );
+      break;
+    }
+
+    case 'case_unlock': {
+      const d = data as unknown as {
+        caseId: string;
+        agentSession: string;
+        force?: boolean;
+      };
+      if (!d.caseId || !d.agentSession) {
+        logger.warn(
+          { sourceGroup },
+          'case_unlock missing caseId or agentSession',
+        );
+        break;
+      }
+      const caseItem = getCaseById(d.caseId);
+      if (!caseItem || (!isMain && caseItem.group_folder !== sourceGroup)) {
+        logger.warn(
+          { caseId: d.caseId, sourceGroup },
+          'Unauthorized case_unlock attempt',
+        );
+        break;
+      }
+      const unlockResult = unlockCase(
+        d.caseId,
+        d.agentSession,
+        d.force || false,
+      );
+      if (!unlockResult.success) {
+        logger.warn(
+          { caseId: d.caseId, error: unlockResult.error },
+          'case_unlock failed',
+        );
+      }
+      break;
+    }
+
+    case 'case_heartbeat': {
+      const d = data as unknown as {
+        caseId: string;
+        agentSession: string;
+      };
+      if (!d.caseId || !d.agentSession) {
+        logger.warn(
+          { sourceGroup },
+          'case_heartbeat missing caseId or agentSession',
+        );
+        break;
+      }
+      const caseItem = getCaseById(d.caseId);
+      if (!caseItem || (!isMain && caseItem.group_folder !== sourceGroup)) {
+        logger.warn(
+          { caseId: d.caseId, sourceGroup },
+          'Unauthorized case_heartbeat attempt',
+        );
+        break;
+      }
+      const hbResult = heartbeatCase(d.caseId, d.agentSession);
+      if (!hbResult.success) {
+        logger.warn(
+          { caseId: d.caseId, error: hbResult.error },
+          'case_heartbeat failed',
+        );
       }
       break;
     }

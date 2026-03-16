@@ -208,16 +208,41 @@ EOF
 **Known group JIDs:**
 - Garsson: `tg:-5128317012` (folder: `telegram_garsson`)
 
+## Worktree Lock Protocol (L3 Enforcement)
+
+Worktrees are protected by a mechanistic lock system that prevents accidental deletion of active workspaces. This replaces the previous L1 (instructions-only) policy after an incident where an agent deleted another agent's active worktree.
+
+### How it works
+
+1. **Lock files** — `.worktree-lock.json` in each worktree directory records which agent is working there
+2. **DB locks** — `locked_by` and `last_heartbeat` columns in the cases table track ownership
+3. **Status guard** — `pruneCaseWorkspace()` refuses to prune cases in `active` or `blocked` status
+4. **Stale lock detection** — Locks with heartbeat >30 minutes old can be overridden
+
+### IPC commands for agents
+
+- `case_lock` — acquire exclusive lock on a case (fails if already locked by another session)
+- `case_unlock` — release lock (must be same agent, or set `force: true`)
+- `case_heartbeat` — update heartbeat timestamp (agents should call every 5 min while working)
+
+### Rules
+
+- **Before deleting ANY worktree**, the system checks for `.worktree-lock.json` — fresh locks block deletion
+- **Active/blocked cases cannot be pruned** — change status to `done` first
+- Agents should **lock on entry** and **unlock on exit** (commit → push → PR → done → unlock)
+- Do NOT manually delete worktrees — use `pruneCaseWorkspace()` which enforces all guards
+
 ## End-of-Session Cleanup
 
 Before ending a dev session, run through this checklist:
 
 1. **Dirty files** — `git status` on main and all verticals. Commit meaningful changes, discard noise.
 2. **Stale branches** — delete local branches for merged PRs (`git branch -d <branch>`). Use `-d` (not `-D`) to avoid deleting unmerged work.
-3. **Stale worktrees** — prune ONLY worktrees you created in this session. **NEVER force-remove worktrees you didn't create** — other Claude agents may be actively working in them. Check `git worktree list` and only remove worktrees whose branch names match your completed PRs. When in doubt, leave it.
-4. **Kaizen issues** — close any resolved issues in `Garsson-io/kaizen`.
-5. **Service health** — `systemctl --user status nanoclaw` — verify active and running.
-6. **Notify leads** if any pending action items remain for them.
+3. **Stale worktrees** — prune ONLY worktrees you created in this session. **NEVER force-remove worktrees you didn't create** — other Claude agents may be actively working in them. The system enforces this via lock files and status guards, but manual `rm -rf` bypasses all protection. Always use the case lifecycle (mark done → prune via code).
+4. **Release locks** — if you locked any cases, unlock them before exiting.
+5. **Kaizen issues** — close any resolved issues in `Garsson-io/kaizen`.
+6. **Service health** — `systemctl --user status nanoclaw` — verify active and running.
+7. **Notify leads** if any pending action items remain for them.
 
 ## Git Remotes
 

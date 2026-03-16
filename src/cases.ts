@@ -47,7 +47,25 @@ export interface Case {
   total_cost_usd: number;
   token_source: string | null;
   time_spent_ms: number;
+  locked_by: string | null;
+  last_heartbeat: string | null;
 }
+
+// ---------------------------------------------------------------------------
+// Lock file types
+// ---------------------------------------------------------------------------
+
+export interface WorktreeLock {
+  agent_session: string;
+  case_id: string;
+  started_at: string;
+  heartbeat: string;
+  pid: number;
+}
+
+const LOCK_FILENAME = '.worktree-lock.json';
+/** Locks with heartbeat older than this (ms) are considered stale. */
+const STALE_LOCK_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
 
 // ---------------------------------------------------------------------------
 // DB operations (uses the shared db instance from db.ts)
@@ -84,12 +102,26 @@ export function createCasesSchema(database: Database.Database): void {
       pruned_at TEXT,
       total_cost_usd REAL DEFAULT 0,
       token_source TEXT,
-      time_spent_ms INTEGER DEFAULT 0
+      time_spent_ms INTEGER DEFAULT 0,
+      locked_by TEXT,
+      last_heartbeat TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_cases_status ON cases(status);
     CREATE INDEX IF NOT EXISTS idx_cases_group ON cases(group_folder);
     CREATE INDEX IF NOT EXISTS idx_cases_chat ON cases(chat_jid);
   `);
+
+  // Migration: add lock columns for existing DBs
+  try {
+    database.exec(`ALTER TABLE cases ADD COLUMN locked_by TEXT`);
+  } catch {
+    /* column already exists */
+  }
+  try {
+    database.exec(`ALTER TABLE cases ADD COLUMN last_heartbeat TEXT`);
+  } catch {
+    /* column already exists */
+  }
 }
 
 /** Attach to an already-initialized DB (called after initDatabase). */
@@ -107,8 +139,9 @@ export function insertCase(c: Case): void {
       status, blocked_on, worktree_path, workspace_path, branch_name,
       initiator, initiator_channel, last_message, last_activity_at,
       conclusion, created_at, done_at, reviewed_at, pruned_at,
-      total_cost_usd, token_source, time_spent_ms)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      total_cost_usd, token_source, time_spent_ms,
+      locked_by, last_heartbeat)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     c.id,
     c.group_folder,
@@ -133,6 +166,8 @@ export function insertCase(c: Case): void {
     c.total_cost_usd,
     c.token_source,
     c.time_spent_ms,
+    c.locked_by,
+    c.last_heartbeat,
   );
 }
 
@@ -233,6 +268,8 @@ export function updateCase(
       | 'token_source'
       | 'time_spent_ms'
       | 'description'
+      | 'locked_by'
+      | 'last_heartbeat'
     >
   >,
 ): void {
@@ -336,14 +373,235 @@ function createScratchDir(caseName: string): {
   return { workspacePath, worktreePath: null, branchName: null };
 }
 
+// ---------------------------------------------------------------------------
+// Worktree lock file operations
+// ---------------------------------------------------------------------------
+
+/**
+ * Create a lock file in a worktree directory, marking it as actively in use.
+ */
+export function createWorktreeLock(
+  worktreePath: string,
+  agentSession: string,
+  caseId: string,
+): void {
+  const lock: WorktreeLock = {
+    agent_session: agentSession,
+    case_id: caseId,
+    started_at: new Date().toISOString(),
+    heartbeat: new Date().toISOString(),
+    pid: process.pid,
+  };
+  const lockPath = path.join(worktreePath, LOCK_FILENAME);
+  fs.writeFileSync(lockPath, JSON.stringify(lock, null, 2));
+  logger.info({ worktreePath, agentSession, caseId }, 'Worktree lock created');
+}
+
+/**
+ * Read the lock file from a worktree directory, if it exists.
+ */
+export function readWorktreeLock(
+  worktreePath: string,
+): WorktreeLock | null {
+  const lockPath = path.join(worktreePath, LOCK_FILENAME);
+  if (!fs.existsSync(lockPath)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(lockPath, 'utf-8')) as WorktreeLock;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Update the heartbeat timestamp in an existing lock file.
+ */
+export function updateWorktreeLockHeartbeat(worktreePath: string): boolean {
+  const lock = readWorktreeLock(worktreePath);
+  if (!lock) return false;
+  lock.heartbeat = new Date().toISOString();
+  const lockPath = path.join(worktreePath, LOCK_FILENAME);
+  fs.writeFileSync(lockPath, JSON.stringify(lock, null, 2));
+  return true;
+}
+
+/**
+ * Remove the lock file from a worktree directory.
+ */
+export function removeWorktreeLock(worktreePath: string): void {
+  const lockPath = path.join(worktreePath, LOCK_FILENAME);
+  if (fs.existsSync(lockPath)) {
+    fs.unlinkSync(lockPath);
+    logger.info({ worktreePath }, 'Worktree lock removed');
+  }
+}
+
+/**
+ * Check if a worktree lock is fresh (not stale).
+ * Returns true if lock exists and heartbeat is within threshold.
+ */
+export function isWorktreeLockFresh(lock: WorktreeLock): boolean {
+  const heartbeatAge = Date.now() - new Date(lock.heartbeat).getTime();
+  return heartbeatAge < STALE_LOCK_THRESHOLD_MS;
+}
+
+// ---------------------------------------------------------------------------
+// Case lock operations (DB-backed)
+// ---------------------------------------------------------------------------
+
+/**
+ * Acquire an exclusive lock on a case. Fails if already locked by another session.
+ * Also creates the lock file in the worktree directory.
+ */
+export function lockCase(
+  caseId: string,
+  agentSession: string,
+): { success: boolean; error?: string } {
+  const c = getCaseById(caseId);
+  if (!c) return { success: false, error: 'Case not found' };
+
+  // Check if already locked by another session
+  if (c.locked_by && c.locked_by !== agentSession) {
+    // Check if the existing lock is stale
+    if (c.last_heartbeat) {
+      const age = Date.now() - new Date(c.last_heartbeat).getTime();
+      if (age < STALE_LOCK_THRESHOLD_MS) {
+        return {
+          success: false,
+          error: `Case locked by ${c.locked_by} (heartbeat ${Math.round(age / 1000)}s ago)`,
+        };
+      }
+      logger.warn(
+        { caseId, staleLock: c.locked_by, age },
+        'Overriding stale case lock',
+      );
+    }
+  }
+
+  const now = new Date().toISOString();
+  updateCase(caseId, { locked_by: agentSession, last_heartbeat: now });
+
+  // Create lock file in worktree if it exists
+  if (c.worktree_path && fs.existsSync(c.worktree_path)) {
+    createWorktreeLock(c.worktree_path, agentSession, caseId);
+  }
+
+  logger.info({ caseId, agentSession }, 'Case locked');
+  return { success: true };
+}
+
+/**
+ * Release a lock on a case. Must be the same agent session, or force.
+ */
+export function unlockCase(
+  caseId: string,
+  agentSession: string,
+  force = false,
+): { success: boolean; error?: string } {
+  const c = getCaseById(caseId);
+  if (!c) return { success: false, error: 'Case not found' };
+
+  if (c.locked_by && c.locked_by !== agentSession && !force) {
+    return {
+      success: false,
+      error: `Case locked by ${c.locked_by}, not ${agentSession}`,
+    };
+  }
+
+  updateCase(caseId, { locked_by: null, last_heartbeat: null });
+
+  // Remove lock file from worktree if it exists
+  if (c.worktree_path && fs.existsSync(c.worktree_path)) {
+    removeWorktreeLock(c.worktree_path);
+  }
+
+  logger.info({ caseId, agentSession, force }, 'Case unlocked');
+  return { success: true };
+}
+
+/**
+ * Update the heartbeat for a locked case.
+ */
+export function heartbeatCase(
+  caseId: string,
+  agentSession: string,
+): { success: boolean; error?: string } {
+  const c = getCaseById(caseId);
+  if (!c) return { success: false, error: 'Case not found' };
+
+  if (c.locked_by !== agentSession) {
+    return {
+      success: false,
+      error: c.locked_by
+        ? `Case locked by ${c.locked_by}, not ${agentSession}`
+        : 'Case is not locked',
+    };
+  }
+
+  const now = new Date().toISOString();
+  updateCase(caseId, { last_heartbeat: now });
+
+  // Update lock file heartbeat too
+  if (c.worktree_path && fs.existsSync(c.worktree_path)) {
+    updateWorktreeLockHeartbeat(c.worktree_path);
+  }
+
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Workspace pruning (with L3 protection)
+// ---------------------------------------------------------------------------
+
 /**
  * Prune a case's workspace.
  * For dev: removes worktree and optionally the branch.
  * For work: removes the scratch directory.
  * Preserves the DB record (metadata, cost, conclusion).
+ *
+ * L3 PROTECTION:
+ * - Refuses to prune cases in active/blocked status
+ * - Checks for fresh lock files before deleting worktrees
  */
 export function pruneCaseWorkspace(c: Case): void {
+  // Status guard: never prune active or blocked cases
+  if (c.status === 'active' || c.status === 'blocked') {
+    const msg = `Cannot prune case ${c.name}: status is ${c.status}`;
+    logger.error({ caseId: c.id, status: c.status }, msg);
+    throw new Error(msg);
+  }
+
   if (c.type === 'dev' && c.worktree_path) {
+    // Lock file guard: check for active lock before deletion
+    const lock = readWorktreeLock(c.worktree_path);
+    if (lock && isWorktreeLockFresh(lock)) {
+      const age = Date.now() - new Date(lock.heartbeat).getTime();
+      const msg = `Cannot prune case ${c.name}: worktree has fresh lock (agent=${lock.agent_session}, heartbeat ${Math.round(age / 1000)}s ago)`;
+      logger.error({ caseId: c.id, lock }, msg);
+      throw new Error(msg);
+    }
+    if (lock) {
+      logger.warn(
+        { caseId: c.id, lock },
+        'Stale lock found on worktree — proceeding with prune',
+      );
+    }
+
+    // DB lock guard: check locked_by field
+    if (c.locked_by) {
+      if (c.last_heartbeat) {
+        const age = Date.now() - new Date(c.last_heartbeat).getTime();
+        if (age < STALE_LOCK_THRESHOLD_MS) {
+          const msg = `Cannot prune case ${c.name}: DB lock held by ${c.locked_by} (heartbeat ${Math.round(age / 1000)}s ago)`;
+          logger.error({ caseId: c.id, locked_by: c.locked_by }, msg);
+          throw new Error(msg);
+        }
+      }
+      logger.warn(
+        { caseId: c.id, locked_by: c.locked_by },
+        'Stale DB lock found — proceeding with prune',
+      );
+    }
+
     try {
       execSync(
         `git worktree remove ${JSON.stringify(c.worktree_path)} --force`,
@@ -510,6 +768,8 @@ export function suggestDevCase(opts: {
     total_cost_usd: 0,
     token_source: null,
     time_spent_ms: 0,
+    locked_by: null,
+    last_heartbeat: null,
   };
 
   insertCase(c);
