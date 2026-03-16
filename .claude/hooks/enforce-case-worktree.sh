@@ -18,7 +18,7 @@ fi
 BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 
 # Allow: case branches, skill branches, explicit feature branches
-if echo "$BRANCH" | grep -qE '^(case/|skill/|260[0-9]{3}-|feat/)'; then
+if echo "$BRANCH" | grep -qE '^(case/|skill/|[0-9]{6}-|feat/|worktree-)'; then
   exit 0
 fi
 

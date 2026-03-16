@@ -9,6 +9,7 @@ import {
   TIMEZONE,
   TRIGGER_PATTERN,
 } from './config.js';
+import { classifyError, getErrorMessage } from './error-classify.js';
 import { startCredentialProxy } from './credential-proxy.js';
 import './channels/index.js';
 import {
@@ -586,52 +587,8 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   if (agentResult.status === 'error' || hadError) {
     // Send mechanistic error notification — no LLM needed, pre-canned messages.
     // Users must never be left in silence wondering if the system is broken.
-    const errDetail = (agentResult.errorDetail || '').toLowerCase();
-    let errorMsg: string;
-
-    if (
-      errDetail.includes('rate limit') ||
-      errDetail.includes('rate_limit') ||
-      errDetail.includes('429')
-    ) {
-      errorMsg =
-        '⚠️ API rate limit reached. Your message was received — will retry automatically.';
-    } else if (
-      errDetail.includes('budget') ||
-      errDetail.includes('billing') ||
-      errDetail.includes('insufficient') ||
-      errDetail.includes('credit') ||
-      errDetail.includes('payment') ||
-      errDetail.includes('quota')
-    ) {
-      errorMsg =
-        '⚠️ API budget/billing issue — unable to process requests. Aviad has been notified.';
-    } else if (
-      errDetail.includes('401') ||
-      errDetail.includes('403') ||
-      errDetail.includes('unauthorized') ||
-      errDetail.includes('forbidden') ||
-      errDetail.includes('authentication') ||
-      errDetail.includes('invalid.*key')
-    ) {
-      errorMsg =
-        '⚠️ Authentication error — API access denied. Aviad has been notified.';
-    } else if (
-      errDetail.includes('timeout') ||
-      errDetail.includes('timed out')
-    ) {
-      errorMsg =
-        '⚠️ Request timed out. The task may be too complex — try breaking it into smaller parts.';
-    } else if (
-      errDetail.includes('docker') ||
-      errDetail.includes('container') ||
-      errDetail.includes('spawn')
-    ) {
-      errorMsg = '⚠️ Processing system unavailable. Aviad has been notified.';
-    } else {
-      errorMsg =
-        '⚠️ Something went wrong processing your message. Will retry automatically.';
-    }
+    const errorCategory = classifyError(agentResult.errorDetail || '');
+    const errorMsg = getErrorMessage(errorCategory);
 
     // Send error notification to user — this is mechanistic, no LLM needed
     await channel
