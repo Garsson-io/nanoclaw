@@ -1,6 +1,11 @@
 #!/bin/bash
 set -e
 
+# Add skill executables to PATH (each skill dir may contain CLI tools)
+for skill_dir in /home/node/.claude/skills/*/; do
+  [ -d "$skill_dir" ] && export PATH="$skill_dir:$PATH"
+done
+
 # If GITHUB_TOKEN is set (dev cases), configure git to use it for HTTPS auth
 if [ -n "$GITHUB_TOKEN" ]; then
   git config --global credential.helper \

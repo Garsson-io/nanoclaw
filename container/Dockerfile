@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y \
     libdrm2 \
     libxshmfence1 \
     poppler-utils \
+    ghostscript \
     python3 \
     python3-pip \
     curl \
@@ -36,7 +37,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python packages for preflight tools (Pillow for images, pymupdf for PDFs)
-RUN pip3 install --no-cache-dir --break-system-packages Pillow>=10.0 pymupdf>=1.24.0
+RUN pip3 install --no-cache-dir --break-system-packages Pillow>=10.0 pymupdf>=1.24.0 pikepdf>=9.0
 
 # Set Chromium path for agent-browser
 ENV AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium
