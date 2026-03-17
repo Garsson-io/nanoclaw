@@ -25,6 +25,7 @@ import { createTask, deleteTask, getTaskById, updateTask } from './db.js';
 import { createGitHubIssue, DEV_CASE_ISSUE_REPO } from './github-issues.js';
 import { isValidGroupFolder, resolveGroupFolderPath } from './group-folder.js';
 import { logger } from './logger.js';
+import { validateAdditionalMounts } from './mount-security.js';
 import { RegisteredGroup } from './types.js';
 
 export interface IpcDeps {
@@ -60,6 +61,72 @@ export interface IpcDeps {
     availableGroups: AvailableGroup[],
     registeredJids: Set<string>,
   ) => void;
+}
+
+/**
+ * Translate a container filesystem path to the corresponding host path.
+ * Returns { hostPath, allowedDir } on success, or null if the prefix is
+ * unrecognised (caller should treat this as a traversal block).
+ *
+ * Supported prefixes:
+ *   /workspace/group/...   → groups/{sourceGroup}/...
+ *   /workspace/extra/...   → looked up from the group's additionalMounts config
+ */
+export function resolveContainerToHostPath(
+  containerPath: string,
+  sourceGroup: string,
+  registeredGroups: Record<string, RegisteredGroup>,
+): { hostPath: string; allowedDir: string } | null {
+  // /workspace/group/ → groups/{sourceGroup}/
+  if (containerPath.startsWith('/workspace/group/')) {
+    const relativePath = containerPath.slice('/workspace/group/'.length);
+    const groupDir = resolveGroupFolderPath(sourceGroup);
+    return {
+      hostPath: path.join(groupDir, relativePath),
+      allowedDir: groupDir,
+    };
+  }
+
+  // /workspace/extra/{name}/... → reverse-map via validated additional mounts
+  if (containerPath.startsWith('/workspace/extra/')) {
+    const group = Object.values(registeredGroups).find(
+      (g) => g.folder === sourceGroup,
+    );
+    if (!group?.containerConfig?.additionalMounts) return null;
+
+    const validatedMounts = validateAdditionalMounts(
+      group.containerConfig.additionalMounts,
+      group.name,
+      group.isMain ?? false,
+    );
+
+    for (const mount of validatedMounts) {
+      const prefix = mount.containerPath.endsWith('/')
+        ? mount.containerPath
+        : mount.containerPath + '/';
+      if (
+        containerPath === mount.containerPath ||
+        containerPath.startsWith(prefix)
+      ) {
+        const relativePath = containerPath
+          .slice(mount.containerPath.length)
+          .replace(/^\//, '');
+        const hostPath = relativePath
+          ? path.join(mount.hostPath, relativePath)
+          : mount.hostPath;
+        return { hostPath, allowedDir: mount.hostPath };
+      }
+    }
+    return null;
+  }
+
+  // Paths already on the host filesystem (within the group dir) — pass through
+  const groupDir = resolveGroupFolderPath(sourceGroup);
+  if (containerPath.startsWith(groupDir)) {
+    return { hostPath: containerPath, allowedDir: groupDir };
+  }
+
+  return null;
 }
 
 /** Dispatch an IPC message, routing through pool bots when a sender is present. */
@@ -116,20 +183,30 @@ export async function dispatchIpcImage(
     return 'unauthorized';
   }
 
-  // Translate container path to host path.
-  // Container mounts: /workspace/group/ → groups/{folder}/
-  let hostPath = data.imagePath;
-  if (data.imagePath.startsWith('/workspace/group/')) {
-    const relativePath = data.imagePath.slice('/workspace/group/'.length);
-    hostPath = path.join(resolveGroupFolderPath(sourceGroup), relativePath);
+  // Translate container path to host path
+  const pathResult = resolveContainerToHostPath(
+    data.imagePath,
+    sourceGroup,
+    registeredGroups,
+  );
+  if (!pathResult) {
+    logger.warn(
+      { chatJid: data.chatJid, imagePath: data.imagePath, sourceGroup },
+      'IPC image path: unrecognised container prefix blocked',
+    );
+    return 'unauthorized';
   }
 
-  // Path traversal guard: resolved path must stay within the group folder
-  const groupDir = resolveGroupFolderPath(sourceGroup);
+  const { hostPath, allowedDir } = pathResult;
   const resolved = path.resolve(hostPath);
-  if (!resolved.startsWith(groupDir)) {
+  if (!resolved.startsWith(path.resolve(allowedDir))) {
     logger.warn(
-      { chatJid: data.chatJid, imagePath: data.imagePath, resolved, groupDir },
+      {
+        chatJid: data.chatJid,
+        imagePath: data.imagePath,
+        resolved,
+        allowedDir,
+      },
       'IPC image path traversal blocked',
     );
     return 'unauthorized';
@@ -188,24 +265,29 @@ export async function dispatchIpcDocument(
     return 'unauthorized';
   }
 
-  // Translate container path to host path.
-  // Container mounts: /workspace/group/ → groups/{folder}/
-  let hostPath = data.documentPath;
-  if (data.documentPath.startsWith('/workspace/group/')) {
-    const relativePath = data.documentPath.slice('/workspace/group/'.length);
-    hostPath = path.join(resolveGroupFolderPath(sourceGroup), relativePath);
+  // Translate container path to host path
+  const pathResult = resolveContainerToHostPath(
+    data.documentPath,
+    sourceGroup,
+    registeredGroups,
+  );
+  if (!pathResult) {
+    logger.warn(
+      { chatJid: data.chatJid, documentPath: data.documentPath, sourceGroup },
+      'IPC document path: unrecognised container prefix blocked',
+    );
+    return 'unauthorized';
   }
 
-  // Path traversal guard: resolved path must stay within the group folder
-  const groupDir = resolveGroupFolderPath(sourceGroup);
+  const { hostPath, allowedDir } = pathResult;
   const resolved = path.resolve(hostPath);
-  if (!resolved.startsWith(groupDir)) {
+  if (!resolved.startsWith(path.resolve(allowedDir))) {
     logger.warn(
       {
         chatJid: data.chatJid,
         documentPath: data.documentPath,
         resolved,
-        groupDir,
+        allowedDir,
       },
       'IPC document path traversal blocked',
     );
