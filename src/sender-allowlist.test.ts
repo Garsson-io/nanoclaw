@@ -291,6 +291,8 @@ describe('loadSenderAllowlist autoTriggerSenders', () => {
   });
 });
 
+// INVARIANT: Auto-trigger content filter must reject trivial acks and pass substantive messages.
+// SUT: isAutoTriggerContent — pure function, no dependencies.
 describe('isAutoTriggerContent', () => {
   it('rejects short messages below minimum length', () => {
     expect(isAutoTriggerContent('ok')).toBe(false);
@@ -346,8 +348,20 @@ describe('isAutoTriggerContent', () => {
     expect(isAutoTriggerContent('ok, can you also fix the tests?')).toBe(true);
     expect(isAutoTriggerContent('thanks for that, now deploy it')).toBe(true);
   });
+
+  it('accepts exactly-min-length non-ack content', () => {
+    expect(isAutoTriggerContent('hey')).toBe(true);
+    expect(isAutoTriggerContent('fix')).toBe(true);
+  });
+
+  it('accepts multi-emoji messages not in ack list', () => {
+    expect(isAutoTriggerContent('👍👍')).toBe(true);
+    expect(isAutoTriggerContent('🎉🎊')).toBe(true);
+  });
 });
 
+// INVARIANT: shouldAutoTrigger must require BOTH sender in auto-trigger list AND substantive content.
+// SUT: shouldAutoTrigger — composes isAutoTriggerSender + isAutoTriggerContent.
 describe('shouldAutoTrigger', () => {
   const cfg: SenderAllowlistConfig = {
     default: { allow: '*', mode: 'trigger' },

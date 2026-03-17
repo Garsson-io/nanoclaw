@@ -180,6 +180,6 @@ export function shouldAutoTrigger(
   content: string,
   cfg: SenderAllowlistConfig,
 ): boolean {
-  if (!cfg.autoTriggerSenders.includes(sender)) return false;
+  if (!isAutoTriggerSender(sender, cfg)) return false;
   return isAutoTriggerContent(content);
 }
