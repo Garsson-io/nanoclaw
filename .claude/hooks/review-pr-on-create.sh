@@ -6,6 +6,8 @@
 # Runs as PostToolUse hook on Bash tool calls.
 # Always exits 0 — advisory, not blocking.
 
+source "$(dirname "$0")/lib/parse-command.sh"
+
 INPUT=$(cat)
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
 STDOUT=$(echo "$INPUT" | jq -r '.tool_output.stdout // empty')
@@ -17,11 +19,7 @@ if [ "$EXIT_CODE" != "0" ]; then
   exit 0
 fi
 
-# Extract only the command line, stripping heredoc bodies to avoid false positives
-CMD_LINE=$(echo "$COMMAND" | sed '/<<[[:space:]]*['\''\"]\{0,1\}[A-Za-z_]*['\''\"]\{0,1\}/,$d')
-if [ -z "$CMD_LINE" ]; then
-  CMD_LINE=$(echo "$COMMAND" | head -1)
-fi
+CMD_LINE=$(strip_heredoc_body "$COMMAND")
 
 # Only trigger on gh pr create commands (not gh pr view, gh pr list, etc.)
 if ! echo "$CMD_LINE" | grep -qE 'gh\s+pr\s+create'; then

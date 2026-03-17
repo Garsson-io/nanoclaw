@@ -8,17 +8,11 @@
 # Exit 0 = allow (with advisory on stderr)
 # JSON with permissionDecision deny = block
 
+source "$(dirname "$0")/lib/parse-command.sh"
+
 INPUT=$(cat)
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
-
-# Extract only the command line, stripping heredoc bodies.
-# Heredocs (<<'EOF' ... EOF) can contain arbitrary text that causes false
-# positives when grepping for command patterns like "gh pr create".
-CMD_LINE=$(echo "$COMMAND" | sed '/<<[[:space:]]*['\''\"]\{0,1\}[A-Za-z_]*['\''\"]\{0,1\}/,$d')
-# If sed removed everything (command IS on the heredoc line), use the first line
-if [ -z "$CMD_LINE" ]; then
-  CMD_LINE=$(echo "$COMMAND" | head -1)
-fi
+CMD_LINE=$(strip_heredoc_body "$COMMAND")
 
 # Only check gh pr create and gh pr merge
 if ! echo "$CMD_LINE" | grep -qE 'gh\s+pr\s+(create|merge)'; then
