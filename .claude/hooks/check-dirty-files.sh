@@ -26,7 +26,7 @@ IS_PR_MERGE=false
 
 if is_gh_pr_command "$CMD_LINE" "create"; then
   IS_PR_CREATE=true
-elif echo "$CMD_LINE" | sed 's/[|;&]\{1,\}/\n/g' | sed 's/^[[:space:]]*//' | grep -qE '^git[[:space:]]+push'; then
+elif is_git_command "$CMD_LINE" "push"; then
   IS_GIT_PUSH=true
 elif is_gh_pr_command "$CMD_LINE" "merge"; then
   IS_PR_MERGE=true

@@ -36,6 +36,16 @@ is_gh_pr_command() {
     grep -qE "^gh[[:space:]]+pr[[:space:]]+($subcommands)"
 }
 
+# Check if a command line contains an actual `git <subcommand>` invocation.
+# Same segment-splitting logic as is_gh_pr_command.
+# Usage: is_git_command "$CMD_LINE" "push"
+is_git_command() {
+  local cmd_line="$1"
+  local subcommand="$2"
+  echo "$cmd_line" | sed 's/[|;&]\{1,\}/\n/g' | sed 's/^[[:space:]]*//' | \
+    grep -qE "^git[[:space:]]+${subcommand}"
+}
+
 # Extract PR number from a gh pr <subcommand> invocation.
 # Usage: PR_NUM=$(extract_pr_number "$CMD_LINE" "merge")
 # Returns the number if present, empty string otherwise.

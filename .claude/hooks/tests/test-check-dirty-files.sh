@@ -13,53 +13,7 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 HOOKS_DIR="$(dirname "$SCRIPT_DIR")"
 HOOK="$HOOKS_DIR/check-dirty-files.sh"
-
-PASS=0
-FAIL=0
-
-assert_eq() {
-  local test_name="$1"
-  local expected="$2"
-  local actual="$3"
-  if [ "$expected" = "$actual" ]; then
-    echo "  PASS: $test_name"
-    ((PASS++))
-  else
-    echo "  FAIL: $test_name"
-    echo "    expected: '$expected'"
-    echo "    actual:   '$actual'"
-    ((FAIL++))
-  fi
-}
-
-assert_contains() {
-  local test_name="$1"
-  local needle="$2"
-  local haystack="$3"
-  if echo "$haystack" | grep -q "$needle"; then
-    echo "  PASS: $test_name"
-    ((PASS++))
-  else
-    echo "  FAIL: $test_name"
-    echo "    expected to contain: '$needle'"
-    echo "    actual: '$haystack'"
-    ((FAIL++))
-  fi
-}
-
-assert_not_contains() {
-  local test_name="$1"
-  local needle="$2"
-  local haystack="$3"
-  if ! echo "$haystack" | grep -q "$needle"; then
-    echo "  PASS: $test_name"
-    ((PASS++))
-  else
-    echo "  FAIL: $test_name"
-    echo "    expected NOT to contain: '$needle'"
-    ((FAIL++))
-  fi
-}
+source "$SCRIPT_DIR/test-helpers.sh"
 
 # Create mock dir
 MOCK_DIR=$(mktemp -d)
@@ -179,10 +133,4 @@ assert_contains "shows staged category" "Staged but not committed" "$OUTPUT"
 assert_contains "shows modified category" "Modified" "$OUTPUT"
 assert_contains "shows untracked category" "Untracked" "$OUTPUT"
 
-echo ""
-echo "================================"
-echo "Results: $PASS passed, $FAIL failed"
-if [ "$FAIL" -gt 0 ]; then
-  exit 1
-fi
-echo "All tests passed."
+print_results
