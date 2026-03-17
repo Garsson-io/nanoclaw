@@ -20,6 +20,28 @@ const chatJid = process.env.NANOCLAW_CHAT_JID!;
 const groupFolder = process.env.NANOCLAW_GROUP_FOLDER!;
 const isMain = process.env.NANOCLAW_IS_MAIN === '1';
 
+/** Poll for a result file written by the host. Returns parsed JSON or null on timeout. */
+async function pollForResult(
+  dir: string,
+  requestId: string,
+  maxAttempts = 30,
+): Promise<Record<string, unknown> | null> {
+  const resultFile = path.join(dir, `${requestId}.json`);
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    try {
+      if (fs.existsSync(resultFile)) {
+        const result = JSON.parse(fs.readFileSync(resultFile, 'utf-8'));
+        fs.unlinkSync(resultFile);
+        return result;
+      }
+    } catch {
+      // File might not exist yet, keep polling
+    }
+  }
+  return null;
+}
+
 function writeIpcFile(dir: string, data: object): string {
   fs.mkdirSync(dir, { recursive: true });
 
@@ -526,29 +548,20 @@ Case types:
 
     writeIpcFile(TASKS_DIR, data);
 
-    // Wait briefly for the host to process and write the result
-    const resultDir = path.join(IPC_DIR, 'case_results');
-    const resultFile = path.join(resultDir, `${requestId}.json`);
-
     // Poll for result (host processes IPC files every ~1s, dev cases also create a GitHub issue)
-    for (let i = 0; i < 30; i++) {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      try {
-        if (fs.existsSync(resultFile)) {
-          const result = JSON.parse(fs.readFileSync(resultFile, 'utf-8'));
-          fs.unlinkSync(resultFile);
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Case created:\n  ID: ${result.id}\n  Name: ${result.name}\n  Workspace: ${result.workspace_path}${result.issue_url ? `\n  GitHub: ${result.issue_url}` : ''}\n\nThe case is now ACTIVE. Future messages about this topic will be routed to it.`,
-              },
-            ],
-          };
-        }
-      } catch {
-        // File might not exist yet, keep polling
-      }
+    const result = await pollForResult(
+      path.join(IPC_DIR, 'case_results'),
+      requestId,
+    );
+    if (result) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Case created:\n  ID: ${result.id}\n  Name: ${result.name}\n  Workspace: ${result.workspace_path}${result.issue_url ? `\n  GitHub: ${result.issue_url}` : ''}\n\nThe case is now ACTIVE. Future messages about this topic will be routed to it.`,
+          },
+        ],
+      };
     }
 
     // Timeout — the IPC was written, case will be created but we can't confirm
@@ -781,40 +794,30 @@ Allowed labels: work-agent, needs-dev, kaizen, bug, enhancement.`,
 
     writeIpcFile(TASKS_DIR, data);
 
-    // Poll for result (host processes IPC files every ~1s)
-    const resultDir = path.join(IPC_DIR, 'issue_results');
-    const resultFile = path.join(resultDir, `${requestId}.json`);
-
-    for (let i = 0; i < 30; i++) {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      try {
-        if (fs.existsSync(resultFile)) {
-          const result = JSON.parse(fs.readFileSync(resultFile, 'utf-8'));
-          fs.unlinkSync(resultFile);
-
-          if (result.success) {
-            return {
-              content: [
-                {
-                  type: 'text' as const,
-                  text: `Issue created: ${result.issueUrl}\nNumber: #${result.issueNumber}`,
-                },
-              ],
-            };
-          } else {
-            return {
-              content: [
-                {
-                  type: 'text' as const,
-                  text: `Failed to create issue: ${result.error}`,
-                },
-              ],
-              isError: true,
-            };
-          }
-        }
-      } catch {
-        // File might not exist yet, keep polling
+    const result = await pollForResult(
+      path.join(IPC_DIR, 'issue_results'),
+      requestId,
+    );
+    if (result) {
+      if (result.success) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Issue created: ${result.issueUrl}\nNumber: #${result.issueNumber}`,
+            },
+          ],
+        };
+      } else {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Failed to create issue: ${result.error}`,
+            },
+          ],
+          isError: true,
+        };
       }
     }
 

@@ -8,6 +8,7 @@ import { RegisteredGroup } from './types.js';
 // Mock github-issues module at the top level
 vi.mock('./github-issues.js', () => ({
   createGitHubIssue: vi.fn(),
+  DEV_CASE_ISSUE_REPO: { owner: 'Garsson-io', repo: 'kaizen' },
 }));
 
 // Mock cases module for case_create tests

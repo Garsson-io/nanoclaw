@@ -24,6 +24,9 @@ export interface CreateIssueResult {
   error?: string;
 }
 
+/** Default repo for auto-created dev case issues. */
+export const DEV_CASE_ISSUE_REPO = { owner: 'Garsson-io', repo: 'kaizen' };
+
 /**
  * Repos that agents are allowed to create issues in.
  * Format: "owner/repo"

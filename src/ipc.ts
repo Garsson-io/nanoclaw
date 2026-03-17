@@ -21,7 +21,7 @@ import {
 import type { Case } from './cases.js';
 import { AvailableGroup } from './container-runner.js';
 import { createTask, deleteTask, getTaskById, updateTask } from './db.js';
-import { createGitHubIssue } from './github-issues.js';
+import { createGitHubIssue, DEV_CASE_ISSUE_REPO } from './github-issues.js';
 import { isValidGroupFolder } from './group-folder.js';
 import { logger } from './logger.js';
 import { RegisteredGroup } from './types.js';
@@ -715,8 +715,8 @@ export async function processTaskIpc(
       let issueUrl: string | null = null;
       if (caseType === 'dev' && !githubIssue) {
         const issueResult = await createGitHubIssue({
-          owner: 'Garsson-io',
-          repo: 'kaizen',
+          owner: DEV_CASE_ISSUE_REPO.owner,
+          repo: DEV_CASE_ISSUE_REPO.repo,
           title: name,
           body: `${d.description}\n\n---\n*Auto-created by dev case \`${name}\`*`,
           labels: ['kaizen'],
