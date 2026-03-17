@@ -14,25 +14,25 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
 CMD_LINE=$(strip_heredoc_body "$COMMAND")
 
 # Only check gh pr create and gh pr merge
-if ! echo "$CMD_LINE" | grep -qE 'gh\s+pr\s+(create|merge)'; then
+if ! is_gh_pr_command "$CMD_LINE" "create|merge"; then
   exit 0
 fi
 
 IS_MERGE=false
-if echo "$CMD_LINE" | grep -qE 'gh\s+pr\s+merge'; then
+if is_gh_pr_command "$CMD_LINE" "merge"; then
   IS_MERGE=true
 fi
 
-# Determine base branch for diff
-BASE="main"
+# Get the list of changed files — from PR diff for merges, git diff for creates
+ALL_CHANGED=$(get_pr_changed_files "$CMD_LINE" "$IS_MERGE")
 
 # Get changed source files (exclude tests, config, docs, hooks)
-CHANGED_SRC=$(git diff --name-only "$BASE"...HEAD 2>/dev/null | \
+CHANGED_SRC=$(echo "$ALL_CHANGED" | \
   grep -E '\.(ts|js|tsx|jsx)$' | \
   grep -vE '(\.test\.|\.spec\.|__tests__|\.config\.|vitest\.|CLAUDE\.md|\.claude/)' || true)
 
 # Get changed test files
-CHANGED_TESTS=$(git diff --name-only "$BASE"...HEAD 2>/dev/null | \
+CHANGED_TESTS=$(echo "$ALL_CHANGED" | \
   grep -E '\.(test|spec)\.(ts|js|tsx|jsx)$' || true)
 
 # If no source changes, nothing to check
