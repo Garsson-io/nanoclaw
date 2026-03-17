@@ -2,9 +2,9 @@
 # Tests for enforce-case-worktree.sh hook
 # Run: bash .claude/hooks/tests/test-enforce-case-worktree.sh
 #
-# INVARIANT: git commit/push on allowed branch prefixes (case/, skill/, feat/, wt/, YYMMDD-) are ALLOWED.
-# INVARIANT: git commit/push on main or unrecognized branches are DENIED.
-# INVARIANT: Non-git-commit/push commands are always ALLOWED regardless of branch.
+# INVARIANT: git commit/push inside a git worktree are ALLOWED.
+# INVARIANT: git commit/push outside a worktree (main checkout) are DENIED.
+# INVARIANT: Non-git-commit/push commands are always ALLOWED regardless of location.
 # SUT: enforce-case-worktree.sh
 
 set -u
@@ -17,93 +17,112 @@ source "$SCRIPT_DIR/test-helpers.sh"
 setup_mock_dir
 trap 'rm -rf "$MOCK_DIR"' EXIT
 
-# Helper: create a mock git that reports a specific branch name
-setup_branch_mock() {
-  local branch="$1"
-  cat > "$MOCK_DIR/git" << MOCK
+# Helper: mock git to simulate being inside a worktree
+# In a worktree, --git-dir and --git-common-dir return different paths
+setup_worktree_mock() {
+  cat > "$MOCK_DIR/git" << 'MOCK'
 #!/bin/bash
-if echo "\$@" | grep -q "rev-parse --abbrev-ref HEAD"; then
-  echo "$branch"
+if echo "$@" | grep -q "rev-parse --git-dir"; then
+  echo "/repo/.git/worktrees/my-worktree"
   exit 0
 fi
-/usr/bin/git "\$@"
+if echo "$@" | grep -q "rev-parse --git-common-dir"; then
+  echo "/repo/.git"
+  exit 0
+fi
+if echo "$@" | grep -q "rev-parse --abbrev-ref HEAD"; then
+  echo "some-branch"
+  exit 0
+fi
+/usr/bin/git "$@"
+MOCK
+  chmod +x "$MOCK_DIR/git"
+}
+
+# Helper: mock git to simulate being in the main checkout (not a worktree)
+# In main checkout, --git-dir and --git-common-dir return the same path
+setup_main_checkout_mock() {
+  cat > "$MOCK_DIR/git" << 'MOCK'
+#!/bin/bash
+if echo "$@" | grep -q "rev-parse --git-dir"; then
+  echo ".git"
+  exit 0
+fi
+if echo "$@" | grep -q "rev-parse --git-common-dir"; then
+  echo ".git"
+  exit 0
+fi
+if echo "$@" | grep -q "rev-parse --abbrev-ref HEAD"; then
+  echo "main"
+  exit 0
+fi
+/usr/bin/git "$@"
 MOCK
   chmod +x "$MOCK_DIR/git"
 }
 
 echo "=== Non-git-commit/push commands are always allowed ==="
 
-setup_branch_mock "main"
+setup_main_checkout_mock
 
 OUTPUT=$(run_hook "$HOOK" "npm run build")
-assert_eq "npm command allowed on main" "" "$OUTPUT"
+assert_eq "npm command allowed in main checkout" "" "$OUTPUT"
 
 OUTPUT=$(run_hook "$HOOK" "git status")
-assert_eq "git status allowed on main" "" "$OUTPUT"
+assert_eq "git status allowed in main checkout" "" "$OUTPUT"
 
 OUTPUT=$(run_hook "$HOOK" "git add .")
-assert_eq "git add allowed on main" "" "$OUTPUT"
+assert_eq "git add allowed in main checkout" "" "$OUTPUT"
 
 OUTPUT=$(run_hook "$HOOK" "git diff HEAD")
-assert_eq "git diff allowed on main" "" "$OUTPUT"
+assert_eq "git diff allowed in main checkout" "" "$OUTPUT"
 
 OUTPUT=$(run_hook "$HOOK" "git log --oneline")
-assert_eq "git log allowed on main" "" "$OUTPUT"
+assert_eq "git log allowed in main checkout" "" "$OUTPUT"
 
 echo ""
-echo "=== Allowed branch prefixes can commit and push ==="
+echo "=== Inside a worktree: commit and push are ALLOWED ==="
 
-setup_branch_mock "case/260317-fix-bug"
-OUTPUT=$(run_hook "$HOOK" "git commit -m 'fix'")
-assert_eq "case/ branch can commit" "" "$OUTPUT"
-OUTPUT=$(run_hook "$HOOK" "git push origin case/260317-fix-bug")
-assert_eq "case/ branch can push" "" "$OUTPUT"
+setup_worktree_mock
 
-setup_branch_mock "skill/browser-tool"
-OUTPUT=$(run_hook "$HOOK" "git commit -m 'add skill'")
-assert_eq "skill/ branch can commit" "" "$OUTPUT"
+OUTPUT=$(run_hook "$HOOK" "git commit -m 'fix something'")
+assert_eq "commit allowed in worktree" "" "$OUTPUT"
 
-setup_branch_mock "feat/new-feature"
-OUTPUT=$(run_hook "$HOOK" "git commit -m 'feat'")
-assert_eq "feat/ branch can commit" "" "$OUTPUT"
-OUTPUT=$(run_hook "$HOOK" "git push -u origin feat/new-feature")
-assert_eq "feat/ branch can push" "" "$OUTPUT"
+OUTPUT=$(run_hook "$HOOK" "git push origin my-branch")
+assert_eq "push allowed in worktree" "" "$OUTPUT"
 
-setup_branch_mock "wt/260317-1430-a1b2c3"
-OUTPUT=$(run_hook "$HOOK" "git commit -m 'wt commit'")
-assert_eq "wt/ nonce branch can commit" "" "$OUTPUT"
-OUTPUT=$(run_hook "$HOOK" "git push origin wt/260317-1430-a1b2c3")
-assert_eq "wt/ nonce branch can push" "" "$OUTPUT"
-
-setup_branch_mock "260317-1430-manual"
-OUTPUT=$(run_hook "$HOOK" "git commit -m 'dated'")
-assert_eq "YYMMDD- branch can commit" "" "$OUTPUT"
-
-setup_branch_mock "HEAD"
-OUTPUT=$(run_hook "$HOOK" "git commit -m 'rebase'")
-assert_eq "detached HEAD can commit" "" "$OUTPUT"
+OUTPUT=$(run_hook "$HOOK" "git push -u origin my-branch")
+assert_eq "push -u allowed in worktree" "" "$OUTPUT"
 
 echo ""
-echo "=== main and unrecognized branches are DENIED ==="
+echo "=== Outside a worktree (main checkout): commit and push are DENIED ==="
 
-setup_branch_mock "main"
+setup_main_checkout_mock
+
 OUTPUT=$(run_hook "$HOOK" "git commit -m 'bad'")
-assert_contains "main branch commit denied" "deny" "$OUTPUT"
-assert_contains "main branch deny mentions worktree" "worktree" "$OUTPUT"
+assert_contains "commit denied in main checkout" "deny" "$OUTPUT"
+assert_contains "commit deny mentions worktree" "worktree" "$OUTPUT"
 
 OUTPUT=$(run_hook "$HOOK" "git push origin main")
-assert_contains "main branch push denied" "deny" "$OUTPUT"
+assert_contains "push denied in main checkout" "deny" "$OUTPUT"
 
-setup_branch_mock "develop"
-OUTPUT=$(run_hook "$HOOK" "git commit -m 'wrong branch'")
-assert_contains "develop branch denied" "deny" "$OUTPUT"
+OUTPUT=$(run_hook "$HOOK" "git push -u origin some-branch")
+assert_contains "push -u denied in main checkout" "deny" "$OUTPUT"
 
-setup_branch_mock "my-random-branch"
-OUTPUT=$(run_hook "$HOOK" "git commit -m 'unrecognized'")
-assert_contains "unrecognized branch denied" "deny" "$OUTPUT"
+echo ""
+echo "=== Branch name doesn't matter — only worktree context ==="
 
-setup_branch_mock "feature/missing-slash-prefix"
-OUTPUT=$(run_hook "$HOOK" "git commit -m 'wrong prefix'")
-assert_contains "feature/ (not feat/) denied" "deny" "$OUTPUT"
+# Even with a branch name that looks like a case/feature branch,
+# if we're not in a worktree, it should be denied
+setup_main_checkout_mock
+
+OUTPUT=$(run_hook "$HOOK" "git commit -m 'sneaky'")
+assert_contains "main checkout denied regardless of branch name" "deny" "$OUTPUT"
+
+# Even with a random branch name, if we're in a worktree, it should be allowed
+setup_worktree_mock
+
+OUTPUT=$(run_hook "$HOOK" "git commit -m 'any branch is fine'")
+assert_eq "worktree allowed regardless of branch name" "" "$OUTPUT"
 
 print_results
