@@ -153,4 +153,18 @@ describe('dispatchIpcMessage', () => {
     expect(result).toBe('sent');
     expect(sendMessage).toHaveBeenCalledWith('tg:222', 'from main');
   });
+  // INVARIANT: Pool is not used for non-Telegram JIDs even when sender is present
+  // SUT: dispatchIpcMessage tg: prefix guard
+  test('does not use pool for non-telegram JIDs', async () => {
+    const result = await dispatchIpcMessage(
+      { chatJid: 'wa:123@g.us', text: 'hello', sender: 'Researcher' },
+      'telegram_main',
+      true,
+      makeDeps({ withPool: true }),
+    );
+
+    expect(result).toBe('sent');
+    expect(sendPoolMessage).not.toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenCalledWith('wa:123@g.us', 'hello');
+  });
 });

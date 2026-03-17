@@ -16,6 +16,7 @@ import {
   getChannelFactory,
   getRegisteredChannelNames,
 } from './channels/registry.js';
+// Wiring layer: index.ts imports channel-specific features to inject into channel-agnostic IPC deps
 import { initBotPool, sendPoolMessage } from './channels/telegram.js';
 import {
   ContainerOutput,

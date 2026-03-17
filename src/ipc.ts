@@ -65,7 +65,7 @@ export async function dispatchIpcMessage(
     return 'unauthorized';
   }
 
-  if (data.sender && data.chatJid.startsWith('tg:') && deps.sendPoolMessage) {
+  if (data.sender && deps.sendPoolMessage && data.chatJid.startsWith('tg:')) {
     const sent = await deps.sendPoolMessage(
       data.chatJid,
       data.text,
