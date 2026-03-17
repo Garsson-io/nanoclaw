@@ -107,7 +107,11 @@ Respond with JSON only (no markdown):
 
 // Haiku API call (routed through credential proxy)
 
-/** @internal — exported for testing */
+/**
+ * @deprecated Use routeMessage from router-container.ts instead.
+ * Kept as fallback when the container-based router is unavailable.
+ * @internal — exported for testing
+ */
 export async function callHaiku(prompt: string): Promise<string> {
   const body = JSON.stringify({
     model: 'claude-haiku-4-5-20251001',
