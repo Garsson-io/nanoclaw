@@ -328,7 +328,7 @@ export function _setRegisteredGroups(
   registeredGroups = groups;
 }
 
-function makeResponseDeps(channel: Channel): SendResponseDeps {
+export function makeResponseDeps(channel: Channel): SendResponseDeps {
   return {
     sendMessage: (jid, text) => channel.sendMessage(jid, text),
     sendPoolMessage:
