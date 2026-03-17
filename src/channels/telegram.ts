@@ -406,9 +406,48 @@ export class TelegramChannel implements Channel {
     this.bot.on('message:video', (ctx) => storeNonText(ctx, '[Video]'));
     this.bot.on('message:voice', (ctx) => storeNonText(ctx, '[Voice message]'));
     this.bot.on('message:audio', (ctx) => storeNonText(ctx, '[Audio]'));
-    this.bot.on('message:document', (ctx) => {
-      const name = ctx.message.document?.file_name || 'file';
-      storeNonText(ctx, `[Document: ${name}]`);
+    this.bot.on('message:document', async (ctx) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      const group = this.opts.registeredGroups()[chatJid];
+      if (!group) return;
+
+      const doc = ctx.message.document;
+      const originalName = doc?.file_name || 'file';
+
+      try {
+        const file = await ctx.api.getFile(doc!.file_id);
+        if (!file.file_path)
+          throw new Error('No file_path in Telegram response');
+
+        const url = `https://api.telegram.org/file/bot${this.botToken}/${file.file_path}`;
+        const groupDir = resolveGroupFolderPath(group.folder);
+        const uploadsDir = path.join(groupDir, 'uploads');
+        fs.mkdirSync(uploadsDir, { recursive: true });
+
+        // Prefix with message ID to avoid filename collisions
+        const safeName = originalName.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const filename = `${ctx.message.message_id}-${safeName}`;
+        const filePath = path.join(uploadsDir, filename);
+
+        await downloadFile(url, filePath);
+
+        const containerPath = `/workspace/group/uploads/${filename}`;
+        logger.info(
+          { chatJid, filePath, originalName },
+          'Downloaded Telegram document',
+        );
+
+        storeNonText(
+          ctx,
+          `[Document: ${containerPath} — original name: "${originalName}", use Read tool or Bash to process]`,
+        );
+      } catch (err) {
+        logger.error(
+          { err, chatJid, originalName },
+          'Failed to download Telegram document',
+        );
+        storeNonText(ctx, `[Document: ${originalName} — download failed]`);
+      }
     });
     this.bot.on('message:sticker', (ctx) => {
       const emoji = ctx.message.sticker?.emoji || '';
