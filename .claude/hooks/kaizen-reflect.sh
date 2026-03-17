@@ -8,6 +8,7 @@
 # Always exits 0 — this is advisory, not blocking.
 
 source "$(dirname "$0")/lib/parse-command.sh"
+source "$(dirname "$0")/lib/send-telegram-ipc.sh"
 
 INPUT=$(cat)
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
@@ -117,6 +118,20 @@ The PR has been merged. Reflect on the outcome:
    - Update any related kaizen issues
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 REFLECT
+
+  # Send Telegram notification to leads (Kaizen #31 — L2 escalation from L1 instructions)
+  # Extract PR title from the merge output or via gh pr view
+  PR_TITLE=""
+  PR_NUM=$(echo "$PR_URL" | grep -oE '[0-9]+$')
+  REPO=$(echo "$PR_URL" | sed -n 's|https://github.com/\([^/]*/[^/]*\)/pull/.*|\1|p')
+  if [ -n "$PR_NUM" ] && [ -n "$REPO" ]; then
+    PR_TITLE=$(gh pr view "$PR_NUM" --repo "$REPO" --json title --jq '.title' 2>/dev/null || true)
+  fi
+  PR_TITLE="${PR_TITLE:-unknown}"
+
+  NOTIFY_TEXT="$(printf '✅ PR merged: %s\n%s\nBranch: %s\n\nCheck CLAUDE.md post-merge procedure for deploy steps.' \
+    "$PR_TITLE" "$PR_URL" "$BRANCH")"
+  send_telegram_ipc "$NOTIFY_TEXT" >/dev/null 2>&1 || true
 fi
 
 exit 0
