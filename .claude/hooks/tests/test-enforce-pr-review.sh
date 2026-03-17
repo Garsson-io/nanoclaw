@@ -177,6 +177,24 @@ else
   ((FAIL++))
 fi
 
+OUTPUT=$(run_gate "git status")
+if [ -z "$OUTPUT" ]; then
+  echo "  PASS: git status allowed during review"
+  ((PASS++))
+else
+  echo "  FAIL: git status blocked during review"
+  ((FAIL++))
+fi
+
+OUTPUT=$(run_gate "git branch -a")
+if [ -z "$OUTPUT" ]; then
+  echo "  PASS: git branch allowed during review"
+  ((PASS++))
+else
+  echo "  FAIL: git branch blocked during review"
+  ((FAIL++))
+fi
+
 echo ""
 echo "=== Passed review: gate opens ==="
 
@@ -269,6 +287,41 @@ fi
 
 REASON=$(echo "$OUTPUT" | jq -r '.hookSpecificOutput.permissionDecisionReason // empty')
 assert_contains "deny references the correct PR" "garsson-prints/pull/5" "$REASON"
+
+echo ""
+echo "=== Stale state files are ignored ==="
+
+setup
+create_state "https://github.com/Garsson-io/nanoclaw/pull/50" "1" "needs_review"
+
+# INVARIANT: State files older than MAX_STATE_AGE are treated as stale and ignored
+# SUT: enforce-pr-review.sh staleness check
+# Backdate the state file to 3 hours ago (10800 seconds)
+STATE_FILE="$STATE_DIR/Garsson-io_nanoclaw_50"
+touch -d "3 hours ago" "$STATE_FILE" 2>/dev/null || touch -t "$(date -d '3 hours ago' +%Y%m%d%H%M.%S 2>/dev/null || date -v-3H +%Y%m%d%H%M.%S)" "$STATE_FILE" 2>/dev/null
+
+OUTPUT=$(MAX_STATE_AGE=7200 run_gate "npm test")
+if [ -z "$OUTPUT" ]; then
+  echo "  PASS: stale needs_review state file ignored"
+  ((PASS++))
+else
+  echo "  FAIL: stale state file still blocking"
+  ((FAIL++))
+fi
+
+# INVARIANT: Fresh state files (within MAX_STATE_AGE) still block
+# SUT: enforce-pr-review.sh with fresh state
+setup
+create_state "https://github.com/Garsson-io/nanoclaw/pull/51" "1" "needs_review"
+# File was just created — should be fresh
+OUTPUT=$(MAX_STATE_AGE=7200 run_gate "npm test")
+if is_denied "$OUTPUT"; then
+  echo "  PASS: fresh needs_review state file still blocks"
+  ((PASS++))
+else
+  echo "  FAIL: fresh state file did NOT block"
+  ((FAIL++))
+fi
 
 echo ""
 echo "=== Piped review commands allowed ==="

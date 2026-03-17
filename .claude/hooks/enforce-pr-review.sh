@@ -9,7 +9,10 @@
 #
 # Allowed commands during review gate:
 #   gh pr diff, gh pr view, gh pr comment, gh pr edit
-#   git diff, git log, git show
+#   git diff, git log, git show, git status, git branch
+#
+# State files older than 2 hours are considered stale and ignored,
+# preventing permanent lockout from orphaned sessions.
 #
 # The gate opens when the agent runs `gh pr diff` (which sets STATUS=passed
 # in the PostToolUse hook). If the agent pushes fixes, the gate re-engages.
@@ -28,10 +31,23 @@ CMD_LINE=$(strip_heredoc_body "$COMMAND")
 # State directory — must match pr-review-loop.sh
 STATE_DIR="${STATE_DIR:-/tmp/.pr-review-state}"
 
-# Check if any state file has STATUS=needs_review
+# Max age for state files (seconds). Files older than this are stale —
+# likely from a crashed/abandoned session — and should not block.
+MAX_STATE_AGE="${MAX_STATE_AGE:-7200}"  # 2 hours
+
+# Check if any state file has STATUS=needs_review (and is not stale)
 find_needs_review() {
+  local now
+  now=$(date +%s)
   for f in "$STATE_DIR"/*; do
     [ -f "$f" ] || continue
+    # Skip stale state files
+    local mtime
+    mtime=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null || echo "0")
+    local age=$(( now - mtime ))
+    if [ "$age" -gt "$MAX_STATE_AGE" ]; then
+      continue
+    fi
     local status
     status=$(grep -E '^STATUS=' "$f" 2>/dev/null | head -1 | cut -d= -f2-)
     if [ "$status" = "needs_review" ]; then
@@ -53,8 +69,8 @@ is_review_command() {
   if is_gh_pr_command "$cmd" "diff|view|comment|edit"; then
     return 0
   fi
-  # git diff/log/show — read-only review commands
-  if is_git_command "$cmd" "diff|log|show"; then
+  # git diff/log/show/status/branch — read-only review commands
+  if is_git_command "$cmd" "diff|log|show|status|branch"; then
     return 0
   fi
   return 1
@@ -87,7 +103,7 @@ self-review checklist. Only after reviewing can you proceed with other work.
 
 Allowed commands during review:
   gh pr diff, gh pr view, gh pr comment, gh pr edit
-  git diff, git log, git show" \
+  git diff, git log, git show, git status, git branch" \
   '{
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
