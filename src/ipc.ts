@@ -140,13 +140,12 @@ export async function dispatchIpcImage(
       { chatJid: data.chatJid, imagePath: data.imagePath, hostPath },
       'IPC image file not found',
     );
-    // Fall back to text message with caption
-    if (data.caption) {
-      await deps.sendMessage(
-        data.chatJid,
-        `${data.caption}\n\n(Image not found: ${data.imagePath})`,
-      );
-    }
+    await deps.sendMessage(
+      data.chatJid,
+      data.caption
+        ? `${data.caption}\n\n(Image not found: ${data.imagePath})`
+        : `(Image not found: ${data.imagePath})`,
+    );
     return 'sent';
   }
 
@@ -218,12 +217,12 @@ export async function dispatchIpcDocument(
       { chatJid: data.chatJid, documentPath: data.documentPath, hostPath },
       'IPC document file not found',
     );
-    if (data.caption) {
-      await deps.sendMessage(
-        data.chatJid,
-        `${data.caption}\n\n(Document not found: ${data.documentPath})`,
-      );
-    }
+    await deps.sendMessage(
+      data.chatJid,
+      data.caption
+        ? `${data.caption}\n\n(Document not found: ${data.documentPath})`
+        : `(Document not found: ${data.documentPath})`,
+    );
     return 'sent';
   }
 

@@ -337,6 +337,30 @@ describe('dispatchIpcImage', () => {
     vi.restoreAllMocks();
   });
 
+  // INVARIANT: When image file doesn't exist and no caption, user still gets feedback
+  test('sends fallback text when image file not found without caption', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+
+    const result = await dispatchIpcImage(
+      {
+        chatJid: 'tg:111',
+        imagePath: '/test-groups/telegram_main/output/missing.png',
+      },
+      'telegram_main',
+      true,
+      makeDeps({ withImage: true }),
+    );
+
+    expect(result).toBe('sent');
+    expect(sendImage).not.toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenCalledWith(
+      'tg:111',
+      expect.stringContaining('Image not found'),
+    );
+
+    vi.restoreAllMocks();
+  });
+
   // INVARIANT: Path traversal via ../ is blocked
   test('blocks path traversal attempts', async () => {
     vi.spyOn(fs, 'existsSync').mockReturnValue(true);
@@ -484,6 +508,30 @@ describe('dispatchIpcDocument', () => {
         chatJid: 'tg:111',
         documentPath: '/test-groups/telegram_main/output/missing.pdf',
         caption: 'A report',
+      },
+      'telegram_main',
+      true,
+      makeDeps({ withDocument: true }),
+    );
+
+    expect(result).toBe('sent');
+    expect(sendDocument).not.toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenCalledWith(
+      'tg:111',
+      expect.stringContaining('Document not found'),
+    );
+
+    vi.restoreAllMocks();
+  });
+
+  // INVARIANT: When document file doesn't exist and no caption, user still gets feedback
+  test('sends fallback text when document file not found without caption', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+
+    const result = await dispatchIpcDocument(
+      {
+        chatJid: 'tg:111',
+        documentPath: '/test-groups/telegram_main/output/missing.pdf',
       },
       'telegram_main',
       true,
