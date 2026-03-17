@@ -278,6 +278,14 @@ export class TelegramChannel implements Channel {
         }
       }
 
+      // Replies to bot messages count as triggers (user is addressing the agent)
+      if (
+        ctx.message.reply_to_message?.from?.is_bot &&
+        !TRIGGER_PATTERN.test(content)
+      ) {
+        content = `@${ASSISTANT_NAME} ${content}`;
+      }
+
       // Store chat metadata for discovery
       const isGroup =
         ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
@@ -328,7 +336,16 @@ export class TelegramChannel implements Channel {
         ctx.from?.username ||
         ctx.from?.id?.toString() ||
         'Unknown';
-      const caption = ctx.message.caption ? ` ${ctx.message.caption}` : '';
+      let caption = ctx.message.caption ? ` ${ctx.message.caption}` : '';
+
+      // Replies to bot messages count as triggers
+      const fullContent = `${placeholder}${caption}`;
+      if (
+        ctx.message.reply_to_message?.from?.is_bot &&
+        !TRIGGER_PATTERN.test(fullContent)
+      ) {
+        caption = ` @${ASSISTANT_NAME}${caption}`;
+      }
 
       const isGroup =
         ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
