@@ -17,8 +17,14 @@ if [ "$EXIT_CODE" != "0" ]; then
   exit 0
 fi
 
+# Extract only the command line, stripping heredoc bodies to avoid false positives
+CMD_LINE=$(echo "$COMMAND" | sed '/<<[[:space:]]*['\''\"]\{0,1\}[A-Za-z_]*['\''\"]\{0,1\}/,$d')
+if [ -z "$CMD_LINE" ]; then
+  CMD_LINE=$(echo "$COMMAND" | head -1)
+fi
+
 # Only trigger on gh pr create commands (not gh pr view, gh pr list, etc.)
-if ! echo "$COMMAND" | grep -qE 'gh\s+pr\s+create'; then
+if ! echo "$CMD_LINE" | grep -qE 'gh\s+pr\s+create'; then
   exit 0
 fi
 

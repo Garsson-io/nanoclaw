@@ -18,11 +18,17 @@ if [ "$EXIT_CODE" != "0" ]; then
   exit 0
 fi
 
+# Extract only the command line, stripping heredoc bodies to avoid false positives
+CMD_LINE=$(echo "$COMMAND" | sed '/<<[[:space:]]*['\''\"]\{0,1\}[A-Za-z_]*['\''\"]\{0,1\}/,$d')
+if [ -z "$CMD_LINE" ]; then
+  CMD_LINE=$(echo "$COMMAND" | head -1)
+fi
+
 IS_CREATE=false
 IS_MERGE=false
-if echo "$COMMAND" | grep -qE 'gh\s+pr\s+create'; then
+if echo "$CMD_LINE" | grep -qE 'gh\s+pr\s+create'; then
   IS_CREATE=true
-elif echo "$COMMAND" | grep -qE 'gh\s+pr\s+merge'; then
+elif echo "$CMD_LINE" | grep -qE 'gh\s+pr\s+merge'; then
   IS_MERGE=true
 else
   exit 0

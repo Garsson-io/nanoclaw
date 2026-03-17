@@ -67,10 +67,10 @@ import {
   stopRemoteControl,
 } from './remote-control.js';
 import {
-  isAutoTriggerSender,
   isSenderAllowed,
   isTriggerAllowed,
   loadSenderAllowlist,
+  shouldAutoTrigger,
   shouldDropMessage,
 } from './sender-allowlist.js';
 import { startSchedulerLoop } from './task-scheduler.js';
@@ -362,7 +362,8 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
           (m.is_from_me ||
             isTriggerAllowed(chatJid, m.sender, allowlistCfg))) ||
         // Auto-trigger: leads/trusted senders activate without prefix
-        isAutoTriggerSender(m.sender, allowlistCfg),
+        // (filtered to skip trivial ack messages like "ok", "thanks", emoji)
+        shouldAutoTrigger(m.sender, m.content, allowlistCfg),
     );
     if (!hasTrigger) return true;
   }
@@ -818,7 +819,8 @@ async function startMessageLoop(): Promise<void> {
                   (m.is_from_me ||
                     isTriggerAllowed(chatJid, m.sender, allowlistCfg))) ||
                 // Auto-trigger: leads/trusted senders activate without prefix
-                isAutoTriggerSender(m.sender, allowlistCfg),
+                // (filtered to skip trivial ack messages like "ok", "thanks", emoji)
+                shouldAutoTrigger(m.sender, m.content, allowlistCfg),
             );
             if (!hasTrigger) continue;
           }

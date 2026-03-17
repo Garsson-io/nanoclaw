@@ -11,16 +11,25 @@
 INPUT=$(cat)
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
 
+# Extract only the command line, stripping heredoc bodies.
+# Heredocs (<<'EOF' ... EOF) can contain arbitrary text that causes false
+# positives when grepping for command patterns like "gh pr create".
+CMD_LINE=$(echo "$COMMAND" | sed '/<<[[:space:]]*['\''\"]\{0,1\}[A-Za-z_]*['\''\"]\{0,1\}/,$d')
+# If sed removed everything (command IS on the heredoc line), use the first line
+if [ -z "$CMD_LINE" ]; then
+  CMD_LINE=$(echo "$COMMAND" | head -1)
+fi
+
 # Only check gh pr create and gh pr merge
-if ! echo "$COMMAND" | grep -qE 'gh\s+pr\s+(create|merge)'; then
+if ! echo "$CMD_LINE" | grep -qE 'gh\s+pr\s+(create|merge)'; then
   exit 0
 fi
 
 IS_CREATE=false
 IS_MERGE=false
-if echo "$COMMAND" | grep -qE 'gh\s+pr\s+create'; then
+if echo "$CMD_LINE" | grep -qE 'gh\s+pr\s+create'; then
   IS_CREATE=true
-elif echo "$COMMAND" | grep -qE 'gh\s+pr\s+merge'; then
+elif echo "$CMD_LINE" | grep -qE 'gh\s+pr\s+merge'; then
   IS_MERGE=true
 fi
 
