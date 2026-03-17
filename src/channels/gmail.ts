@@ -284,7 +284,9 @@ export class GmailChannel implements Channel {
   }
 
   /** Fetch thread metadata from Gmail API for reply threading. */
-  async fetchThreadMeta(threadId: string): Promise<ThreadMeta | undefined> {
+  private async fetchThreadMeta(
+    threadId: string,
+  ): Promise<ThreadMeta | undefined> {
     if (!this.gmail) return undefined;
 
     try {

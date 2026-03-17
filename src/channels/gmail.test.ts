@@ -919,7 +919,13 @@ describe('fetchThreadMeta', () => {
 
   it('returns undefined when gmail is not initialized', async () => {
     await channel.disconnect();
-    const result = await channel.fetchThreadMeta('thread-x');
+    const result = await (
+      channel as unknown as {
+        fetchThreadMeta(
+          id: string,
+        ): Promise<Record<string, string> | undefined>;
+      }
+    ).fetchThreadMeta('thread-x');
     expect(result).toBeUndefined();
   });
 
@@ -927,13 +933,25 @@ describe('fetchThreadMeta', () => {
     mockApi.users.threads.get.mockResolvedValue({
       data: { messages: [] },
     });
-    const result = await channel.fetchThreadMeta('thread-empty');
+    const result = await (
+      channel as unknown as {
+        fetchThreadMeta(
+          id: string,
+        ): Promise<Record<string, string> | undefined>;
+      }
+    ).fetchThreadMeta('thread-empty');
     expect(result).toBeUndefined();
   });
 
   it('returns undefined on API error', async () => {
     mockApi.users.threads.get.mockRejectedValue(new Error('API down'));
-    const result = await channel.fetchThreadMeta('thread-error');
+    const result = await (
+      channel as unknown as {
+        fetchThreadMeta(
+          id: string,
+        ): Promise<Record<string, string> | undefined>;
+      }
+    ).fetchThreadMeta('thread-error');
     expect(result).toBeUndefined();
   });
 
@@ -954,7 +972,13 @@ describe('fetchThreadMeta', () => {
       },
     });
 
-    const result = await channel.fetchThreadMeta('thread-jane');
+    const result = await (
+      channel as unknown as {
+        fetchThreadMeta(
+          id: string,
+        ): Promise<Record<string, string> | undefined>;
+      }
+    ).fetchThreadMeta('thread-jane');
     expect(result).toEqual({
       sender: 'jane@example.com',
       senderName: 'Jane Doe',
@@ -989,7 +1013,13 @@ describe('fetchThreadMeta', () => {
       },
     });
 
-    const result = await channel.fetchThreadMeta('thread-mixed');
+    const result = await (
+      channel as unknown as {
+        fetchThreadMeta(
+          id: string,
+        ): Promise<Record<string, string> | undefined>;
+      }
+    ).fetchThreadMeta('thread-mixed');
     expect(result?.sender).toBe('ext@example.com');
     expect(result?.senderName).toBe('External');
   });
