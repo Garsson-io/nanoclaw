@@ -104,6 +104,11 @@ These policies were learned from past mistakes. Follow them strictly.
     - **Has this type of failure happened before?** If yes, the previous level wasn't enough — escalate.
     - **Affects humans directly?** → Must be Level 3 (humans should never wait on agent mistakes)
     - CLAUDE.md instructions are Level 1 — necessary but not sufficient. When they fail, escalate to hooks (Level 2) or architectural enforcement (Level 3).
+12. **Hooks are the foundation of our kaizen infrastructure.** The `.claude/hooks/` directory contains Level 2 enforcement — automated checks that catch mistakes before they reach humans. When a hook blocks you:
+    - **Do NOT override it blindly.** The hook exists because a past mistake proved instructions alone weren't enough.
+    - **If it's a false positive**, fix the hook. Improve its matching logic, add exclusions with rationale, and add a test case that covers the false-positive scenario. This is recursive kaizen — making the enforcement smarter, not weaker.
+    - **If it's a true positive**, fix the underlying issue. The hook is doing its job.
+    - **Always add a test** for any hook change in `.claude/hooks/tests/`. Hooks without tests are Level 1 pretending to be Level 2.
 
 ## Verification Discipline (Kaizen #11, #15, #17)
 
