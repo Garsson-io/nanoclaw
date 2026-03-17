@@ -24,9 +24,9 @@ CMD_LINE=$(strip_heredoc_body "$COMMAND")
 
 IS_CREATE=false
 IS_MERGE=false
-if echo "$CMD_LINE" | grep -qE 'gh\s+pr\s+create'; then
+if is_gh_pr_command "$CMD_LINE" "create"; then
   IS_CREATE=true
-elif echo "$CMD_LINE" | grep -qE 'gh\s+pr\s+merge'; then
+elif is_gh_pr_command "$CMD_LINE" "merge"; then
   IS_MERGE=true
 else
   exit 0
@@ -41,8 +41,8 @@ fi
 # Get current branch for context
 BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 
-# Get changed files for context
-CHANGED=$(git diff --name-only main...HEAD 2>/dev/null | head -20 || true)
+# Get changed files for context (uses PR diff for merges, git diff for creates)
+CHANGED=$(get_pr_changed_files "$CMD_LINE" "$IS_MERGE" 2>/dev/null | head -20)
 
 if [ "$IS_CREATE" = true ]; then
   cat >&2 <<'REFLECT'

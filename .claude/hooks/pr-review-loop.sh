@@ -11,6 +11,8 @@
 # Uses state file to track review progress across tool calls.
 # Always exits 0 — advisory, not blocking.
 
+source "$(dirname "$0")/lib/parse-command.sh"
+
 INPUT=$(cat)
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
 STDOUT=$(echo "$INPUT" | jq -r '.tool_output.stdout // empty')
@@ -21,6 +23,8 @@ EXIT_CODE=$(echo "$INPUT" | jq -r '.tool_output.exit_code // "0"')
 if [ "$EXIT_CODE" != "0" ]; then
   exit 0
 fi
+
+CMD_LINE=$(strip_heredoc_body "$COMMAND")
 
 # State directory for review tracking
 STATE_DIR="/tmp/.pr-review-state"
@@ -37,13 +41,13 @@ IS_GIT_PUSH=false
 IS_PR_DIFF=false
 IS_PR_MERGE=false
 
-if echo "$COMMAND" | grep -qE 'gh\s+pr\s+create'; then
+if is_gh_pr_command "$CMD_LINE" "create"; then
   IS_PR_CREATE=true
-elif echo "$COMMAND" | grep -qE 'git\s+push'; then
+elif is_git_command "$CMD_LINE" "push"; then
   IS_GIT_PUSH=true
-elif echo "$COMMAND" | grep -qE 'gh\s+pr\s+diff'; then
+elif is_gh_pr_command "$CMD_LINE" "diff"; then
   IS_PR_DIFF=true
-elif echo "$COMMAND" | grep -qE 'gh\s+pr\s+merge'; then
+elif is_gh_pr_command "$CMD_LINE" "merge"; then
   IS_PR_MERGE=true
 else
   exit 0

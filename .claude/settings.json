@@ -29,6 +29,11 @@
             "type": "command",
             "command": "./.claude/hooks/check-verification.sh",
             "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "./.claude/hooks/check-dirty-files.sh",
+            "timeout": 10
           }
         ]
       },
