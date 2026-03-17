@@ -18,21 +18,24 @@ send_telegram_ipc() {
     return 1
   fi
 
-  # Allow override for testing
-  local ipc_dir="${IPC_DIR:-data/ipc/main/messages}"
+  # Allow override for testing; anchor to project dir when available
+  local ipc_dir="${IPC_DIR:-${CLAUDE_PROJECT_DIR:-.}/data/ipc/main/messages}"
 
   # Ensure directory exists
   if [ ! -d "$ipc_dir" ]; then
     mkdir -p "$ipc_dir" 2>/dev/null || return 1
   fi
 
-  IPC_FILE="$ipc_dir/notify-$(date +%s)-$$.json"
+  IPC_FILE="$ipc_dir/notify-$(date +%s)-$$-$RANDOM.json"
 
   # Use jq for safe JSON construction — prevents injection via message text
-  jq -n --arg text "$text" --arg jid "$chat_jid" \
-    '{type:"message",chatJid:$jid,text:$text}' > "$IPC_FILE" 2>/dev/null
+  if ! jq -n --arg text "$text" --arg jid "$chat_jid" \
+    '{type:"message",chatJid:$jid,text:$text}' > "$IPC_FILE" 2>/dev/null; then
+    rm -f "$IPC_FILE" 2>/dev/null
+    return 1
+  fi
 
-  if [ $? -ne 0 ] || [ ! -s "$IPC_FILE" ]; then
+  if [ ! -s "$IPC_FILE" ]; then
     rm -f "$IPC_FILE" 2>/dev/null
     return 1
   fi
