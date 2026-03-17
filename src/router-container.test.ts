@@ -215,6 +215,20 @@ That's my answer.`;
   });
 
   /**
+   * INVARIANT: When text contains other braces (e.g. {thinking}), the correct
+   * JSON response is still extracted
+   * SUT: parseRouterResponse with mixed brace content
+   * VERIFICATION: The routing JSON is parsed, not the stray braces
+   */
+  it('extracts correct JSON when text contains other braces', () => {
+    const text =
+      'Here is my {thinking} about this: {"requestId":"req-6","decision":"route_to_case","caseId":"case-1","confidence":0.9,"reason":"auth related"}';
+    const result = parseRouterResponse(text, 'req-6');
+    expect(result.decision).toBe('route_to_case');
+    expect(result.caseId).toBe('case-1');
+  });
+
+  /**
    * INVARIANT: Falls back to provided requestId when response omits it
    * SUT: parseRouterResponse requestId fallback
    * VERIFICATION: Provided requestId is used when not in the JSON

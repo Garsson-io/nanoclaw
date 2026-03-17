@@ -36,7 +36,7 @@ import { RouterRequest, RouterResponse } from './router-types.js';
 const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
 const OUTPUT_END_MARKER = '---NANOCLAW_OUTPUT_END---';
 
-const ROUTER_TIMEOUT_MS = 30_000; // 30 seconds for router decisions
+const ROUTER_TIMEOUT_MS = 60_000; // 60 seconds — first container run includes image pull + SDK init
 const ROUTER_GROUP_FOLDER = '__router__';
 
 /**
@@ -90,24 +90,59 @@ export function parseRouterResponse(
   resultText: string,
   requestId: string,
 ): RouterResponse {
-  // Try to find JSON in the output — the agent might wrap it in text
-  const jsonMatch = resultText.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
+  // Try to find JSON — agent might wrap it in text.
+  // Try the last {…} block first (most likely the actual response JSON),
+  // then fall back to the first match.
+  const allMatches = resultText.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g);
+  if (!allMatches || allMatches.length === 0) {
     throw new Error(`Router returned no JSON: ${resultText.slice(0, 200)}`);
   }
 
-  const parsed = JSON.parse(jsonMatch[0]);
+  // Try each match from last to first, return the first that parses
+  // and looks like a routing response
+  for (let i = allMatches.length - 1; i >= 0; i--) {
+    try {
+      const parsed = JSON.parse(allMatches[i]);
+      if (parsed.decision || parsed.confidence !== undefined || parsed.reason) {
+        return {
+          requestId: parsed.requestId || requestId,
+          decision: parsed.decision || 'suggest_new',
+          caseId: parsed.caseId,
+          caseName: parsed.caseName,
+          confidence:
+            typeof parsed.confidence === 'number' ? parsed.confidence : 0,
+          reason: parsed.reason || '',
+          directAnswer: parsed.directAnswer,
+          model: parsed.model,
+        };
+      }
+    } catch {
+      // Not valid JSON, try next match
+    }
+  }
 
-  return {
-    requestId: parsed.requestId || requestId,
-    decision: parsed.decision || 'suggest_new',
-    caseId: parsed.caseId,
-    caseName: parsed.caseName,
-    confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0,
-    reason: parsed.reason || '',
-    directAnswer: parsed.directAnswer,
-    model: parsed.model,
-  };
+  // Last resort: try the greedy match
+  const greedyMatch = resultText.match(/\{[\s\S]*\}/);
+  if (greedyMatch) {
+    try {
+      const parsed = JSON.parse(greedyMatch[0]);
+      return {
+        requestId: parsed.requestId || requestId,
+        decision: parsed.decision || 'suggest_new',
+        caseId: parsed.caseId,
+        caseName: parsed.caseName,
+        confidence:
+          typeof parsed.confidence === 'number' ? parsed.confidence : 0,
+        reason: parsed.reason || '',
+        directAnswer: parsed.directAnswer,
+        model: parsed.model,
+      };
+    } catch {
+      // Fall through to error
+    }
+  }
+
+  throw new Error(`Router returned no valid JSON: ${resultText.slice(0, 200)}`);
 }
 
 /**
@@ -124,13 +159,21 @@ async function runRouterContainer(
   const routerIpcDir = path.join(DATA_DIR, 'ipc', ROUTER_GROUP_FOLDER);
   fs.mkdirSync(path.join(routerIpcDir, 'input'), { recursive: true });
 
-  // Write _close sentinel so the agent-runner exits after the first query
-  // (don't keep it alive waiting for IPC messages)
+  // Write _close sentinel so the agent-runner exits after the first query.
+  // Phase 1: one-shot containers. Phase 2 will remove this for persistent routing.
   fs.writeFileSync(path.join(routerIpcDir, 'input', '_close'), '');
 
   // Prepare router group directory (minimal — just needs to exist)
   const routerGroupDir = path.join(DATA_DIR, 'router-group');
   fs.mkdirSync(routerGroupDir, { recursive: true });
+
+  const routerClaudeMd = path.join(routerGroupDir, 'CLAUDE.md');
+  if (!fs.existsSync(routerClaudeMd)) {
+    fs.writeFileSync(
+      routerClaudeMd,
+      '# Router\n\nYou are a message router. Respond with JSON only. No commentary, no markdown, no explanation.\n',
+    );
+  }
 
   // Prepare router sessions directory
   const routerSessionsDir = path.join(

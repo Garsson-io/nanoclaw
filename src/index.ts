@@ -62,7 +62,6 @@ import {
   updateCase,
   writeCasesSnapshot,
 } from './cases.js';
-import { routeMessageToCase } from './case-router.js';
 import { routeMessage, stopRouterContainer } from './router-container.js';
 import { RouterRequest } from './router-types.js';
 import {
@@ -427,7 +426,10 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         if (routerResponse.decision === 'direct_answer') {
           // Router can answer directly — send to channel, no case container needed
           if (routerResponse.directAnswer) {
-            await channel.sendMessage(chatJid, routerResponse.directAnswer);
+            const formatted = formatOutbound(routerResponse.directAnswer);
+            if (formatted) {
+              await channel.sendMessage(chatJid, formatted);
+            }
           }
           lastAgentTimestamp[chatJid] =
             missedMessages[missedMessages.length - 1].timestamp;
@@ -464,37 +466,12 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
           );
         }
       } catch (routerErr) {
-        // Router failed — fall back to legacy Haiku routing
+        // Router failed — spawn without case context, let agent decide
         logger.warn(
           { err: routerErr },
-          'Container router failed, falling back to Haiku router',
+          'Container router failed, spawning without case context',
         );
-
-        const routeResult = await routeMessageToCase(
-          lastMsgText,
-          senderName,
-          routableCases,
-        );
-
-        if (routeResult.caseId) {
-          targetCase = getCaseById(routeResult.caseId) || undefined;
-          logger.info(
-            {
-              caseId: routeResult.caseId,
-              caseName: routeResult.caseName,
-              confidence: routeResult.confidence,
-            },
-            'Message routed to case (Haiku fallback)',
-          );
-        } else if (routeResult.suggestNew) {
-          logger.info(
-            {
-              confidence: routeResult.confidence,
-              reason: routeResult.reason,
-            },
-            'No case match (Haiku fallback), routing without case context',
-          );
-        }
+        // targetCase remains undefined — agent processes without case isolation
       }
     } else if (routableCases.length === 1) {
       targetCase = routableCases[0];
