@@ -37,8 +37,8 @@ NanoClaw (harness, public)              Verticals (private repos)
 
 | Dependency type | Where it goes | Example |
 |----------------|---------------|---------|
-| Universal system deps | Harness Dockerfile (`container/Dockerfile`) | `chromium`, `git`, `node` |
-| Vertical-specific system deps | Declared by vertical, installed in container | `poppler-utils` (insurance), `ghostscript` (prints) |
+| Universal system deps | Harness Dockerfile (`container/Dockerfile`) | `chromium`, `git`, `node`, `ghostscript`, `poppler-utils` |
+| Vertical-specific system deps | Declared by vertical, installed in container | `tesseract-ocr` (insurance) |
 | Vertical npm deps | Vertical's `package.json` | `sharp`, `pdfjs-dist` |
 | Domain tools/workflows | Vertical repo | `policy-cache-manager.js`, `workflows/` |
 | Harness infrastructure | This repo | `src/`, `container/`, skills |

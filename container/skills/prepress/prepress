@@ -1,0 +1,544 @@
+#!/usr/bin/env python3
+"""
+Prepress PDF analysis tool.
+
+Commands:
+  inspect <file>     Show all page boxes, dimensions, and bleed status
+  bleed <file>       Detect and measure bleeds on all pages
+  preflight <file>   Run preflight checks (boxes, images, fonts, color)
+"""
+
+import sys
+import os
+import subprocess
+import tempfile
+import re
+
+# PDF points conversions
+MM_TO_PT = 2.83465
+PT_TO_MM = 1 / MM_TO_PT
+
+# Standard bleed threshold (3mm)
+BLEED_GOOD_PT = 3 * MM_TO_PT       # 8.504 pt
+BLEED_ACCEPTABLE_PT = 2 * MM_TO_PT  # 5.669 pt
+BLEED_MARGINAL_PT = 1 * MM_TO_PT    # 2.835 pt
+
+# Standard paper sizes in points (width x height, portrait)
+STANDARD_SIZES = {
+    'A3':      (841.89, 1190.55),
+    'A4':      (595.28, 841.89),
+    'A5':      (419.53, 595.28),
+    'A6':      (297.64, 419.53),
+    'Letter':  (612.0, 792.0),
+    'Legal':   (612.0, 1008.0),
+    'Tabloid': (792.0, 1224.0),
+    '4x6':     (288.0, 432.0),
+    '5x7':     (360.0, 504.0),
+    '8x10':    (576.0, 720.0),
+    '11x14':   (792.0, 1008.0),
+    '10x15cm': (283.46, 425.20),
+    '13x18cm': (368.50, 510.24),
+}
+
+
+def pts_to_mm(pts):
+    return pts * PT_TO_MM
+
+
+def format_mm(pts):
+    return f"{pts_to_mm(pts):.1f}mm"
+
+
+def format_box(box):
+    """Format a box as [x0, y0, x1, y1] with dimensions."""
+    x0, y0, x1, y1 = [float(v) for v in box]
+    w, h = x1 - x0, y1 - y0
+    return f"[{x0:.1f}, {y0:.1f}, {x1:.1f}, {y1:.1f}] = {format_mm(w)} x {format_mm(h)}"
+
+
+def match_standard_size(w_pt, h_pt, tolerance_pt=2.0):
+    """Try to match dimensions to a standard paper size."""
+    # Try both orientations
+    for name, (sw, sh) in STANDARD_SIZES.items():
+        if (abs(w_pt - sw) < tolerance_pt and abs(h_pt - sh) < tolerance_pt):
+            return name, 'portrait'
+        if (abs(w_pt - sh) < tolerance_pt and abs(h_pt - sw) < tolerance_pt):
+            return name, 'landscape'
+    return None, None
+
+
+def bleed_verdict(bleed_pt):
+    """Rate a bleed amount. Allows 0.1pt tolerance for PDF coordinate rounding."""
+    TOLERANCE = 0.1  # PDF coords often get rounded
+    if bleed_pt >= BLEED_GOOD_PT - TOLERANCE:
+        return "good (>=3mm)"
+    elif bleed_pt >= BLEED_ACCEPTABLE_PT - TOLERANCE:
+        return "acceptable (>=2mm)"
+    elif bleed_pt >= BLEED_MARGINAL_PT - TOLERANCE:
+        return "marginal (>=1mm)"
+    elif bleed_pt > 0.5:
+        return "insufficient (<1mm)"
+    else:
+        return "none"
+
+
+def get_gs_bbox(pdf_path, page_num=1):
+    """Use Ghostscript bbox device to find actual ink extent."""
+    result = subprocess.run(
+        ['gs', '-dSAFER', '-dBATCH', '-dNOPAUSE', '-dQUIET',
+         '-sDEVICE=bbox',
+         f'-dFirstPage={page_num}', f'-dLastPage={page_num}',
+         str(pdf_path)],
+        capture_output=True, text=True
+    )
+    stderr = result.stderr
+    hires = re.search(
+        r'%%HiResBoundingBox:\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)',
+        stderr
+    )
+    if hires:
+        return [float(x) for x in hires.groups()]
+
+    standard = re.search(
+        r'%%BoundingBox:\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)',
+        stderr
+    )
+    if standard:
+        return [float(x) for x in standard.groups()]
+
+    return None
+
+
+def check_edge_content(pdf_path, page_num=1, dpi=72):
+    """Render page and check for non-white content at edges."""
+    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+        tmp_path = tmp.name
+
+    try:
+        result = subprocess.run(
+            ['gs', '-dSAFER', '-dBATCH', '-dNOPAUSE', '-dQUIET',
+             '-sDEVICE=png16m', f'-r{dpi}',
+             f'-dFirstPage={page_num}', f'-dLastPage={page_num}',
+             f'-sOutputFile={tmp_path}', str(pdf_path)],
+            capture_output=True
+        )
+        if result.returncode != 0 or not os.path.exists(tmp_path) or os.path.getsize(tmp_path) == 0:
+            return {side: {'has_content': False, 'coverage': 0} for side in ['top', 'bottom', 'left', 'right']}
+
+        from PIL import Image
+        img = Image.open(tmp_path).convert('RGB')
+        pixels = img.load()
+        w, h = img.size
+        WHITE_THRESHOLD = 248
+
+        def is_nonwhite(pixel):
+            return any(c < WHITE_THRESHOLD for c in pixel)
+
+        edges = {}
+        # Sample along each edge
+        for label, coords in [
+            ('top',    [(x, 0) for x in range(0, w, max(1, w // 200))]),
+            ('bottom', [(x, h - 1) for x in range(0, w, max(1, w // 200))]),
+            ('left',   [(0, y) for y in range(0, h, max(1, h // 200))]),
+            ('right',  [(w - 1, y) for y in range(0, h, max(1, h // 200))]),
+        ]:
+            nonwhite_count = sum(1 for x, y in coords if is_nonwhite(pixels[x, y]))
+            total = len(coords)
+            ratio = nonwhite_count / total if total > 0 else 0
+            edges[label] = {
+                'has_content': ratio > 0.05,  # >5% non-white pixels
+                'coverage': ratio
+            }
+        return edges
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+
+def open_pdf(path):
+    """Open a PDF with pikepdf."""
+    try:
+        import pikepdf
+        return pikepdf.Pdf.open(path)
+    except ImportError:
+        print("Error: pikepdf not installed. Run: pip install pikepdf", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_inspect(pdf_path):
+    """Show all page boxes and metadata."""
+    pdf = open_pdf(pdf_path)
+    print(f"File: {pdf_path}")
+    print(f"Pages: {len(pdf.pages)}")
+    print(f"PDF version: {pdf.pdf_version}")
+    print()
+
+    for i, page in enumerate(pdf.pages):
+        print(f"--- Page {i + 1} ---")
+
+        boxes = {}
+        # pikepdf property names → PDF spec key names
+        box_keys = {
+            'mediabox': '/MediaBox', 'cropbox': '/CropBox',
+            'bleedbox': '/BleedBox', 'trimbox': '/TrimBox', 'artbox': '/ArtBox',
+        }
+        for box_name in ['mediabox', 'cropbox', 'bleedbox', 'trimbox', 'artbox']:
+            key = box_keys[box_name]
+            # Check if explicitly defined (not inherited/defaulted)
+            explicitly_set = key in page
+            box_val = getattr(page, box_name)
+            boxes[box_name] = {
+                'values': [float(v) for v in box_val],
+                'explicit': explicitly_set
+            }
+            status = "" if explicitly_set else " (inherited)"
+            print(f"  {box_name:10s}: {format_box(box_val)}{status}")
+
+        # Dimensions from MediaBox
+        mb = boxes['mediabox']['values']
+        w, h = mb[2] - mb[0], mb[3] - mb[1]
+        size_name, orientation = match_standard_size(w, h)
+        if size_name:
+            print(f"  Size match: {size_name} ({orientation})")
+
+        # Check if TrimBox differs from MediaBox (implies bleed structure)
+        if boxes['trimbox']['explicit']:
+            tb = boxes['trimbox']['values']
+            bleed_l = tb[0] - mb[0]
+            bleed_b = tb[1] - mb[1]
+            bleed_r = mb[2] - tb[2]
+            bleed_t = mb[3] - tb[3]
+            if any(b > 0.5 for b in [bleed_l, bleed_b, bleed_r, bleed_t]):
+                print(f"  Bleed (MediaBox - TrimBox):"
+                      f" L={format_mm(bleed_l)} B={format_mm(bleed_b)}"
+                      f" R={format_mm(bleed_r)} T={format_mm(bleed_t)}")
+
+        print()
+
+
+def cmd_bleed(pdf_path):
+    """Detect and measure bleeds using multiple strategies."""
+    pdf = open_pdf(pdf_path)
+    print(f"Bleed analysis: {pdf_path}")
+    print(f"Pages: {len(pdf.pages)}")
+    print()
+
+    results = []
+
+    for i, page in enumerate(pdf.pages):
+        page_num = i + 1
+        print(f"--- Page {page_num} ---")
+
+        mb = [float(v) for v in page.mediabox]
+        mb_w, mb_h = mb[2] - mb[0], mb[3] - mb[1]
+
+        has_trimbox = '/TrimBox' in page
+        has_bleedbox = '/BleedBox' in page
+
+        result = {
+            'page': page_num,
+            'method': None,
+            'confidence': None,
+            'bleeds': {'left': 0, 'bottom': 0, 'right': 0, 'top': 0},
+            'verdict': None,
+            'trimbox': None,
+        }
+
+        # Strategy 1: Explicit TrimBox + BleedBox
+        if has_trimbox and has_bleedbox:
+            tb = [float(v) for v in page.trimbox]
+            bb = [float(v) for v in page.bleedbox]
+            result['method'] = 'explicit_boxes'
+            result['confidence'] = 'high'
+            result['trimbox'] = tb
+            result['bleeds'] = {
+                'left':   tb[0] - bb[0],
+                'bottom': tb[1] - bb[1],
+                'right':  bb[2] - tb[2],
+                'top':    bb[3] - tb[3],
+            }
+            print(f"  Method: Explicit TrimBox + BleedBox (high confidence)")
+            print(f"  TrimBox: {format_box(tb)}")
+            print(f"  BleedBox: {format_box(bb)}")
+
+        # Strategy 2: Explicit TrimBox, infer bleed from content extent
+        elif has_trimbox:
+            tb = [float(v) for v in page.trimbox]
+            result['trimbox'] = tb
+            bbox = get_gs_bbox(pdf_path, page_num)
+            if bbox:
+                result['method'] = 'trimbox_plus_ink'
+                result['confidence'] = 'medium'
+                result['bleeds'] = {
+                    'left':   max(0, tb[0] - bbox[0]),
+                    'bottom': max(0, tb[1] - bbox[1]),
+                    'right':  max(0, bbox[2] - tb[2]),
+                    'top':    max(0, bbox[3] - tb[3]),
+                }
+                print(f"  Method: TrimBox + ink extent analysis (medium confidence)")
+                print(f"  TrimBox: {format_box(tb)}")
+                print(f"  Ink bbox: {format_box(bbox)}")
+            else:
+                result['method'] = 'trimbox_only'
+                result['confidence'] = 'low'
+                result['bleeds'] = {
+                    'left':   tb[0] - mb[0],
+                    'bottom': tb[1] - mb[1],
+                    'right':  mb[2] - tb[2],
+                    'top':    mb[3] - tb[3],
+                }
+                print(f"  Method: TrimBox vs MediaBox (low confidence)")
+                print(f"  TrimBox: {format_box(tb)}")
+
+        # Strategy 3: No TrimBox — try standard size matching + ink analysis
+        else:
+            # Try to match MediaBox to standard size + bleed
+            inferred_trim = None
+            for name, (sw, sh) in STANDARD_SIZES.items():
+                for tw, th in [(sw, sh), (sh, sw)]:  # both orientations
+                    bl = (mb_w - tw) / 2
+                    bt = (mb_h - th) / 2
+                    if BLEED_MARGINAL_PT < bl < 20 and BLEED_MARGINAL_PT < bt < 20:
+                        if abs(bl - bt) < 3:  # bleeds roughly equal
+                            inferred_trim = [mb[0] + bl, mb[1] + bt, mb[2] - bl, mb[3] - bt]
+                            result['method'] = f'size_match_{name}'
+                            result['confidence'] = 'medium'
+                            print(f"  Method: MediaBox matches {name} + {format_mm(bl)} bleed (medium confidence)")
+                            break
+                if inferred_trim:
+                    break
+
+            if inferred_trim:
+                result['trimbox'] = inferred_trim
+                result['bleeds'] = {
+                    'left':   inferred_trim[0] - mb[0],
+                    'bottom': inferred_trim[1] - mb[1],
+                    'right':  mb[2] - inferred_trim[2],
+                    'top':    mb[3] - inferred_trim[3],
+                }
+            else:
+                # Fall back to edge content analysis
+                print(f"  Method: Edge content analysis (low confidence)")
+                bbox = get_gs_bbox(pdf_path, page_num)
+                edges = check_edge_content(pdf_path, page_num)
+                result['method'] = 'edge_analysis'
+                result['confidence'] = 'low'
+
+                has_edge_content = any(e['has_content'] for e in edges.values())
+                if has_edge_content:
+                    print(f"  Content reaches edges:")
+                    for side, info in edges.items():
+                        if info['has_content']:
+                            print(f"    {side}: {info['coverage']:.0%} coverage")
+                    # If content reaches edges, bleed exists but we can't measure vs trim
+                    # because we don't know where trim should be
+                    result['bleeds'] = None
+                    result['verdict'] = (
+                        "Content reaches page edges (bleed-like), but no TrimBox defined. "
+                        "Cannot determine bleed amount without knowing intended trim size."
+                    )
+                else:
+                    result['verdict'] = (
+                        "No bleed detected. Content does not reach page edges "
+                        "and no TrimBox/BleedBox defined."
+                    )
+
+                if bbox:
+                    print(f"  Ink bbox: {format_box(bbox)}")
+                    ink_margin_l = bbox[0] - mb[0]
+                    ink_margin_b = bbox[1] - mb[1]
+                    ink_margin_r = mb[2] - bbox[2]
+                    ink_margin_t = mb[3] - bbox[3]
+                    print(f"  Ink margins from MediaBox:"
+                          f" L={format_mm(ink_margin_l)} B={format_mm(ink_margin_b)}"
+                          f" R={format_mm(ink_margin_r)} T={format_mm(ink_margin_t)}")
+
+        # Print bleed measurements and verdict
+        if result['bleeds']:
+            b = result['bleeds']
+            print(f"  Bleeds: L={format_mm(b['left'])} B={format_mm(b['bottom'])}"
+                  f" R={format_mm(b['right'])} T={format_mm(b['top'])}")
+
+            min_bleed = min(b.values())
+            result['verdict'] = bleed_verdict(min_bleed)
+            print(f"  Verdict: {result['verdict']}")
+
+            # Check symmetry
+            h_diff = abs(b['left'] - b['right'])
+            v_diff = abs(b['top'] - b['bottom'])
+            if h_diff > 1 or v_diff > 1:
+                print(f"  Warning: Asymmetric bleeds (H diff={format_mm(h_diff)}, V diff={format_mm(v_diff)})")
+
+        elif result.get('verdict'):
+            print(f"  Verdict: {result['verdict']}")
+
+        print()
+        results.append(result)
+
+    # Summary
+    print("=== Summary ===")
+    for r in results:
+        confidence = f" [{r['confidence']}]" if r['confidence'] else ""
+        method = f" ({r['method']})" if r['method'] else ""
+        verdict = r.get('verdict', 'unknown')
+        print(f"  Page {r['page']}: {verdict}{confidence}{method}")
+
+    return results
+
+
+def cmd_preflight(pdf_path):
+    """Run preflight checks on a PDF."""
+    pdf = open_pdf(pdf_path)
+    issues = []
+    warnings = []
+    info = []
+
+    print(f"Preflight: {pdf_path}")
+    print(f"Pages: {len(pdf.pages)}")
+    print()
+
+    # Check page boxes
+    print("--- Page Boxes ---")
+    for i, page in enumerate(pdf.pages):
+        pn = i + 1
+        has_trim = '/TrimBox' in page
+        has_bleed = '/BleedBox' in page
+
+        if not has_trim:
+            issues.append(f"Page {pn}: No TrimBox defined (required for print)")
+        if not has_bleed:
+            warnings.append(f"Page {pn}: No BleedBox defined")
+
+        if has_trim:
+            mb = [float(v) for v in page.mediabox]
+            tb = [float(v) for v in page.trimbox]
+            # Check bleed amount
+            bleeds = [
+                tb[0] - mb[0], tb[1] - mb[1],
+                mb[2] - tb[2], mb[3] - tb[3]
+            ]
+            min_bleed = min(bleeds)
+            tolerance = 0.1  # PDF coords often get rounded
+            if min_bleed < BLEED_ACCEPTABLE_PT - tolerance:
+                issues.append(f"Page {pn}: Insufficient bleed ({format_mm(min_bleed)} min, need >=2mm)")
+            elif min_bleed < BLEED_GOOD_PT - tolerance:
+                warnings.append(f"Page {pn}: Bleed is acceptable but not ideal ({format_mm(min_bleed)} min, recommend 3mm)")
+            else:
+                info.append(f"Page {pn}: Bleed OK ({format_mm(min_bleed)} min)")
+
+    # Check images
+    print("--- Images ---")
+    try:
+        from pikepdf import PdfImage
+        img_count = 0
+        rgb_images = 0
+
+        for i, page in enumerate(pdf.pages):
+            pn = i + 1
+            for name, raw in page.images.items():
+                img_count += 1
+                try:
+                    image = PdfImage(raw)
+                    cs = str(image.colorspace)
+                    if 'RGB' in cs.upper():
+                        rgb_images += 1
+                        warnings.append(f"Page {pn}: Image '{name}' is RGB (consider CMYK for offset)")
+
+                    # Estimate DPI: compare image dimensions to page display size
+                    # This is approximate since we'd need the image transform matrix
+                    w_px, h_px = image.width, image.height
+                    if w_px > 0 and h_px > 0:
+                        info.append(f"Page {pn}: Image '{name}' {w_px}x{h_px}px, colorspace={cs}")
+                except Exception as e:
+                    warnings.append(f"Page {pn}: Could not analyze image '{name}': {e}")
+
+        info.append(f"Total images: {img_count}")
+        if rgb_images:
+            warnings.append(f"{rgb_images} RGB image(s) found — convert to CMYK for offset printing")
+    except ImportError:
+        warnings.append("pikepdf.PdfImage not available for image analysis")
+
+    # Check fonts
+    print("--- Fonts ---")
+    try:
+        import fitz  # PyMuPDF
+        doc = fitz.open(str(pdf_path))
+        all_fonts = set()
+        unembedded = set()
+        for i in range(len(doc)):
+            page_fonts = doc[i].get_fonts()
+            for font in page_fonts:
+                font_name = font[3]  # name field
+                all_fonts.add(font_name)
+                # Check if embedded (xref > 0 and not "n/a")
+                if font[0] == 0:
+                    unembedded.add(font_name)
+
+        info.append(f"Fonts found: {len(all_fonts)}")
+        if unembedded:
+            issues.append(f"Unembedded fonts: {', '.join(sorted(unembedded))}")
+        else:
+            info.append("All fonts embedded")
+        doc.close()
+    except ImportError:
+        warnings.append("PyMuPDF not available for font analysis")
+
+    # Print results
+    print()
+    print("=== Preflight Results ===")
+    if issues:
+        print(f"\nISSUES ({len(issues)}):")
+        for issue in issues:
+            print(f"  [!] {issue}")
+
+    if warnings:
+        print(f"\nWARNINGS ({len(warnings)}):")
+        for warning in warnings:
+            print(f"  [~] {warning}")
+
+    if info:
+        print(f"\nINFO ({len(info)}):")
+        for item in info:
+            print(f"  [i] {item}")
+
+    if not issues:
+        print("\nResult: PASS (no critical issues)")
+    else:
+        print(f"\nResult: FAIL ({len(issues)} issue(s) must be resolved)")
+
+    return {'issues': issues, 'warnings': warnings, 'info': info}
+
+
+def main():
+    if len(sys.argv) < 2:
+        print(__doc__)
+        sys.exit(1)
+
+    command = sys.argv[1]
+    if command in ('-h', '--help', 'help'):
+        print(__doc__)
+        sys.exit(0)
+
+    if len(sys.argv) < 3:
+        print(f"Usage: prepress {command} <pdf-file>")
+        sys.exit(1)
+
+    pdf_path = sys.argv[2]
+    if not os.path.exists(pdf_path):
+        print(f"Error: File not found: {pdf_path}", file=sys.stderr)
+        sys.exit(1)
+
+    if command == 'inspect':
+        cmd_inspect(pdf_path)
+    elif command == 'bleed':
+        cmd_bleed(pdf_path)
+    elif command == 'preflight':
+        cmd_preflight(pdf_path)
+    else:
+        print(f"Unknown command: {command}")
+        print(__doc__)
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()
