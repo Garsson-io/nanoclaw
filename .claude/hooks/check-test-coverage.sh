@@ -23,16 +23,31 @@ if echo "$CMD_LINE" | grep -qE 'gh\s+pr\s+merge'; then
   IS_MERGE=true
 fi
 
-# Determine base branch for diff
-BASE="main"
+# Get the list of changed files — from PR diff for merges, git diff for creates
+if [ "$IS_MERGE" = true ]; then
+  # Extract PR number from command (e.g., "gh pr merge 42" or "gh pr merge")
+  PR_NUM=$(echo "$CMD_LINE" | grep -oP 'gh\s+pr\s+merge\s+\K[0-9]+' || true)
+  if [ -n "$PR_NUM" ]; then
+    ALL_CHANGED=$(gh pr diff "$PR_NUM" --name-only --repo Garsson-io/nanoclaw 2>/dev/null || true)
+  else
+    # No PR number — try current branch's PR
+    ALL_CHANGED=$(gh pr diff --name-only --repo Garsson-io/nanoclaw 2>/dev/null || true)
+  fi
+  # Fallback to git diff if gh pr diff fails (e.g., no PR exists yet)
+  if [ -z "$ALL_CHANGED" ]; then
+    ALL_CHANGED=$(git diff --name-only main...HEAD 2>/dev/null || true)
+  fi
+else
+  ALL_CHANGED=$(git diff --name-only main...HEAD 2>/dev/null || true)
+fi
 
 # Get changed source files (exclude tests, config, docs, hooks)
-CHANGED_SRC=$(git diff --name-only "$BASE"...HEAD 2>/dev/null | \
+CHANGED_SRC=$(echo "$ALL_CHANGED" | \
   grep -E '\.(ts|js|tsx|jsx)$' | \
   grep -vE '(\.test\.|\.spec\.|__tests__|\.config\.|vitest\.|CLAUDE\.md|\.claude/)' || true)
 
 # Get changed test files
-CHANGED_TESTS=$(git diff --name-only "$BASE"...HEAD 2>/dev/null | \
+CHANGED_TESTS=$(echo "$ALL_CHANGED" | \
   grep -E '\.(test|spec)\.(ts|js|tsx|jsx)$' || true)
 
 # If no source changes, nothing to check

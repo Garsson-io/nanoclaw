@@ -70,7 +70,7 @@ fi
 if [ "$IS_MERGE" = true ]; then
   # For merge: fetch PR body and check for verification section
   # Extract PR number from command if present
-  PR_NUM=$(echo "$COMMAND" | grep -oE '[0-9]+' | head -1)
+  PR_NUM=$(echo "$CMD_LINE" | grep -oP 'gh\s+pr\s+merge\s+\K[0-9]+' || true)
 
   if [ -n "$PR_NUM" ]; then
     PR_BODY=$(gh pr view "$PR_NUM" --json body --jq '.body' 2>/dev/null || echo "")
