@@ -21,6 +21,7 @@ import {
 import type { Case } from './cases.js';
 import { AvailableGroup } from './container-runner.js';
 import { createTask, deleteTask, getTaskById, updateTask } from './db.js';
+import { createGitHubIssue } from './github-issues.js';
 import { isValidGroupFolder } from './group-folder.js';
 import { logger } from './logger.js';
 import { RegisteredGroup } from './types.js';
@@ -842,6 +843,70 @@ export async function processTaskIpc(
         }
       }
       break;
+
+    case 'create_github_issue': {
+      const d = data as unknown as {
+        owner?: string;
+        repo?: string;
+        title?: string;
+        body?: string;
+        labels?: string[];
+        requestId?: string;
+      };
+      if (!d.title || !d.owner || !d.repo) {
+        logger.warn(
+          { sourceGroup },
+          'create_github_issue missing required fields',
+        );
+        break;
+      }
+
+      const result = await createGitHubIssue({
+        owner: d.owner,
+        repo: d.repo,
+        title: d.title,
+        body: d.body || '',
+        labels: d.labels || ['work-agent', 'needs-dev'],
+      });
+
+      // Write result file so the MCP tool can read it back
+      if (d.requestId) {
+        const resultDir = path.join(
+          DATA_DIR,
+          'ipc',
+          sourceGroup,
+          'issue_results',
+        );
+        fs.mkdirSync(resultDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(resultDir, `${d.requestId}.json`),
+          JSON.stringify(result),
+        );
+      }
+
+      // Notify via Telegram if issue was created successfully
+      if (result.success && result.issueUrl) {
+        const chatJid = Object.entries(registeredGroups).find(
+          ([, g]) => g.folder === sourceGroup,
+        )?.[0];
+        if (chatJid) {
+          deps
+            .sendMessage(
+              chatJid,
+              `🐛 Work agent created issue: ${result.issueUrl}`,
+            )
+            .catch(() => {
+              /* non-critical */
+            });
+        }
+      }
+
+      logger.info(
+        { sourceGroup, success: result.success, issueUrl: result.issueUrl },
+        'create_github_issue processed',
+      );
+      break;
+    }
 
     default:
       logger.warn({ type: data.type }, 'Unknown IPC task type');
