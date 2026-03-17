@@ -19,6 +19,15 @@ export const ASSISTANT_HAS_OWN_NUMBER =
     envConfig.ASSISTANT_HAS_OWN_NUMBER) === 'true';
 export const POLL_INTERVAL = 2000;
 export const SCHEDULER_POLL_INTERVAL = 60000;
+// How long to wait after the first message arrives before starting a container,
+// so that concurrent document downloads (which are async) can complete and be
+// stored in the DB together with the triggering text message.
+// This prevents text + document sent as separate messages from being split into
+// two agent turns. Tune via ATTACHMENT_COALESCE_MS env var (default: 1500ms).
+export const ATTACHMENT_COALESCE_MS = parseInt(
+  process.env.ATTACHMENT_COALESCE_MS || '1500',
+  10,
+);
 
 // Absolute paths needed for container mounts
 const PROJECT_ROOT = process.cwd();

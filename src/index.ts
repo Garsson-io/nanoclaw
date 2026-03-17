@@ -3,6 +3,7 @@ import path from 'path';
 
 import {
   ASSISTANT_NAME,
+  ATTACHMENT_COALESCE_MS,
   TELEGRAM_BOT_POOL,
   CREDENTIAL_PROXY_PORT,
   IDLE_TIMEOUT,
@@ -261,7 +262,7 @@ let lastAgentTimestamp: Record<string, string> = {};
 let messageLoopRunning = false;
 
 const channels: Channel[] = [];
-const queue = new GroupQueue();
+const queue = new GroupQueue({ attachmentCoalesceMs: ATTACHMENT_COALESCE_MS });
 
 function loadState(): void {
   lastTimestamp = getRouterState('last_timestamp') || '';

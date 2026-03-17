@@ -20,6 +20,7 @@ interface GroupState {
   isTaskContainer: boolean;
   runningTaskId: string | null;
   pendingMessages: boolean;
+  coalescePending: boolean;
   pendingTasks: QueuedTask[];
   process: ChildProcess | null;
   containerName: string | null;
@@ -34,6 +35,11 @@ export class GroupQueue {
   private processMessagesFn: ((groupJid: string) => Promise<boolean>) | null =
     null;
   private shuttingDown = false;
+  private attachmentCoalesceMs: number;
+
+  constructor(opts: { attachmentCoalesceMs?: number } = {}) {
+    this.attachmentCoalesceMs = opts.attachmentCoalesceMs ?? 0;
+  }
 
   private getGroup(groupJid: string): GroupState {
     let state = this.groups.get(groupJid);
@@ -44,6 +50,7 @@ export class GroupQueue {
         isTaskContainer: false,
         runningTaskId: null,
         pendingMessages: false,
+        coalescePending: false,
         pendingTasks: [],
         process: null,
         containerName: null,
@@ -79,6 +86,39 @@ export class GroupQueue {
         { groupJid, activeCount: this.activeCount },
         'At concurrency limit, message queued',
       );
+      return;
+    }
+
+    // Coalescing window: wait before starting so concurrent document downloads
+    // (which are async) have time to complete and be stored in the DB.
+    // Calls that arrive while the timer is running are absorbed into the window.
+    if (this.attachmentCoalesceMs > 0) {
+      if (state.coalescePending) {
+        logger.debug(
+          { groupJid },
+          'Coalescing: duplicate absorbed into pending window',
+        );
+        return;
+      }
+      state.coalescePending = true;
+      logger.debug(
+        { groupJid, delayMs: this.attachmentCoalesceMs },
+        'Coalescing: waiting for possible concurrent attachments',
+      );
+      setTimeout(() => {
+        state.coalescePending = false;
+        if (this.shuttingDown || state.active) return;
+        if (this.activeCount >= MAX_CONCURRENT_CONTAINERS) {
+          state.pendingMessages = true;
+          if (!this.waitingGroups.includes(groupJid)) {
+            this.waitingGroups.push(groupJid);
+          }
+          return;
+        }
+        this.runForGroup(groupJid, 'messages').catch((err) =>
+          logger.error({ groupJid, err }, 'Unhandled error in runForGroup'),
+        );
+      }, this.attachmentCoalesceMs);
       return;
     }
 

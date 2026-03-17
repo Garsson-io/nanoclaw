@@ -94,6 +94,7 @@ vi.mock('./logger.js', () => ({
 }));
 vi.mock('./config.js', () => ({
   ASSISTANT_NAME: 'TestBot',
+  ATTACHMENT_COALESCE_MS: 0,
   TELEGRAM_BOT_POOL: ['token1'],
   CREDENTIAL_PROXY_PORT: 3001,
   IDLE_TIMEOUT: 300000,

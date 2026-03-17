@@ -27,7 +27,8 @@ describe('GroupQueue', () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
-    queue = new GroupQueue();
+    // Default queue has no coalescing delay so existing tests stay fast
+    queue = new GroupQueue({ attachmentCoalesceMs: 0 });
   });
 
   afterEach(() => {
@@ -431,6 +432,174 @@ describe('GroupQueue', () => {
 
     resolveTask!();
     await vi.advanceTimersByTimeAsync(10);
+  });
+
+  // --- Attachment coalescing ---
+  //
+  // REGRESSION GUARD: These tests protect against the following bug:
+  //
+  //   When a user sends a text message + document attachment as separate
+  //   Telegram messages in quick succession, the document download is async.
+  //   Without coalescing, the message loop starts a container for the text
+  //   message before the download completes, causing the agent to reply
+  //   "I don't see an attachment" — then process the document in a second turn.
+  //
+  // INVARIANT: With attachmentCoalesceMs > 0, a container run for a group
+  //   does not start until at least `attachmentCoalesceMs` has elapsed after
+  //   the first enqueueMessageCheck call, allowing concurrent downloads to
+  //   complete and be stored in the DB before the container reads messages.
+  //
+  // SUT: GroupQueue.enqueueMessageCheck with attachmentCoalesceMs option.
+  //
+  // VERIFICATION: Each test uses vi.useFakeTimers() to verify the exact delay
+  //   before processMessages is invoked.
+
+  describe('attachment coalescing', () => {
+    let coalescingQueue: GroupQueue;
+
+    beforeEach(() => {
+      coalescingQueue = new GroupQueue({ attachmentCoalesceMs: 1500 });
+    });
+
+    it('delays container start by attachmentCoalesceMs', async () => {
+      // INVARIANT: container does not start before the coalesce window closes
+      const processMessages = vi.fn(async () => true);
+      coalescingQueue.setProcessMessagesFn(processMessages);
+
+      coalescingQueue.enqueueMessageCheck('group1@g.us');
+
+      // Must NOT start before window closes
+      await vi.advanceTimersByTimeAsync(1499);
+      expect(processMessages).not.toHaveBeenCalled();
+
+      // MUST start after the coalesce delay
+      await vi.advanceTimersByTimeAsync(2);
+      expect(processMessages).toHaveBeenCalledTimes(1);
+    });
+
+    it('ignores duplicate enqueues during the coalesce window (only one container run)', async () => {
+      // INVARIANT: N calls within the window produce exactly 1 container run
+      let startCount = 0;
+      const processMessages = vi.fn(async () => {
+        startCount++;
+        return true;
+      });
+      coalescingQueue.setProcessMessagesFn(processMessages);
+
+      // Fire three rapid enqueues (simulates text + doc metadata + doc ready)
+      coalescingQueue.enqueueMessageCheck('group1@g.us');
+      coalescingQueue.enqueueMessageCheck('group1@g.us');
+      coalescingQueue.enqueueMessageCheck('group1@g.us');
+
+      await vi.advanceTimersByTimeAsync(2000);
+
+      // Container started exactly once — not three times
+      expect(startCount).toBe(1);
+    });
+
+    it('batches text and document that arrive within the coalesce window', async () => {
+      // INVARIANT: when text arrives at T=0 and doc download completes at T=500ms,
+      // both are in the DB by the time the single container run starts at T=1500ms.
+      // Simulated here as two enqueue calls within the window.
+      let containerRuns = 0;
+      const processMessages = vi.fn(async () => {
+        containerRuns++;
+        return true;
+      });
+      coalescingQueue.setProcessMessagesFn(processMessages);
+
+      // T=0: text message triggers enqueue
+      coalescingQueue.enqueueMessageCheck('group1@g.us');
+
+      // T=500ms: document download completes → second enqueue absorbed into window
+      await vi.advanceTimersByTimeAsync(500);
+      coalescingQueue.enqueueMessageCheck('group1@g.us');
+
+      // T=1500ms: coalesce window fires — exactly one container run
+      await vi.advanceTimersByTimeAsync(1100);
+      expect(containerRuns).toBe(1);
+    });
+
+    it('messages piped to an active container have no coalesce delay', async () => {
+      // INVARIANT: the delay only applies to the IDLE→ACTIVE transition,
+      // not to messages sent to an already-running container (those go via IPC).
+      let resolveFirst: () => void;
+      const processMessages = vi.fn(async () => {
+        await new Promise<void>((r) => {
+          resolveFirst = r;
+        });
+        return true;
+      });
+      coalescingQueue.setProcessMessagesFn(processMessages);
+
+      // First enqueue: waits for coalesce then starts
+      coalescingQueue.enqueueMessageCheck('group1@g.us');
+      await vi.advanceTimersByTimeAsync(1501);
+      expect(processMessages).toHaveBeenCalledTimes(1);
+
+      // While active, second enqueue is queued immediately (pendingMessages flag)
+      coalescingQueue.enqueueMessageCheck('group1@g.us');
+
+      // Complete first run
+      resolveFirst!();
+      await vi.advanceTimersByTimeAsync(10);
+
+      // Second run should start without an additional 1500ms delay
+      expect(processMessages).toHaveBeenCalledTimes(2);
+    });
+
+    it('clears coalescePending after timer fires so next independent message gets its own window', async () => {
+      // INVARIANT: the coalesce state is reset after each window so subsequent
+      // independent messages also benefit from the coalescing delay.
+      const processMessages = vi.fn(async () => true);
+      coalescingQueue.setProcessMessagesFn(processMessages);
+
+      // First message: timer fires, container runs and completes
+      coalescingQueue.enqueueMessageCheck('group1@g.us');
+      await vi.advanceTimersByTimeAsync(1600);
+      expect(processMessages).toHaveBeenCalledTimes(1);
+
+      // Second independent message: gets its own coalesce delay
+      coalescingQueue.enqueueMessageCheck('group1@g.us');
+      await vi.advanceTimersByTimeAsync(1499);
+      expect(processMessages).toHaveBeenCalledTimes(1); // window still open
+
+      await vi.advanceTimersByTimeAsync(2);
+      expect(processMessages).toHaveBeenCalledTimes(2); // window closed
+    });
+
+    it('no-op when coalesceMs is 0 — container starts immediately (existing behaviour)', async () => {
+      // INVARIANT: when disabled (coalesceMs=0), enqueueMessageCheck behaves
+      // exactly as before this change — starts the container synchronously.
+      const noCoalesceQueue = new GroupQueue({ attachmentCoalesceMs: 0 });
+      const processMessages = vi.fn(async () => true);
+      noCoalesceQueue.setProcessMessagesFn(processMessages);
+
+      noCoalesceQueue.enqueueMessageCheck('group1@g.us');
+
+      // Should start immediately (no timer delay)
+      await vi.advanceTimersByTimeAsync(0);
+      expect(processMessages).toHaveBeenCalledTimes(1);
+    });
+
+    it('handles shutdown during coalesce window gracefully', async () => {
+      // INVARIANT: if shutdown is called while the coalesce timer is running,
+      // the timer callback is a no-op and no container starts.
+      const processMessages = vi.fn(async () => true);
+      coalescingQueue.setProcessMessagesFn(processMessages);
+
+      coalescingQueue.enqueueMessageCheck('group1@g.us');
+
+      // Shut down before the window closes
+      await vi.advanceTimersByTimeAsync(500);
+      await coalescingQueue.shutdown(0);
+
+      // Let the timer fire
+      await vi.advanceTimersByTimeAsync(1500);
+
+      // Container must NOT have started
+      expect(processMessages).not.toHaveBeenCalled();
+    });
   });
 
   it('preempts when idle arrives with pending tasks', async () => {
