@@ -1,8 +1,8 @@
 #!/bin/bash
 # kaizen-reflect.sh — Level 2 kaizen enforcement (Issue #9)
 # Triggers after `gh pr create` or `gh pr merge` to prompt structured
-# kaizen reflection. Outputs reflection prompts on stderr so the agent
-# sees them and acts on them.
+# kaizen reflection. Outputs reflection prompts on stdout so the agent
+# sees them in the transcript (PostToolUse exit 0 → stdout shown).
 #
 # Runs as PostToolUse hook on Bash tool calls.
 # Always exits 0 — this is advisory, not blocking.
@@ -46,7 +46,7 @@ BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 CHANGED=$(get_pr_changed_files "$CMD_LINE" "$IS_MERGE" 2>/dev/null | head -20)
 
 if [ "$IS_CREATE" = true ]; then
-  cat >&2 <<'REFLECT'
+  cat <<'REFLECT'
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🔄 KAIZEN REFLECTION — Post-PR Creation
@@ -86,7 +86,7 @@ REFLECT
 fi
 
 if [ "$IS_MERGE" = true ]; then
-  cat >&2 <<'REFLECT'
+  cat <<'REFLECT'
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🔄 KAIZEN REFLECTION — Post-Merge
