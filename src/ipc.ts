@@ -23,12 +23,18 @@ import type { Case } from './cases.js';
 import { AvailableGroup } from './container-runner.js';
 import { createTask, deleteTask, getTaskById, updateTask } from './db.js';
 import { createGitHubIssue, DEV_CASE_ISSUE_REPO } from './github-issues.js';
-import { isValidGroupFolder } from './group-folder.js';
+import { isValidGroupFolder, resolveGroupFolderPath } from './group-folder.js';
 import { logger } from './logger.js';
 import { RegisteredGroup } from './types.js';
 
 export interface IpcDeps {
   sendMessage: (jid: string, text: string) => Promise<void>;
+  /** Optional: send an image file. Falls back to sendMessage with caption if not supported. */
+  sendImage?: (
+    jid: string,
+    imagePath: string,
+    caption?: string,
+  ) => Promise<void>;
   /** Optional channel-aware send for pool bots (e.g. Telegram swarm).
    *  Returns true if handled, false to fall back to sendMessage. */
   sendPoolMessage?: (
@@ -86,6 +92,74 @@ export async function dispatchIpcMessage(
   return 'sent';
 }
 
+/** Dispatch an IPC image message, translating container paths to host paths. */
+export async function dispatchIpcImage(
+  data: { chatJid: string; imagePath: string; caption?: string },
+  sourceGroup: string,
+  isMain: boolean,
+  deps: IpcDeps,
+): Promise<'sent' | 'unauthorized'> {
+  const registeredGroups = deps.registeredGroups();
+  const targetGroup = registeredGroups[data.chatJid];
+  if (!isMain && !(targetGroup && targetGroup.folder === sourceGroup)) {
+    logger.warn(
+      { chatJid: data.chatJid, sourceGroup },
+      'Unauthorized IPC image attempt blocked',
+    );
+    return 'unauthorized';
+  }
+
+  // Translate container path to host path.
+  // Container mounts: /workspace/group/ → groups/{folder}/
+  let hostPath = data.imagePath;
+  if (data.imagePath.startsWith('/workspace/group/')) {
+    const relativePath = data.imagePath.slice('/workspace/group/'.length);
+    hostPath = path.join(resolveGroupFolderPath(sourceGroup), relativePath);
+  }
+
+  // Path traversal guard: resolved path must stay within the group folder
+  const groupDir = resolveGroupFolderPath(sourceGroup);
+  const resolved = path.resolve(hostPath);
+  if (!resolved.startsWith(groupDir)) {
+    logger.warn(
+      { chatJid: data.chatJid, imagePath: data.imagePath, resolved, groupDir },
+      'IPC image path traversal blocked',
+    );
+    return 'unauthorized';
+  }
+
+  if (!fs.existsSync(hostPath)) {
+    logger.warn(
+      { chatJid: data.chatJid, imagePath: data.imagePath, hostPath },
+      'IPC image file not found',
+    );
+    // Fall back to text message with caption
+    if (data.caption) {
+      await deps.sendMessage(
+        data.chatJid,
+        `${data.caption}\n\n(Image not found: ${data.imagePath})`,
+      );
+    }
+    return 'sent';
+  }
+
+  if (deps.sendImage) {
+    await deps.sendImage(data.chatJid, hostPath, data.caption);
+  } else {
+    // Channel doesn't support images — send caption as text
+    await deps.sendMessage(
+      data.chatJid,
+      data.caption || '(Image sent but channel does not support images)',
+    );
+  }
+
+  logger.info(
+    { chatJid: data.chatJid, sourceGroup, hostPath },
+    'IPC image sent',
+  );
+  return 'sent';
+}
+
 let ipcWatcherRunning = false;
 
 export function startIpcWatcher(deps: IpcDeps): void {
@@ -137,6 +211,12 @@ export function startIpcWatcher(deps: IpcDeps): void {
               const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
               if (data.type === 'message' && data.chatJid && data.text) {
                 await dispatchIpcMessage(data, sourceGroup, isMain, deps);
+              } else if (
+                data.type === 'image' &&
+                data.chatJid &&
+                data.imagePath
+              ) {
+                await dispatchIpcImage(data, sourceGroup, isMain, deps);
               }
               fs.unlinkSync(filePath);
             } catch (err) {
