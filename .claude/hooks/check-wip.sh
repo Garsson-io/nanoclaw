@@ -18,9 +18,9 @@ cat <<'WORKTREE_WARNING'
 !! Multiple Claude instances on the main checkout WILL conflict.
 !!
 !! USE INSTEAD:
-!!   claude-wt [args...]                    — auto-creates isolated worktree
-!!   claude-wt -p "fix the bug"             — headless with worktree
-!!   claude-wt --dangerously-skip-permissions -p "do it"
+!!   claude-wt [args...]              — auto-creates isolated worktree
+!!   claude-wt -p "fix the bug"       — headless with prompt
+!!   claude-wt --safe                  — with permission prompts
 !!
 !! You MUST use EnterWorktree or claude-wt for any dev work.
 WORKTREE_WARNING

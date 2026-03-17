@@ -19,37 +19,71 @@
 
 set -euo pipefail
 
-# Parse our own flags (before passing rest to claude)
-BASE_BRANCH=""
-KEEP_WORKTREE=false
-SKIP_PERMISSIONS=true  # Default: skip permissions (worktree is isolated, safe)
-CLAUDE_ARGS=()
+# Arg parsing — separated for testability (see test-claude-wt.sh)
+parse_claude_wt_args() {
+  BASE_BRANCH=""
+  KEEP_WORKTREE=false
+  SKIP_PERMISSIONS=true
+  CLAUDE_ARGS=()
 
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --base)
-      BASE_BRANCH="$2"
-      shift 2
-      ;;
-    --keep)
-      KEEP_WORKTREE=true
-      shift
-      ;;
-    --safe)
-      SKIP_PERMISSIONS=false
-      shift
-      ;;
-    *)
-      CLAUDE_ARGS+=("$1")
-      shift
-      ;;
-  esac
-done
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --help)
+        cat <<'USAGE'
+claude-wt — Launch Claude Code in an isolated git worktree
 
-# Add --dangerously-skip-permissions by default (worktree is isolated)
-if [ "$SKIP_PERMISSIONS" = true ]; then
-  CLAUDE_ARGS=("--dangerously-skip-permissions" "${CLAUDE_ARGS[@]}")
+Usage: claude-wt [options] [claude args...]
+
+Options:
+  --base <branch>   Branch off a specific base (default: current branch)
+  --keep            Preserve worktree even if clean on exit
+  --safe            Don't skip permissions (ask for each tool)
+  --help            Show this help
+
+All other arguments are passed through to claude.
+By default, --dangerously-skip-permissions is added (safe: worktree is isolated).
+
+Examples:
+  claude-wt                          # interactive session
+  claude-wt -p "fix the bug"        # headless with prompt
+  claude-wt --base feat/foo -p "x"  # branch off feat/foo
+  claude-wt --safe                   # with permission prompts
+USAGE
+        exit 0
+        ;;
+      --base)
+        BASE_BRANCH="$2"
+        shift 2
+        ;;
+      --keep)
+        KEEP_WORKTREE=true
+        shift
+        ;;
+      --safe)
+        SKIP_PERMISSIONS=false
+        shift
+        ;;
+      *)
+        CLAUDE_ARGS+=("$1")
+        shift
+        ;;
+    esac
+  done
+
+  # Add --dangerously-skip-permissions by default (worktree is isolated)
+  if [ "$SKIP_PERMISSIONS" = true ]; then
+    CLAUDE_ARGS=("--dangerously-skip-permissions" "${CLAUDE_ARGS[@]}")
+  fi
+}
+
+# Allow sourcing for tests without executing main.
+# When sourced for testing, don't impose set -e on the caller.
+if [[ "${CLAUDE_WT_TEST:-}" = "1" ]]; then
+  set +e
+  return 0 2>/dev/null || true
 fi
+
+parse_claude_wt_args "$@"
 
 # Find repo root
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
@@ -64,14 +98,17 @@ if [ -z "$BASE_BRANCH" ]; then
 fi
 
 # Generate nonce: YYMMDD-HHMM-random
-NONCE=$(date +%y%m%d-%H%M)-$(head -c 3 /dev/urandom | xxd -p)
+NONCE=$(date +%y%m%d-%H%M)-$(printf '%04x' $RANDOM)
 BRANCH_NAME="wt/${NONCE}"
 WORKTREE_DIR="${REPO_ROOT}/.claude/worktrees/${NONCE}"
 
 # Create worktree
 echo "Creating worktree: ${WORKTREE_DIR}"
 echo "  Branch: ${BRANCH_NAME} (based on ${BASE_BRANCH})"
-git worktree add -b "${BRANCH_NAME}" "${WORKTREE_DIR}" "${BASE_BRANCH}" 2>/dev/null
+if ! git worktree add -b "${BRANCH_NAME}" "${WORKTREE_DIR}" "${BASE_BRANCH}"; then
+  echo "Error: failed to create worktree. Is '${BASE_BRANCH}' a valid branch?" >&2
+  exit 1
+fi
 
 cleanup() {
   local exit_code=$?
