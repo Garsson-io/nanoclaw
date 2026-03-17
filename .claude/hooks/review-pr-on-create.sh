@@ -31,7 +31,12 @@ cat <<EOF
 
 📋 PR created: $PR_URL
 
-MANDATORY SELF-REVIEW — complete before proceeding:
+MANDATORY SELF-REVIEW LOOP — you MUST complete this before proceeding.
+
+Review the PR, fix issues, re-review. Repeat up to 4 rounds until clean.
+
+For EACH round, work through this checklist. If you find issues, fix them,
+commit, push, then start the next round.
 
 **Context & Purpose:**
 - WHY: What problem does this PR solve?
@@ -58,7 +63,19 @@ MANDATORY SELF-REVIEW — complete before proceeding:
 - Purpose clear to first-time reader?
 - Would you merge this reviewing someone else's PR?
 
-Address each section, then proceed.
+PROCESS:
+1. Run \`gh pr diff $PR_URL\` to review the actual diff
+2. Walk through each checklist item against the diff
+3. If issues found: fix, commit, push, log what you fixed
+4. Re-review from step 1 (next round)
+5. If clean: state "REVIEW PASSED (round N/4)" and proceed
+
+After 4 rounds with remaining issues:
+1. Comment on the PR summarizing unresolved issues and what was attempted
+2. Ping Aviad: use \`gh pr comment $PR_URL --body "@aviadr1 Self-review hit 4 rounds. Remaining issues: [list]. Need human eyes."\`
+3. Then proceed — do not loop further
+
+Track your round: "ROUND N/4: [reviewing|issues found|clean]"
 EOF
 
 exit 0
