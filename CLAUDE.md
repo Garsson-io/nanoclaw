@@ -306,6 +306,31 @@ This is a fork of `qwibitai/nanoclaw`. Remotes:
 
 **Always use `--repo Garsson-io/nanoclaw`** with `gh` commands. The `gh` CLI may default to upstream otherwise.
 
+## Merging PRs
+
+Branch protection has `strict: true` status checks. Auto-merge is enabled. The agent handles the full merge loop autonomously — do NOT ask the user unless something is genuinely broken after retries.
+
+```bash
+# Step 1: Queue auto-merge (non-blocking — GitHub merges when CI passes + branch is current)
+gh pr merge <url> --repo Garsson-io/nanoclaw --squash --delete-branch --auto
+
+# Step 2: Wait for CI
+gh run watch <run-id> --repo Garsson-io/nanoclaw --exit-status
+
+# Step 3: Verify merge completed
+gh pr view <url> --repo Garsson-io/nanoclaw --json state --jq .state
+# Expected: "MERGED"
+
+# Step 4: Sync main
+git -C /home/aviadr1/projects/nanoclaw fetch origin main && git -C /home/aviadr1/projects/nanoclaw merge origin/main --no-edit
+```
+
+**If CI fails**: fix the issue, commit, push. Auto-merge stays queued — CI re-runs automatically. Go back to step 2.
+
+**If branch is behind main**: `git fetch origin main && git merge origin/main --no-edit && git push`. CI re-runs, auto-merge retries. Go back to step 2.
+
+**If state is not MERGED after CI passes**: check `gh pr view --json mergeStateStatus` for the reason and fix it. This is rare — usually means another PR merged during your CI run and `strict` requires re-running. Push triggers a new CI run and auto-merge retries.
+
 ## Container Build Cache
 
 The container buildkit caches the build context aggressively. `--no-cache` alone does NOT invalidate COPY steps — the builder's volume retains stale files. To force a truly clean rebuild, prune the builder then re-run `./container/build.sh`.
