@@ -65,7 +65,7 @@ export async function dispatchIpcMessage(
     return 'unauthorized';
   }
 
-  if (data.sender && deps.sendPoolMessage) {
+  if (data.sender && data.chatJid.startsWith('tg:') && deps.sendPoolMessage) {
     const sent = await deps.sendPoolMessage(
       data.chatJid,
       data.text,
@@ -888,11 +888,16 @@ export async function processTaskIpc(
       };
       if (!d.title || !d.owner || !d.repo) {
         logger.warn(
-          { sourceGroup },
+          { sourceGroup, isMain },
           'create_github_issue missing required fields',
         );
         break;
       }
+
+      logger.info(
+        { sourceGroup, isMain, repo: `${d.owner}/${d.repo}`, title: d.title },
+        'create_github_issue requested',
+      );
 
       const result = await createGitHubIssue({
         owner: d.owner,
