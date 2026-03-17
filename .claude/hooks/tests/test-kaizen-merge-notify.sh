@@ -3,7 +3,7 @@
 #
 # INVARIANT: Every successful gh pr merge produces exactly one Telegram IPC
 #   notification file with correct PR title and URL.
-# INVARIANT: Failed merges (is_error=true) produce no notification.
+# INVARIANT: Failed merges (exit_code != 0) produce no notification.
 # INVARIANT: Missing PR URL in output produces no notification.
 # INVARIANT: gh pr view failure does not break the hook (graceful degradation).
 # SUT: kaizen-reflect.sh (merge path)
@@ -87,8 +87,9 @@ setup_gh_mock "Add container router"
 MERGE_INPUT=$(jq -n '{
   "tool_input": {"command": "gh pr merge 42 --repo Garsson-io/nanoclaw --squash"},
   "tool_response": {
-    "content": "Merged https://github.com/Garsson-io/nanoclaw/pull/42",
-    "is_error": false
+    "stdout": "Merged https://github.com/Garsson-io/nanoclaw/pull/42",
+    "stderr": "",
+    "exit_code": "0"
   }
 }')
 
@@ -118,8 +119,9 @@ reset_ipc_dir
 ERROR_INPUT=$(jq -n '{
   "tool_input": {"command": "gh pr merge 42 --repo Garsson-io/nanoclaw --squash"},
   "tool_response": {
-    "content": "GraphQL: Pull request is not mergeable",
-    "is_error": true
+    "stdout": "",
+    "stderr": "GraphQL: Pull request is not mergeable",
+    "exit_code": "1"
   }
 }')
 
@@ -137,8 +139,9 @@ setup_gh_mock "Some PR"
 NO_URL_INPUT=$(jq -n '{
   "tool_input": {"command": "gh pr merge --squash"},
   "tool_response": {
-    "content": "some unexpected output with no URL",
-    "is_error": false
+    "stdout": "some unexpected output with no URL",
+    "stderr": "",
+    "exit_code": "0"
   }
 }')
 
@@ -160,8 +163,9 @@ setup_gh_mock_failing
 MERGE_INPUT_NOFETCH=$(jq -n '{
   "tool_input": {"command": "gh pr merge 10 --squash"},
   "tool_response": {
-    "content": "Merged https://github.com/Garsson-io/nanoclaw/pull/10",
-    "is_error": false
+    "stdout": "Merged https://github.com/Garsson-io/nanoclaw/pull/10",
+    "stderr": "",
+    "exit_code": "0"
   }
 }')
 
@@ -185,8 +189,9 @@ setup_gh_mock "New feature"
 CREATE_INPUT=$(jq -n '{
   "tool_input": {"command": "gh pr create --title \"test\""},
   "tool_response": {
-    "content": "https://github.com/Garsson-io/nanoclaw/pull/99",
-    "is_error": false
+    "stdout": "https://github.com/Garsson-io/nanoclaw/pull/99",
+    "stderr": "",
+    "exit_code": "0"
   }
 }')
 
@@ -204,8 +209,9 @@ setup_gh_mock 'Title with "quotes" and $(cmd) injection'
 INJECT_INPUT=$(jq -n '{
   "tool_input": {"command": "gh pr merge 50 --squash"},
   "tool_response": {
-    "content": "Merged https://github.com/Garsson-io/nanoclaw/pull/50",
-    "is_error": false
+    "stdout": "Merged https://github.com/Garsson-io/nanoclaw/pull/50",
+    "stderr": "",
+    "exit_code": "0"
   }
 }')
 
