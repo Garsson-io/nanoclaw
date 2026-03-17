@@ -315,4 +315,20 @@ describe('BotPool', () => {
       pool.send('tg:999', 'hello', 'Researcher', 'main'),
     ).rejects.toThrow('Telegram API: chat not found');
   });
+
+  // INVARIANT: For any pool size N, sender i always gets bot (i % N)
+  // SUT: BotPool round-robin assignment property
+  test('round-robin property holds for various pool sizes', async () => {
+    for (const poolSize of [1, 2, 3, 5, 7]) {
+      const pool = new BotPool(testDeps);
+      await pool.init(Array.from({ length: poolSize }, (_, i) => `token${i}`));
+
+      for (let sender = 0; sender < poolSize * 3; sender++) {
+        await pool.send('tg:123', 'hi', `sender-${sender}`, 'main');
+        expect(pool.getAssignment(`sender-${sender}`, 'main')).toBe(
+          sender % poolSize,
+        );
+      }
+    }
+  });
 });

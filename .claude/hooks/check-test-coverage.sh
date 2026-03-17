@@ -26,10 +26,11 @@ fi
 # Get the list of changed files — from PR diff for merges, git diff for creates
 ALL_CHANGED=$(get_pr_changed_files "$CMD_LINE" "$IS_MERGE")
 
-# Get changed source files (exclude tests, config, docs, hooks)
+# Get changed source files (exclude tests, config, docs, hooks, container agent-runner)
+# container/agent-runner/src/ runs inside containers — tested via smoke tests, not host unit tests
 CHANGED_SRC=$(echo "$ALL_CHANGED" | \
   grep -E '\.(ts|js|tsx|jsx)$' | \
-  grep -vE '(\.test\.|\.spec\.|__tests__|\.config\.|vitest\.|CLAUDE\.md|\.claude/)' || true)
+  grep -vE '(\.test\.|\.spec\.|__tests__|\.config\.|vitest\.|CLAUDE\.md|\.claude/|container/agent-runner/)' || true)
 
 # Get changed test files
 CHANGED_TESTS=$(echo "$ALL_CHANGED" | \
@@ -55,10 +56,14 @@ while IFS= read -r src_file; do
   basename=$(basename "$src_file" | sed 's/\.\(ts\|js\|tsx\|jsx\)$//')
   dir=$(dirname "$src_file")
 
-  # Look for matching test in changed tests
+  # Look for matching test in changed tests.
+  # Match patterns:
+  #   1. Exact: {basename}.test.ts (e.g., ipc.test.ts for ipc.ts)
+  #   2. Prefixed: {basename}-*.test.ts (e.g., ipc-github-issues.test.ts for ipc.ts)
+  #   3. Directory: {dir}/__tests__/
   FOUND=false
   if [ -n "$CHANGED_TESTS" ]; then
-    if echo "$CHANGED_TESTS" | grep -qE "(${basename}\.(test|spec)\.|${dir}/__tests__/)"; then
+    if echo "$CHANGED_TESTS" | grep -qE "(${basename}[\.-](test|spec)\.|${basename}-[a-z0-9-]+\.(test|spec)\.|${dir}/__tests__/)"; then
       FOUND=true
     fi
   fi

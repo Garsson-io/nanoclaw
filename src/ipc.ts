@@ -21,6 +21,7 @@ import {
 import type { Case } from './cases.js';
 import { AvailableGroup } from './container-runner.js';
 import { createTask, deleteTask, getTaskById, updateTask } from './db.js';
+import { createGitHubIssue, DEV_CASE_ISSUE_REPO } from './github-issues.js';
 import { isValidGroupFolder } from './group-folder.js';
 import { logger } from './logger.js';
 import { RegisteredGroup } from './types.js';
@@ -64,7 +65,7 @@ export async function dispatchIpcMessage(
     return 'unauthorized';
   }
 
-  if (data.sender && deps.sendPoolMessage) {
+  if (data.sender && deps.sendPoolMessage && data.chatJid.startsWith('tg:')) {
     const sent = await deps.sendPoolMessage(
       data.chatJid,
       data.text,
@@ -709,6 +710,32 @@ export async function processTaskIpc(
         )?.[0] ||
         '';
 
+      // Dev cases auto-create a GitHub issue for tracking (unless one was provided)
+      let githubIssue = d.githubIssue ?? null;
+      let issueUrl: string | null = null;
+      if (caseType === 'dev' && !githubIssue) {
+        const issueResult = await createGitHubIssue({
+          owner: DEV_CASE_ISSUE_REPO.owner,
+          repo: DEV_CASE_ISSUE_REPO.repo,
+          title: name,
+          body: `${d.description}\n\n---\n*Auto-created by dev case \`${name}\`*`,
+          labels: ['kaizen'],
+        });
+        if (issueResult.success && issueResult.issueNumber) {
+          githubIssue = issueResult.issueNumber;
+          issueUrl = issueResult.issueUrl ?? null;
+          logger.info(
+            { caseId: id, issueNumber: githubIssue, issueUrl },
+            'Auto-created GitHub issue for dev case',
+          );
+        } else {
+          logger.warn(
+            { caseId: id, error: issueResult.error },
+            'Failed to auto-create GitHub issue for dev case (continuing without)',
+          );
+        }
+      }
+
       const { workspacePath, worktreePath, branchName } = createCaseWorkspace(
         name,
         caseType,
@@ -739,12 +766,12 @@ export async function processTaskIpc(
         total_cost_usd: 0,
         token_source: null,
         time_spent_ms: 0,
-        github_issue: d.githubIssue ?? null,
+        github_issue: githubIssue,
       };
 
       insertCase(newCase);
       logger.info(
-        { caseId: id, name, caseType, sourceGroup },
+        { caseId: id, name, caseType, sourceGroup, githubIssue },
         'Case created via IPC',
       );
 
@@ -756,15 +783,22 @@ export async function processTaskIpc(
         : `${id}.json`;
       fs.writeFileSync(
         path.join(resultDir, resultFile),
-        JSON.stringify({ id, name, workspace_path: workspacePath }),
+        JSON.stringify({
+          id,
+          name,
+          workspace_path: workspacePath,
+          github_issue: githubIssue,
+          issue_url: issueUrl,
+        }),
       );
 
       // Notify user
       if (resolvedChatJid) {
+        const issueInfo = issueUrl ? `\nGitHub: ${issueUrl}` : '';
         deps
           .sendMessage(
             resolvedChatJid,
-            `📋 New ${caseType} case created: ${name}\n${d.description.slice(0, 200)}`,
+            `📋 New ${caseType} case created: ${name}\n${d.description.slice(0, 200)}${issueInfo}`,
           )
           .catch(() => {
             /* non-critical */
@@ -842,6 +876,75 @@ export async function processTaskIpc(
         }
       }
       break;
+
+    case 'create_github_issue': {
+      const d = data as unknown as {
+        owner?: string;
+        repo?: string;
+        title?: string;
+        body?: string;
+        labels?: string[];
+        requestId?: string;
+      };
+      if (!d.title || !d.owner || !d.repo) {
+        logger.warn(
+          { sourceGroup, isMain },
+          'create_github_issue missing required fields',
+        );
+        break;
+      }
+
+      logger.info(
+        { sourceGroup, isMain, repo: `${d.owner}/${d.repo}`, title: d.title },
+        'create_github_issue requested',
+      );
+
+      const result = await createGitHubIssue({
+        owner: d.owner,
+        repo: d.repo,
+        title: d.title,
+        body: d.body || '',
+        labels: d.labels || ['work-agent', 'needs-dev'],
+      });
+
+      // Write result file so the MCP tool can read it back
+      if (d.requestId) {
+        const resultDir = path.join(
+          DATA_DIR,
+          'ipc',
+          sourceGroup,
+          'issue_results',
+        );
+        fs.mkdirSync(resultDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(resultDir, `${d.requestId}.json`),
+          JSON.stringify(result),
+        );
+      }
+
+      // Notify via Telegram if issue was created successfully
+      if (result.success && result.issueUrl) {
+        const chatJid = Object.entries(registeredGroups).find(
+          ([, g]) => g.folder === sourceGroup,
+        )?.[0];
+        if (chatJid) {
+          deps
+            .sendMessage(
+              chatJid,
+              `🐛 Work agent created issue: ${result.issueUrl}`,
+            )
+            .catch(() => {
+              /* non-critical */
+            });
+        }
+      }
+
+      logger.info(
+        { sourceGroup, success: result.success, issueUrl: result.issueUrl },
+        'create_github_issue processed',
+      );
+      break;
+    }
 
     default:
       logger.warn({ type: data.type }, 'Unknown IPC task type');

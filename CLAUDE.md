@@ -104,6 +104,11 @@ These policies were learned from past mistakes. Follow them strictly.
     - **Has this type of failure happened before?** If yes, the previous level wasn't enough — escalate.
     - **Affects humans directly?** → Must be Level 3 (humans should never wait on agent mistakes)
     - CLAUDE.md instructions are Level 1 — necessary but not sufficient. When they fail, escalate to hooks (Level 2) or architectural enforcement (Level 3).
+12. **Hooks are the foundation of our kaizen infrastructure.** The `.claude/hooks/` directory contains Level 2 enforcement — automated checks that catch mistakes before they reach humans. When a hook blocks you:
+    - **Do NOT override it blindly.** The hook exists because a past mistake proved instructions alone weren't enough.
+    - **If it's a false positive**, fix the hook. Improve its matching logic, add exclusions with rationale, and add a test case that covers the false-positive scenario. This is recursive kaizen — making the enforcement smarter, not weaker.
+    - **If it's a true positive**, fix the underlying issue. The hook is doing its job.
+    - **Always add a test** for any hook change in `.claude/hooks/tests/`. Hooks without tests are Level 1 pretending to be Level 2.
 
 ## Verification Discipline (Kaizen #11, #15, #17)
 
@@ -143,6 +148,18 @@ Always test the **actual deployed artifact**, not just source presence:
 - If code runs in a container, verify inside the container
 - If a mount provides a file, verify the mount exists AND the consumer reads it
 - "The file exists in the repo" is not verification — "the agent receives it at runtime" is
+
+### Smoke Tests — MANDATORY when review identifies them
+
+When a PR review says a smoke test is needed, **you must perform it before declaring the PR ready**. "Pending manual smoke test" is not an acceptable review outcome — it means the review is incomplete.
+
+Smoke test checklist:
+1. **Identify what to smoke test** — the review will name the untested path (e.g., "never hit real GitHub API", "never ran in container")
+2. **Run it** — execute the actual end-to-end path. If it requires credentials or infrastructure you don't have, ask the user to provide them or run the test together.
+3. **Record the result** — include the smoke test output (success or failure) in the PR or review comment.
+4. **If you can't smoke test** — explicitly state what's blocking and ask the user. Don't hand-wave it as "recommended before deploy."
+
+The point of review is to catch gaps. A gap identified but not closed is not a review — it's a TODO list.
 
 ## Kaizen Backlog
 

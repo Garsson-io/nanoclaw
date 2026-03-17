@@ -77,4 +77,33 @@ setup_gh_git_mocks "" "src/new-feature.ts"
 OUTPUT=$(run_hook_stderr "$HOOK" "gh pr create --title test --body 'test'")
 assert_contains "create sees local git diff files" "Test coverage policy" "$OUTPUT"
 
+echo ""
+echo "=== Prefixed test files match source (e.g., ipc-github-issues.test.ts covers ipc.ts) ==="
+
+setup_gh_git_mocks "src/ipc.ts
+src/github-issues.ts
+src/ipc-github-issues.test.ts
+src/github-issues.test.ts" ""
+
+assert_contains "prefixed test matches source → allow" "Test coverage check" "$(run_hook_stderr "$HOOK" "gh pr merge 42")"
+
+echo ""
+echo "=== container/agent-runner/ files are excluded from coverage checks ==="
+
+setup_gh_git_mocks "container/agent-runner/src/ipc-mcp-stdio.ts
+src/github-issues.ts
+src/github-issues.test.ts" ""
+
+assert_contains "agent-runner excluded → allow" "Test coverage check" "$(run_hook_stderr "$HOOK" "gh pr merge 42")"
+
+echo ""
+echo "=== Prefixed test does NOT match unrelated source ==="
+
+# ipc-github-issues.test.ts should NOT count as coverage for config.ts
+setup_gh_git_mocks "src/config.ts
+src/ipc-github-issues.test.ts" ""
+
+OUTPUT=$(run_hook "$HOOK" "gh pr merge 42")
+assert_contains "unrelated prefixed test → deny" "deny" "$OUTPUT"
+
 print_results
