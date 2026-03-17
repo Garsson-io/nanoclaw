@@ -530,8 +530,8 @@ Case types:
     const resultDir = path.join(IPC_DIR, 'case_results');
     const resultFile = path.join(resultDir, `${requestId}.json`);
 
-    // Poll for result (host processes IPC files every ~1s)
-    for (let i = 0; i < 15; i++) {
+    // Poll for result (host processes IPC files every ~1s, dev cases also create a GitHub issue)
+    for (let i = 0; i < 30; i++) {
       await new Promise((resolve) => setTimeout(resolve, 500));
       try {
         if (fs.existsSync(resultFile)) {
@@ -541,7 +541,7 @@ Case types:
             content: [
               {
                 type: 'text' as const,
-                text: `Case created:\n  ID: ${result.id}\n  Name: ${result.name}\n  Workspace: ${result.workspace_path}\n\nThe case is now ACTIVE. Future messages about this topic will be routed to it.`,
+                text: `Case created:\n  ID: ${result.id}\n  Name: ${result.name}\n  Workspace: ${result.workspace_path}${result.issue_url ? `\n  GitHub: ${result.issue_url}` : ''}\n\nThe case is now ACTIVE. Future messages about this topic will be routed to it.`,
               },
             ],
           };

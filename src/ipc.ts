@@ -710,6 +710,32 @@ export async function processTaskIpc(
         )?.[0] ||
         '';
 
+      // Dev cases auto-create a GitHub issue for tracking (unless one was provided)
+      let githubIssue = d.githubIssue ?? null;
+      let issueUrl: string | null = null;
+      if (caseType === 'dev' && !githubIssue) {
+        const issueResult = await createGitHubIssue({
+          owner: 'Garsson-io',
+          repo: 'kaizen',
+          title: name,
+          body: `${d.description}\n\n---\n*Auto-created by dev case \`${name}\`*`,
+          labels: ['kaizen'],
+        });
+        if (issueResult.success && issueResult.issueNumber) {
+          githubIssue = issueResult.issueNumber;
+          issueUrl = issueResult.issueUrl ?? null;
+          logger.info(
+            { caseId: id, issueNumber: githubIssue, issueUrl },
+            'Auto-created GitHub issue for dev case',
+          );
+        } else {
+          logger.warn(
+            { caseId: id, error: issueResult.error },
+            'Failed to auto-create GitHub issue for dev case (continuing without)',
+          );
+        }
+      }
+
       const { workspacePath, worktreePath, branchName } = createCaseWorkspace(
         name,
         caseType,
@@ -740,12 +766,12 @@ export async function processTaskIpc(
         total_cost_usd: 0,
         token_source: null,
         time_spent_ms: 0,
-        github_issue: d.githubIssue ?? null,
+        github_issue: githubIssue,
       };
 
       insertCase(newCase);
       logger.info(
-        { caseId: id, name, caseType, sourceGroup },
+        { caseId: id, name, caseType, sourceGroup, githubIssue },
         'Case created via IPC',
       );
 
@@ -757,15 +783,22 @@ export async function processTaskIpc(
         : `${id}.json`;
       fs.writeFileSync(
         path.join(resultDir, resultFile),
-        JSON.stringify({ id, name, workspace_path: workspacePath }),
+        JSON.stringify({
+          id,
+          name,
+          workspace_path: workspacePath,
+          github_issue: githubIssue,
+          issue_url: issueUrl,
+        }),
       );
 
       // Notify user
       if (resolvedChatJid) {
+        const issueInfo = issueUrl ? `\nGitHub: ${issueUrl}` : '';
         deps
           .sendMessage(
             resolvedChatJid,
-            `📋 New ${caseType} case created: ${name}\n${d.description.slice(0, 200)}`,
+            `📋 New ${caseType} case created: ${name}\n${d.description.slice(0, 200)}${issueInfo}`,
           )
           .catch(() => {
             /* non-critical */

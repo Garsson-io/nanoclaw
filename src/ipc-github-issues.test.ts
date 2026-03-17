@@ -1,6 +1,5 @@
-import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, test, expect, vi, beforeEach } from 'vitest';
 import fs from 'fs';
-import path from 'path';
 
 import { _initTestDatabase, setRegisteredGroup } from './db.js';
 import { processTaskIpc, IpcDeps } from './ipc.js';
@@ -11,9 +10,28 @@ vi.mock('./github-issues.js', () => ({
   createGitHubIssue: vi.fn(),
 }));
 
+// Mock cases module for case_create tests
+vi.mock('./cases.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./cases.js')>();
+  return {
+    ...actual,
+    createCaseWorkspace: vi.fn().mockReturnValue({
+      workspacePath: '/tmp/workspace',
+      worktreePath: '/tmp/worktree',
+      branchName: 'case/test-branch',
+    }),
+    generateCaseId: vi.fn().mockReturnValue('case-test-123'),
+    generateCaseName: vi.fn().mockReturnValue('260317-0530-test-case'),
+    insertCase: vi.fn(),
+    getActiveCasesByGithubIssue: vi.fn().mockReturnValue([]),
+  };
+});
+
 import { createGitHubIssue } from './github-issues.js';
+import { insertCase } from './cases.js';
 
 const mockedCreateGitHubIssue = vi.mocked(createGitHubIssue);
+const mockedInsertCase = vi.mocked(insertCase);
 
 const MAIN_GROUP: RegisteredGroup = {
   name: 'Main',
@@ -222,6 +240,195 @@ describe('create_github_issue IPC handler', () => {
     expect(mockedCreateGitHubIssue).toHaveBeenCalledWith(
       expect.objectContaining({
         labels: ['work-agent', 'needs-dev'],
+      }),
+    );
+  });
+});
+
+// INVARIANT: Dev cases auto-create a GitHub issue for tracking
+// SUT: processTaskIpc 'case_create' handler with caseType=dev
+describe('case_create auto-creates GitHub issue for dev cases', () => {
+  beforeEach(() => {
+    // Mock fs for result file writing
+    vi.spyOn(fs, 'mkdirSync').mockReturnValue(undefined);
+    vi.spyOn(fs, 'writeFileSync').mockReturnValue(undefined);
+    mockedInsertCase.mockReset();
+  });
+
+  test('dev case auto-creates GitHub issue and links it', async () => {
+    mockedCreateGitHubIssue.mockResolvedValue({
+      success: true,
+      issueUrl: 'https://github.com/Garsson-io/kaizen/issues/50',
+      issueNumber: 50,
+    });
+
+    await processTaskIpc(
+      {
+        type: 'case_create',
+        description: 'Fix the broken widget',
+        caseType: 'dev',
+        chatJid: 'tg:111',
+        initiator: 'agent',
+        requestId: 'req-dev-1',
+      } as any,
+      'telegram_main',
+      true,
+      deps,
+    );
+
+    // GitHub issue should be created with kaizen label
+    expect(mockedCreateGitHubIssue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        owner: 'Garsson-io',
+        repo: 'kaizen',
+        labels: ['kaizen'],
+      }),
+    );
+
+    // Case should be inserted with the issue number
+    expect(mockedInsertCase).toHaveBeenCalledWith(
+      expect.objectContaining({
+        github_issue: 50,
+        type: 'dev',
+      }),
+    );
+  });
+
+  test('dev case includes issue URL in result file', async () => {
+    mockedCreateGitHubIssue.mockResolvedValue({
+      success: true,
+      issueUrl: 'https://github.com/Garsson-io/kaizen/issues/51',
+      issueNumber: 51,
+    });
+
+    const writeSpy = vi.mocked(fs.writeFileSync);
+
+    await processTaskIpc(
+      {
+        type: 'case_create',
+        description: 'Improve logging',
+        caseType: 'dev',
+        chatJid: 'tg:111',
+        requestId: 'req-dev-2',
+      } as any,
+      'telegram_main',
+      true,
+      deps,
+    );
+
+    // Find the result file write
+    const resultWrite = writeSpy.mock.calls.find(
+      (call) => typeof call[0] === 'string' && call[0].includes('req-dev-2'),
+    );
+    expect(resultWrite).toBeDefined();
+    const result = JSON.parse(resultWrite![1] as string);
+    expect(result.github_issue).toBe(51);
+    expect(result.issue_url).toBe(
+      'https://github.com/Garsson-io/kaizen/issues/51',
+    );
+  });
+
+  test('dev case includes issue URL in Telegram notification', async () => {
+    mockedCreateGitHubIssue.mockResolvedValue({
+      success: true,
+      issueUrl: 'https://github.com/Garsson-io/kaizen/issues/52',
+      issueNumber: 52,
+    });
+
+    await processTaskIpc(
+      {
+        type: 'case_create',
+        description: 'Add feature X',
+        caseType: 'dev',
+        chatJid: 'tg:111',
+        requestId: 'req-dev-3',
+      } as any,
+      'telegram_main',
+      true,
+      deps,
+    );
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      'tg:111',
+      expect.stringContaining('https://github.com/Garsson-io/kaizen/issues/52'),
+    );
+  });
+
+  test('work case does NOT create GitHub issue', async () => {
+    await processTaskIpc(
+      {
+        type: 'case_create',
+        description: 'Research market data',
+        caseType: 'work',
+        chatJid: 'tg:222',
+        requestId: 'req-work-1',
+      } as any,
+      'telegram_work',
+      false,
+      deps,
+    );
+
+    expect(mockedCreateGitHubIssue).not.toHaveBeenCalled();
+
+    expect(mockedInsertCase).toHaveBeenCalledWith(
+      expect.objectContaining({
+        github_issue: null,
+        type: 'work',
+      }),
+    );
+  });
+
+  test('dev case continues without issue if GitHub API fails', async () => {
+    mockedCreateGitHubIssue.mockResolvedValue({
+      success: false,
+      error: 'GITHUB_TOKEN not configured',
+    });
+
+    await processTaskIpc(
+      {
+        type: 'case_create',
+        description: 'Fix something',
+        caseType: 'dev',
+        chatJid: 'tg:111',
+        requestId: 'req-dev-fail',
+      } as any,
+      'telegram_main',
+      true,
+      deps,
+    );
+
+    // Case should still be created, just without github_issue
+    expect(mockedInsertCase).toHaveBeenCalledWith(
+      expect.objectContaining({
+        github_issue: null,
+        type: 'dev',
+      }),
+    );
+  });
+
+  test('dev case skips issue creation if githubIssue already provided', async () => {
+    await processTaskIpc(
+      {
+        type: 'case_create',
+        description: 'Work on kaizen #34',
+        caseType: 'dev',
+        chatJid: 'tg:111',
+        githubIssue: 34,
+        requestId: 'req-dev-existing',
+      } as any,
+      'telegram_main',
+      true,
+      deps,
+    );
+
+    // Should NOT call createGitHubIssue since one was provided
+    expect(mockedCreateGitHubIssue).not.toHaveBeenCalled();
+
+    // Case should use the provided issue number
+    expect(mockedInsertCase).toHaveBeenCalledWith(
+      expect.objectContaining({
+        github_issue: 34,
+        type: 'dev',
       }),
     );
   });
