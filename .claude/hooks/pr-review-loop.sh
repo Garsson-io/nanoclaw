@@ -92,30 +92,32 @@ print_checklist() {
 
   cat <<CHECKLIST
 
-**Context & Purpose:**
-- WHY: What problem does this PR solve?
-- WHO: Who requested this work?
-- WHAT: Is the purpose clear from title + description?
-- HOW: Is the approach sound?
-- HOW TO TEST: Are verification steps documented?
-- IMPACT: What breaks if wrong? What improves if right?
+Review the PR against each question below. Be honest and thorough.
+
+**Clarity & Conventions:**
+- Is it clear and understandable?
+- Does it follow our guidelines and conventions (CLAUDE.md, kaizen policies)?
+
+**Testability & Correctness:**
+- Is it designed for testability? What would make it more testable and more correct?
+- Do the tests need harness, simulator, hypothesis, fixtures?
+- Does it have clear INVARIANTS and SUT?
+- Did you smoke test it (actually ran it)?
 
 **Code Quality:**
-- Clear and understandable?
-- Follows guidelines/conventions (CLAUDE.md, kaizen policies)?
-- Designed for testability?
-- Needs DRYing, reuse, or refactoring?
+- Does it need DRYing up? More reuse? Refactoring?
 
-**Test Quality:**
-- Clear INVARIANTS and SUT?
-- Need harness, simulator, hypothesis, fixtures?
-- Edge cases covered?
-- Smoke tested (actually ran it)?
+**Purpose & Impact:**
+- Is the PR achieving its intended purpose? Is the intended purpose clear?
+- Is it correct?
+- Does it improve our codebase overall? Does it degrade anything? Create noise?
 
-**Final Gate:**
-- Achieving intended purpose?
-- Purpose clear to first-time reader?
-- Would you merge this reviewing someone else's PR?
+**Security & QoL:**
+- Review security — any injection, path traversal, or trust boundary issues?
+- Review QoL — is it improving the maintainability and understandability of the codebase?
+
+**Kaizen:**
+- Is it kaizen? Is it recursive kaizen?
 
 PROCESS:
 1. Run \`gh pr diff $pr_url\` to review the actual diff
@@ -242,9 +244,9 @@ EOF
   print_checklist "$PR_URL" "$ROUND" "$MAX_ROUNDS"
 
   # After reviewing the diff (without a subsequent push), review is implicitly
-  # passed. We mark it as "reviewed" — if the agent pushes again, that triggers
-  # the next round. If they don't push, the review is done.
-  write_state "$PR_URL" "$ROUND" "reviewed"
+  # passed. If the agent pushes again, that triggers the next round.
+  # If they don't push, the "passed" status stops further nags.
+  write_state "$PR_URL" "$ROUND" "passed"
   exit 0
 fi
 
