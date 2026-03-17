@@ -20,23 +20,8 @@ if [ -z "$TOOL_NAME" ]; then
   exit 0
 fi
 
-# Check if any state file has STATUS=needs_review for the CURRENT branch
-find_needs_review() {
-  while IFS= read -r f; do
-    local status
-    status=$(grep -E '^STATUS=' "$f" 2>/dev/null | head -1 | cut -d= -f2-)
-    if [ "$status" = "needs_review" ]; then
-      local pr_url round
-      pr_url=$(grep -E '^PR_URL=' "$f" 2>/dev/null | head -1 | cut -d= -f2-)
-      round=$(grep -E '^ROUND=' "$f" 2>/dev/null | head -1 | cut -d= -f2-)
-      echo "$pr_url|$round"
-      return 0
-    fi
-  done < <(list_state_files_for_current_worktree)
-  return 1
-}
-
-REVIEW_INFO=$(find_needs_review)
+# Uses shared find_needs_review_state from state-utils.sh
+REVIEW_INFO=$(find_needs_review_state)
 if [ $? -ne 0 ] || [ -z "$REVIEW_INFO" ]; then
   # No active review — allow everything
   exit 0

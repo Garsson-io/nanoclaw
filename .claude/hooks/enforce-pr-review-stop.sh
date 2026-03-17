@@ -24,23 +24,8 @@ source "$(dirname "$0")/lib/state-utils.sh"
 INPUT=$(cat)
 STOP_HOOK_ACTIVE=$(echo "$INPUT" | jq -r '.stop_hook_active // false')
 
-# Find any needs_review state for current branch
-find_needs_review() {
-  while IFS= read -r f; do
-    local status
-    status=$(grep -E '^STATUS=' "$f" 2>/dev/null | head -1 | cut -d= -f2-)
-    if [ "$status" = "needs_review" ]; then
-      local pr_url round
-      pr_url=$(grep -E '^PR_URL=' "$f" 2>/dev/null | head -1 | cut -d= -f2-)
-      round=$(grep -E '^ROUND=' "$f" 2>/dev/null | head -1 | cut -d= -f2-)
-      echo "$pr_url|$round"
-      return 0
-    fi
-  done < <(list_state_files_for_current_worktree)
-  return 1
-}
-
-REVIEW_INFO=$(find_needs_review)
+# Uses shared find_needs_review_state from state-utils.sh
+REVIEW_INFO=$(find_needs_review_state)
 if [ $? -ne 0 ] || [ -z "$REVIEW_INFO" ]; then
   # No pending review — allow stop
   exit 0
