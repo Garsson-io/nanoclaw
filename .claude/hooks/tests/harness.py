@@ -18,6 +18,7 @@ Usage:
 
 import json
 import os
+import re
 import subprocess
 import tempfile
 import shutil
@@ -262,7 +263,6 @@ class HookHarness:
             event_hooks = hooks_config.get(event, [])
             result = []
             for entry in event_hooks:
-                import re
                 matcher = entry.get("matcher", "*")
                 pattern = matcher.replace("*", ".*")
                 if re.match(f"^({pattern})$", tool_name):
