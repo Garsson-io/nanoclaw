@@ -669,6 +669,16 @@ Case types:
       requestId,
     );
     if (result) {
+      if (result.needs_approval) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Dev case suggested (pending approval):\n  ID: ${result.id}\n  Name: ${result.name}\n  Status: SUGGESTED — awaiting approval from main group\n\nThe case needs approval before it becomes active. The main group has been notified. Do NOT start working on this case until it is approved.`,
+            },
+          ],
+        };
+      }
       return {
         content: [
           {
