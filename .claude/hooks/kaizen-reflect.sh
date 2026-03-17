@@ -1,13 +1,14 @@
 #!/bin/bash
 # kaizen-reflect.sh — Level 2 kaizen enforcement (Issue #9)
 # Triggers after `gh pr create` or `gh pr merge` to prompt structured
-# kaizen reflection. Outputs reflection prompts on stderr so the agent
-# sees them and acts on them.
+# kaizen reflection. Outputs reflection prompts on stdout so the agent
+# sees them in the transcript (PostToolUse exit 0 → stdout shown).
 #
 # Runs as PostToolUse hook on Bash tool calls.
 # Always exits 0 — this is advisory, not blocking.
 
 source "$(dirname "$0")/lib/parse-command.sh"
+source "$(dirname "$0")/lib/send-telegram-ipc.sh"
 
 INPUT=$(cat)
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
@@ -45,7 +46,7 @@ BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 CHANGED=$(get_pr_changed_files "$CMD_LINE" "$IS_MERGE" 2>/dev/null | head -20)
 
 if [ "$IS_CREATE" = true ]; then
-  cat >&2 <<'REFLECT'
+  cat <<'REFLECT'
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🔄 KAIZEN REFLECTION — Post-PR Creation
@@ -85,7 +86,7 @@ REFLECT
 fi
 
 if [ "$IS_MERGE" = true ]; then
-  cat >&2 <<'REFLECT'
+  cat <<'REFLECT'
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🔄 KAIZEN REFLECTION — Post-Merge
@@ -116,6 +117,20 @@ The PR has been merged. Reflect on the outcome:
    - Update any related kaizen issues
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 REFLECT
+
+  # Send Telegram notification to leads (Kaizen #31 — L2 escalation from L1 instructions)
+  # Extract PR title from the merge output or via gh pr view
+  PR_TITLE=""
+  PR_NUM=$(echo "$PR_URL" | grep -oE '[0-9]+$')
+  REPO=$(echo "$PR_URL" | sed -n 's|https://github.com/\([^/]*/[^/]*\)/pull/.*|\1|p')
+  if [ -n "$PR_NUM" ] && [ -n "$REPO" ]; then
+    PR_TITLE=$(gh pr view "$PR_NUM" --repo "$REPO" --json title --jq '.title' 2>/dev/null || true)
+  fi
+  PR_TITLE="${PR_TITLE:-unknown}"
+
+  NOTIFY_TEXT="$(printf '✅ PR merged: %s\n%s\nBranch: %s\n\nCheck CLAUDE.md post-merge procedure for deploy steps.' \
+    "$PR_TITLE" "$PR_URL" "$BRANCH")"
+  send_telegram_ipc "$NOTIFY_TEXT" >/dev/null 2>&1 || true
 fi
 
 exit 0
