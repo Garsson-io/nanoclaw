@@ -49,7 +49,12 @@ import {
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
-import { findChannel, formatMessages, formatOutbound } from './router.js';
+import {
+  findChannel,
+  formatMessages,
+  formatOutbound,
+  routeOutboundImage,
+} from './router.js';
 import {
   addCaseCost,
   addCaseTime,
@@ -1095,18 +1100,8 @@ async function main(): Promise<void> {
       if (!channel) throw new Error(`No channel for JID: ${jid}`);
       return channel.sendMessage(jid, text);
     },
-    sendImage: (jid, imagePath, caption) => {
-      const channel = findChannel(channels, jid);
-      if (!channel) throw new Error(`No channel for JID: ${jid}`);
-      if (!channel.sendImage) {
-        // Fallback: send caption as text
-        return channel.sendMessage(
-          jid,
-          caption || '(Image sent but channel does not support images)',
-        );
-      }
-      return channel.sendImage(jid, imagePath, caption);
-    },
+    sendImage: (jid, imagePath, caption) =>
+      routeOutboundImage(channels, jid, imagePath, caption),
     sendPoolMessage:
       TELEGRAM_BOT_POOL.length > 0
         ? (jid, text, sender, groupFolder) =>

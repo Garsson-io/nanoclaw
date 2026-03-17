@@ -44,6 +44,23 @@ export function routeOutbound(
   return channel.sendMessage(jid, text);
 }
 
+export function routeOutboundImage(
+  channels: Channel[],
+  jid: string,
+  imagePath: string,
+  caption?: string,
+): Promise<void> {
+  const channel = channels.find((c) => c.ownsJid(jid));
+  if (!channel) throw new Error(`No channel for JID: ${jid}`);
+  if (!channel.sendImage) {
+    return channel.sendMessage(
+      jid,
+      caption || '(Image sent but channel does not support images)',
+    );
+  }
+  return channel.sendImage(jid, imagePath, caption);
+}
+
 export function findChannel(
   channels: Channel[],
   jid: string,
