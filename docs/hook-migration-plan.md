@@ -55,9 +55,23 @@ Move **enforcement** to portable layers (CI, git hooks, architecture). Keep Clau
 - `.husky/pre-commit`: formats staged TS files, advisory test coverage warning
 
 **Target state:**
-- `.husky/pre-commit`: add worktree check (block commits on main in main checkout)
-- `.husky/pre-push`: new hook — block pushes from main checkout
+- `.husky/pre-commit`: block ALL commits in main checkout (any branch, not just main)
+- `.husky/pre-push`: block ALL pushes from main checkout (defense-in-depth)
 - Claude hook becomes advisory-only
+
+**Why block all branches, not just main?** The policy is "dev work happens in worktrees" — the branch name is irrelevant. Consider:
+
+```bash
+# In main checkout (the running production instance):
+git checkout -b hotfix-typo     # still in main checkout
+vim src/config.ts               # editing production files
+git add -A && git commit        # if only "main" blocked, this succeeds!
+git push -u origin hotfix-typo  # policy violation shipped
+```
+
+This violates workspace isolation even though the branch isn't `main`. What matters is **where** the work happens, not what branch it's on. See `docs/agent-control-flow.md` for the full rationale.
+
+Pre-push is defense-in-depth: if pre-commit blocks all commits, there's nothing to push. But it catches `--no-verify` bypass.
 
 **Why this is better:**
 - Works for humans and all agents, not just Claude
