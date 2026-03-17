@@ -14,7 +14,10 @@
 strip_heredoc_body() {
   local cmd="$1"
   local result
-  result=$(echo "$cmd" | sed '/<<[[:space:]]*-\{0,1\}[[:space:]]*['\''\"]\{0,1\}[A-Za-z_]*['\''\"]\{0,1\}/,$d')
+  # Match heredoc operators: <<EOF, <<'EOF', <<"EOF", <<-EOF, <<-'EOF', etc.
+  # Requires at least one identifier char after << to avoid matching
+  # bitshift operators (<<) or arithmetic (1 << 4).
+  result=$(echo "$cmd" | sed '/<<[[:space:]]*-\{0,1\}[[:space:]]*['\''\"]\{0,1\}[A-Za-z_][A-Za-z_0-9]*['\''\"]\{0,1\}/,$d')
   if [ -z "$result" ]; then
     result=$(echo "$cmd" | head -1)
   fi
