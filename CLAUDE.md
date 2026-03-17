@@ -144,6 +144,18 @@ Always test the **actual deployed artifact**, not just source presence:
 - If a mount provides a file, verify the mount exists AND the consumer reads it
 - "The file exists in the repo" is not verification — "the agent receives it at runtime" is
 
+### Smoke Tests — MANDATORY when review identifies them
+
+When a PR review says a smoke test is needed, **you must perform it before declaring the PR ready**. "Pending manual smoke test" is not an acceptable review outcome — it means the review is incomplete.
+
+Smoke test checklist:
+1. **Identify what to smoke test** — the review will name the untested path (e.g., "never hit real GitHub API", "never ran in container")
+2. **Run it** — execute the actual end-to-end path. If it requires credentials or infrastructure you don't have, ask the user to provide them or run the test together.
+3. **Record the result** — include the smoke test output (success or failure) in the PR or review comment.
+4. **If you can't smoke test** — explicitly state what's blocking and ask the user. Don't hand-wave it as "recommended before deploy."
+
+The point of review is to catch gaps. A gap identified but not closed is not a review — it's a TODO list.
+
 ## Kaizen Backlog
 
 Future work, process improvements, and cross-repo engineering proposals are tracked as GitHub Issues in [`Garsson-io/kaizen`](https://github.com/Garsson-io/kaizen). When a dev agent identifies an improvement that's out of scope for the current PR, file it there with the `kaizen` label. Include: what, why, when, how, reproduction steps, and verification criteria.
