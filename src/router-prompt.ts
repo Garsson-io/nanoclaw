@@ -52,16 +52,8 @@ Rules:
 - For direct_answer: only use for trivial messages (greetings, thanks, simple factual questions) that clearly don't relate to any case
 - When using direct_answer, provide the answer text in the directAnswer field
 
-Respond with ONLY a JSON object (no markdown, no explanation):
-{
-  "requestId": "${request.requestId}",
-  "decision": "route_to_case" | "direct_answer" | "suggest_new",
-  "caseId": "the case ID if routing to a case",
-  "caseName": "the case name if routing to a case",
-  "confidence": 0.0 to 1.0,
-  "reason": "brief explanation of your routing decision",
-  "directAnswer": "answer text if decision is direct_answer"
-}`;
+You MUST call the \`route_decision\` tool exactly once with your decision. Do NOT output raw JSON — use the tool.
+The tool parameters are: request_id, decision, case_id, case_name, confidence, reason, direct_answer.`;
 }
 
 /**

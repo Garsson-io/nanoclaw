@@ -25,7 +25,6 @@ import {
   CONTAINER_HOST_GATEWAY,
   CONTAINER_RUNTIME_BIN,
   hostGatewayArgs,
-  readonlyMountArgs,
 } from './container-runtime.js';
 import { detectAuthMode } from './credential-proxy.js';
 import { logger } from './logger.js';
@@ -87,6 +86,15 @@ export async function routeMessage(
 export function readRouterResult(requestId: string): RouterResponse {
   const resultsDir = path.join(DATA_DIR, 'ipc', ROUTER_GROUP_FOLDER, 'results');
   const resultFile = path.join(resultsDir, `${requestId}.json`);
+
+  if (!fs.existsSync(resultFile)) {
+    // Brief retry for filesystem sync latency (WSL2 mounts can be slow)
+    for (let i = 0; i < 5; i++) {
+      const start = Date.now();
+      while (Date.now() - start < 100) {} // busy-wait 100ms
+      if (fs.existsSync(resultFile)) break;
+    }
+  }
 
   if (!fs.existsSync(resultFile)) {
     throw new Error(`Router produced no result file for ${requestId}`);

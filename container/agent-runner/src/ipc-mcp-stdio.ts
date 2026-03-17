@@ -837,9 +837,8 @@ const transport = new StdioServerTransport();
 await server.connect(transport);
 
 // Router-specific tool — only registered when running as the message router
-const ROUTER_RESULTS_DIR = path.join(IPC_DIR, 'results');
-
 if (groupFolder === '__router__') {
+  const ROUTER_RESULTS_DIR = path.join(IPC_DIR, 'results');
   server.tool(
     'route_decision',
     `Submit your routing decision for the current message. You MUST call this tool exactly once per routing request.

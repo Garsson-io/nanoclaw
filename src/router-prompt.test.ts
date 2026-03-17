@@ -84,15 +84,15 @@ describe('buildRouterPrompt', () => {
   });
 
   /**
-   * INVARIANT: Prompt must include the requestId in the expected response schema
+   * INVARIANT: Prompt must list request_id as a tool parameter
    * SUT: buildRouterPrompt output
-   * VERIFICATION: The requestId appears in the JSON template
+   * VERIFICATION: The request_id parameter is mentioned in the tool instructions
    */
-  it('embeds the requestId in the response template', () => {
+  it('lists request_id as a tool parameter', () => {
     const request = makeRequest({ requestId: 'route-abc-123' });
     const prompt = buildRouterPrompt(request);
 
-    expect(prompt).toContain('"requestId": "route-abc-123"');
+    expect(prompt).toContain('request_id');
   });
 
   /**
@@ -224,15 +224,16 @@ describe('buildRouterPrompt', () => {
   });
 
   /**
-   * INVARIANT: Prompt instructs agent to respond with JSON only
+   * INVARIANT: Prompt instructs agent to call the route_decision tool
    * SUT: buildRouterPrompt response format instructions
-   * VERIFICATION: JSON-only instruction is present
+   * VERIFICATION: Tool-based instruction is present instead of raw JSON
    */
-  it('instructs the agent to respond with JSON only', () => {
+  it('instructs the agent to call the route_decision tool', () => {
     const request = makeRequest();
     const prompt = buildRouterPrompt(request);
 
-    expect(prompt).toContain('ONLY a JSON object');
-    expect(prompt).toContain('no markdown');
+    expect(prompt).toContain('route_decision');
+    expect(prompt).toContain('MUST call');
+    expect(prompt).toContain('Do NOT output raw JSON');
   });
 });
