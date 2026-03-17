@@ -207,7 +207,7 @@ fi
 if $IS_PR_CREATE; then
   PR_URL=$(echo "$TOOL_OUTPUT" | grep -oE 'https://github\.com/[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+/pull/[0-9]+' | head -1)
   if [ -z "$PR_URL" ]; then
-    echo "[$(date -Iseconds)] PR_CREATE: no URL found | stdout=$(echo "$STDOUT" | head -c 500) | stderr=$(echo "$STDERR" | head -c 500)" >> "$DEBUG_LOG"
+    echo "[$(date -Iseconds)] PR_CREATE: no URL found | output=$(echo "$TOOL_OUTPUT" | head -c 500)" >> "$DEBUG_LOG"
     exit 0
   fi
 
