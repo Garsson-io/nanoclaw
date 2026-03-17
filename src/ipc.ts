@@ -64,7 +64,7 @@ export async function dispatchIpcMessage(
     return 'unauthorized';
   }
 
-  if (data.sender && deps.sendPoolMessage) {
+  if (data.sender && data.chatJid.startsWith('tg:') && deps.sendPoolMessage) {
     const sent = await deps.sendPoolMessage(
       data.chatJid,
       data.text,
@@ -751,8 +751,11 @@ export async function processTaskIpc(
       // Write result file so the MCP tool can read it back
       const resultDir = path.join(DATA_DIR, 'ipc', sourceGroup, 'case_results');
       fs.mkdirSync(resultDir, { recursive: true });
-      const resultFile = (data as Record<string, unknown>).requestId
-        ? `${(data as Record<string, unknown>).requestId}.json`
+      const rawReqId = (data as Record<string, unknown>).requestId as
+        | string
+        | undefined;
+      const resultFile = rawReqId
+        ? `${rawReqId.replace(/[^a-zA-Z0-9_-]/g, '')}.json`
         : `${id}.json`;
       fs.writeFileSync(
         path.join(resultDir, resultFile),
