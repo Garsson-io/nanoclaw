@@ -117,6 +117,65 @@ PUSH_INPUT=$(jq -n '{
 PUSH_OUTPUT=$(echo "$PUSH_INPUT" | STATE_DIR="$STATE_DIR" bash "$HOOK" 2>/dev/null)
 assert_contains "push triggers next review round" "ROUND" "$PUSH_OUTPUT"
 
+echo ""
+echo "=== Merge cleans up state file ==="
+
+# Simulate gh pr merge (PR URL in stdout)
+MERGE_INPUT=$(jq -n '{
+  "tool_input": {"command": "gh pr merge 2 --repo Garsson-io/garsson-prints --squash"},
+  "tool_output": {
+    "stdout": "✓ Merged https://github.com/Garsson-io/garsson-prints/pull/2",
+    "stderr": "",
+    "exit_code": "0"
+  }
+}')
+
+echo "$MERGE_INPUT" | STATE_DIR="$STATE_DIR" bash "$HOOK" 2>/dev/null
+PRINTS_FILE="$STATE_DIR/Garsson-io_garsson-prints_2"
+if [ ! -f "$PRINTS_FILE" ]; then
+  echo "  PASS: merge cleans up state file for correct PR"
+  ((PASS++))
+else
+  echo "  FAIL: state file still exists after merge"
+  ((FAIL++))
+fi
+
+echo ""
+echo "=== Push with no active state exits silently ==="
+
+teardown
+setup
+
+PUSH_EMPTY=$(echo "$PUSH_INPUT" | STATE_DIR="$STATE_DIR" bash "$HOOK" 2>/dev/null)
+if [ -z "$PUSH_EMPTY" ]; then
+  echo "  PASS: push with no state produces no output"
+  ((PASS++))
+else
+  echo "  FAIL: push with no state produced output: $PUSH_EMPTY"
+  ((FAIL++))
+fi
+
+echo ""
+echo "=== PR create with no URL in output exits silently ==="
+
+NO_URL_INPUT=$(jq -n '{
+  "tool_input": {"command": "gh pr create --title test"},
+  "tool_output": {
+    "stdout": "some error or unexpected output",
+    "stderr": "",
+    "exit_code": "0"
+  }
+}')
+
+NO_URL_OUTPUT=$(echo "$NO_URL_INPUT" | STATE_DIR="$STATE_DIR" bash "$HOOK" 2>/dev/null)
+if [ -z "$NO_URL_OUTPUT" ]; then
+  echo "  PASS: PR create with no URL exits silently"
+  ((PASS++))
+else
+  echo "  FAIL: PR create with no URL produced output"
+  ((FAIL++))
+fi
+
 teardown
 
 print_results
