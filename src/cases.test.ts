@@ -5,6 +5,7 @@ import {
   insertCase,
   getCaseById,
   getActiveCasesByGithubIssue,
+  getStaleActiveCases,
   updateCase,
   formatCaseStatus,
 } from './cases.js';
@@ -107,6 +108,72 @@ describe('getActiveCasesByGithubIssue', () => {
 
   it('returns empty array when no cases exist', () => {
     const results = getActiveCasesByGithubIssue(999);
+    expect(results).toHaveLength(0);
+  });
+});
+
+// INVARIANT: getStaleActiveCases returns only active cases whose last_activity_at
+//   is older than the specified threshold, excluding done/blocked/other statuses.
+// SUT: getStaleActiveCases
+// VERIFICATION: Insert active cases with varying activity timestamps and non-active
+//   cases, confirm only stale active cases are returned.
+describe('getStaleActiveCases', () => {
+  it('returns active cases idle longer than threshold', () => {
+    const threeHoursAgo = new Date(
+      Date.now() - 3 * 60 * 60 * 1000,
+    ).toISOString();
+    insertCase(
+      makeCase({
+        id: 'stale-active',
+        status: 'active',
+        last_activity_at: threeHoursAgo,
+      }),
+    );
+
+    const results = getStaleActiveCases(2 * 60 * 60 * 1000);
+    expect(results).toHaveLength(1);
+    expect(results[0].id).toBe('stale-active');
+  });
+
+  it('excludes active cases with recent activity', () => {
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    insertCase(
+      makeCase({
+        id: 'fresh-active',
+        status: 'active',
+        last_activity_at: fiveMinAgo,
+      }),
+    );
+
+    const results = getStaleActiveCases(2 * 60 * 60 * 1000);
+    expect(results).toHaveLength(0);
+  });
+
+  it('excludes done/blocked cases even if stale', () => {
+    const threeHoursAgo = new Date(
+      Date.now() - 3 * 60 * 60 * 1000,
+    ).toISOString();
+    insertCase(
+      makeCase({
+        id: 'stale-done',
+        status: 'done',
+        last_activity_at: threeHoursAgo,
+      }),
+    );
+    insertCase(
+      makeCase({
+        id: 'stale-blocked',
+        status: 'blocked',
+        last_activity_at: threeHoursAgo,
+      }),
+    );
+
+    const results = getStaleActiveCases(2 * 60 * 60 * 1000);
+    expect(results).toHaveLength(0);
+  });
+
+  it('returns empty array when no cases exist', () => {
+    const results = getStaleActiveCases(1000);
     expect(results).toHaveLength(0);
   });
 });
