@@ -62,7 +62,8 @@ import {
   updateCase,
   writeCasesSnapshot,
 } from './cases.js';
-import { routeMessageToCase } from './case-router.js';
+import { routeMessage, stopRouterContainer } from './router-container.js';
+import { RouterRequest } from './router-types.js';
 import {
   restoreRemoteControl,
   startRemoteControl,
@@ -401,30 +402,76 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         missedMessages[missedMessages.length - 1].sender_name ||
         missedMessages[missedMessages.length - 1].sender;
 
-      const routeResult = await routeMessageToCase(
-        lastMsgText,
-        senderName,
-        routableCases,
-      );
+      try {
+        // Use the container-based router for multi-case routing
+        const routerRequest: RouterRequest = {
+          type: 'route',
+          requestId: `route-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          messageText: lastMsgText,
+          senderName,
+          groupFolder: group.folder,
+          cases: routableCases.map((c) => ({
+            id: c.id,
+            name: c.name,
+            type: c.type,
+            status: c.status,
+            description: c.description,
+            lastMessage: c.last_message,
+            lastActivityAt: c.last_activity_at,
+          })),
+        };
 
-      if (routeResult.caseId) {
-        targetCase = getCaseById(routeResult.caseId) || undefined;
-        logger.info(
-          {
-            caseId: routeResult.caseId,
-            caseName: routeResult.caseName,
-            confidence: routeResult.confidence,
-          },
-          'Message routed to case',
+        const routerResponse = await routeMessage(routerRequest);
+
+        if (routerResponse.decision === 'direct_answer') {
+          // Router can answer directly — send to channel, no case container needed
+          if (routerResponse.directAnswer) {
+            const formatted = formatOutbound(routerResponse.directAnswer);
+            if (formatted) {
+              await channel.sendMessage(chatJid, formatted);
+            }
+          }
+          lastAgentTimestamp[chatJid] =
+            missedMessages[missedMessages.length - 1].timestamp;
+          saveState();
+          logger.info(
+            {
+              requestId: routerRequest.requestId,
+              confidence: routerResponse.confidence,
+            },
+            'Router provided direct answer',
+          );
+          return true;
+        } else if (
+          routerResponse.decision === 'route_to_case' &&
+          routerResponse.caseId
+        ) {
+          targetCase = getCaseById(routerResponse.caseId) || undefined;
+          logger.info(
+            {
+              caseId: routerResponse.caseId,
+              caseName: routerResponse.caseName,
+              confidence: routerResponse.confidence,
+            },
+            'Message routed to case via router',
+          );
+        } else {
+          // suggest_new — let the agent process without case context
+          logger.info(
+            {
+              confidence: routerResponse.confidence,
+              reason: routerResponse.reason,
+            },
+            'Router suggests new case or no case context',
+          );
+        }
+      } catch (routerErr) {
+        // Router failed — spawn without case context, let agent decide
+        logger.warn(
+          { err: routerErr },
+          'Container router failed, spawning without case context',
         );
-      } else if (routeResult.suggestNew) {
-        // No matching case — let the agent process without case context.
-        // The agent has the create_case tool and can decide whether to
-        // create a new case or handle it as a one-off.
-        logger.info(
-          { confidence: routeResult.confidence, reason: routeResult.reason },
-          'No case match, routing to agent without case context',
-        );
+        // targetCase remains undefined — agent processes without case isolation
       }
     } else if (routableCases.length === 1) {
       targetCase = routableCases[0];
@@ -905,6 +952,7 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
     proxyServer.close();
+    await stopRouterContainer();
     await queue.shutdown(10000);
     for (const ch of channels) await ch.disconnect();
     process.exit(0);
