@@ -224,7 +224,7 @@ SQLite database at `store/messages.db` (path defined by `STORE_DIR` in `src/conf
 node -e "const db=require('better-sqlite3')('store/messages.db'); console.log(JSON.stringify(db.prepare('SELECT name, status, type FROM cases ORDER BY status').all(), null, 2))"
 ```
 
-Tables: `messages`, `chats`, `cases`, `api_usage`, `usage_categories`, `scheduled_tasks`.
+Tables: `messages`, `chats`, `cases`, `sessions`, `api_usage`, `usage_categories`, `scheduled_tasks`, `task_run_logs`, `registered_groups`, `router_state`.
 
 ## Development
 
