@@ -11,10 +11,22 @@ vi.mock('./group-folder.js', async (importOriginal) => {
   };
 });
 
+// Mock mount-security to return predictable mount mappings
+vi.mock('./mount-security.js', () => ({
+  validateAdditionalMounts: vi.fn(() => [
+    {
+      hostPath: '/home/user/projects/prints',
+      containerPath: '/workspace/extra/prints',
+      readonly: true,
+    },
+  ]),
+}));
+
 import {
   dispatchIpcMessage,
   dispatchIpcImage,
   dispatchIpcDocument,
+  resolveContainerToHostPath,
   IpcDeps,
 } from './ipc.js';
 import { RegisteredGroup } from './types.js';
@@ -25,6 +37,11 @@ const MAIN_GROUP: RegisteredGroup = {
   trigger: 'always',
   added_at: '2024-01-01T00:00:00.000Z',
   isMain: true,
+  containerConfig: {
+    additionalMounts: [
+      { hostPath: '/home/user/projects/prints', containerPath: 'prints' },
+    ],
+  },
 };
 
 const OTHER_GROUP: RegisteredGroup = {
@@ -565,6 +582,215 @@ describe('dispatchIpcDocument', () => {
     expect(result).toBe('unauthorized');
     expect(sendDocument).not.toHaveBeenCalled();
     expect(sendMessage).not.toHaveBeenCalled();
+
+    vi.restoreAllMocks();
+  });
+});
+
+describe('resolveContainerToHostPath', () => {
+  // INVARIANT: /workspace/group/ paths resolve to the group folder on host
+  test('resolves /workspace/group/ to group folder', () => {
+    const result = resolveContainerToHostPath(
+      '/workspace/group/output/chart.png',
+      'telegram_main',
+      groups,
+    );
+
+    expect(result).not.toBeNull();
+    expect(result!.hostPath).toBe(
+      '/test-groups/telegram_main/output/chart.png',
+    );
+    expect(result!.allowedDir).toBe('/test-groups/telegram_main');
+  });
+
+  // INVARIANT: /workspace/extra/ paths resolve to the validated additional mount host path
+  test('resolves /workspace/extra/ to additional mount host path', () => {
+    const result = resolveContainerToHostPath(
+      '/workspace/extra/prints/reference-files/bleed/guide.pdf',
+      'telegram_main',
+      groups,
+    );
+
+    expect(result).not.toBeNull();
+    expect(result!.hostPath).toBe(
+      '/home/user/projects/prints/reference-files/bleed/guide.pdf',
+    );
+    expect(result!.allowedDir).toBe('/home/user/projects/prints');
+  });
+
+  // INVARIANT: /workspace/extra/ root path (no subpath) resolves correctly
+  test('resolves /workspace/extra/ mount root without trailing subpath', () => {
+    const result = resolveContainerToHostPath(
+      '/workspace/extra/prints',
+      'telegram_main',
+      groups,
+    );
+
+    expect(result).not.toBeNull();
+    expect(result!.hostPath).toBe('/home/user/projects/prints');
+    expect(result!.allowedDir).toBe('/home/user/projects/prints');
+  });
+
+  // INVARIANT: Unknown container path prefixes are rejected
+  test('returns null for unknown container path prefixes', () => {
+    const result = resolveContainerToHostPath(
+      '/workspace/project/src/index.ts',
+      'telegram_main',
+      groups,
+    );
+
+    expect(result).toBeNull();
+  });
+
+  // INVARIANT: /workspace/extra/ for group without mounts returns null
+  test('returns null for /workspace/extra/ when group has no mounts', () => {
+    const result = resolveContainerToHostPath(
+      '/workspace/extra/prints/file.pdf',
+      'telegram_other',
+      groups,
+    );
+
+    expect(result).toBeNull();
+  });
+
+  // INVARIANT: Host paths within the group directory pass through
+  test('passes through host paths within group directory', () => {
+    const result = resolveContainerToHostPath(
+      '/test-groups/telegram_main/images/photo.jpg',
+      'telegram_main',
+      groups,
+    );
+
+    expect(result).not.toBeNull();
+    expect(result!.hostPath).toBe(
+      '/test-groups/telegram_main/images/photo.jpg',
+    );
+    expect(result!.allowedDir).toBe('/test-groups/telegram_main');
+  });
+
+  // INVARIANT: Arbitrary absolute paths outside known mounts are rejected
+  test('returns null for paths outside known mounts', () => {
+    const result = resolveContainerToHostPath(
+      '/etc/passwd',
+      'telegram_main',
+      groups,
+    );
+
+    expect(result).toBeNull();
+  });
+});
+
+describe('dispatchIpcImage — /workspace/extra/ paths', () => {
+  // INVARIANT: Images from additional mounts are sent successfully
+  test('sends image from /workspace/extra/ mount', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+
+    const result = await dispatchIpcImage(
+      {
+        chatJid: 'tg:111',
+        imagePath: '/workspace/extra/prints/images/banner.jpg',
+        caption: 'Banner',
+      },
+      'telegram_main',
+      true,
+      makeDeps({ withImage: true }),
+    );
+
+    expect(result).toBe('sent');
+    expect(sendImage).toHaveBeenCalledWith(
+      'tg:111',
+      '/home/user/projects/prints/images/banner.jpg',
+      'Banner',
+    );
+
+    vi.restoreAllMocks();
+  });
+
+  // INVARIANT: Path traversal within extra mount is blocked
+  test('blocks path traversal within /workspace/extra/ mount', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+
+    const result = await dispatchIpcImage(
+      {
+        chatJid: 'tg:111',
+        imagePath: '/workspace/extra/prints/../../.env',
+      },
+      'telegram_main',
+      true,
+      makeDeps({ withImage: true }),
+    );
+
+    expect(result).toBe('unauthorized');
+    expect(sendImage).not.toHaveBeenCalled();
+
+    vi.restoreAllMocks();
+  });
+});
+
+describe('dispatchIpcDocument — /workspace/extra/ paths', () => {
+  // INVARIANT: Documents from additional mounts are sent successfully
+  test('sends document from /workspace/extra/ mount', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+
+    const result = await dispatchIpcDocument(
+      {
+        chatJid: 'tg:111',
+        documentPath: '/workspace/extra/prints/reference-files/bleed/guide.pdf',
+        filename: 'guide.pdf',
+        caption: 'Bleed guide',
+      },
+      'telegram_main',
+      true,
+      makeDeps({ withDocument: true }),
+    );
+
+    expect(result).toBe('sent');
+    expect(sendDocument).toHaveBeenCalledWith(
+      'tg:111',
+      '/home/user/projects/prints/reference-files/bleed/guide.pdf',
+      'guide.pdf',
+      'Bleed guide',
+    );
+
+    vi.restoreAllMocks();
+  });
+
+  // INVARIANT: Path traversal within extra mount is blocked
+  test('blocks path traversal within /workspace/extra/ mount', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+
+    const result = await dispatchIpcDocument(
+      {
+        chatJid: 'tg:111',
+        documentPath: '/workspace/extra/prints/../../etc/passwd',
+      },
+      'telegram_main',
+      true,
+      makeDeps({ withDocument: true }),
+    );
+
+    expect(result).toBe('unauthorized');
+    expect(sendDocument).not.toHaveBeenCalled();
+
+    vi.restoreAllMocks();
+  });
+
+  // INVARIANT: /workspace/extra/ from group without mounts is blocked
+  test('blocks /workspace/extra/ from group without additional mounts', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+
+    const result = await dispatchIpcDocument(
+      {
+        chatJid: 'tg:222',
+        documentPath: '/workspace/extra/prints/file.pdf',
+      },
+      'telegram_other',
+      false,
+      makeDeps({ withDocument: true }),
+    );
+
+    expect(result).toBe('unauthorized');
+    expect(sendDocument).not.toHaveBeenCalled();
 
     vi.restoreAllMocks();
   });
