@@ -11,7 +11,11 @@
 # Uses state file to track review progress across tool calls.
 # Always exits 0 — advisory, not blocking.
 
+DEBUG_LOG="/tmp/pr-review-hook-debug.log"
+echo "[$(date -Iseconds)] pr-review-loop.sh INVOKED" >> "$DEBUG_LOG"
+
 INPUT=$(cat)
+echo "[$(date -Iseconds)] INPUT read | cmd=$(echo "$INPUT" | jq -r '.tool_input.command // empty' | head -c 200)" >> "$DEBUG_LOG"
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
 STDOUT=$(echo "$INPUT" | jq -r '.tool_output.stdout // empty')
 STDERR=$(echo "$INPUT" | jq -r '.tool_output.stderr // empty')
@@ -39,13 +43,18 @@ IS_PR_MERGE=false
 
 if echo "$COMMAND" | grep -qE 'gh\s+pr\s+create'; then
   IS_PR_CREATE=true
+  echo "[$(date -Iseconds)] trigger=PR_CREATE" >> "$DEBUG_LOG"
 elif echo "$COMMAND" | grep -qE 'git\s+push'; then
   IS_GIT_PUSH=true
+  echo "[$(date -Iseconds)] trigger=GIT_PUSH" >> "$DEBUG_LOG"
 elif echo "$COMMAND" | grep -qE 'gh\s+pr\s+diff'; then
   IS_PR_DIFF=true
+  echo "[$(date -Iseconds)] trigger=PR_DIFF" >> "$DEBUG_LOG"
 elif echo "$COMMAND" | grep -qE 'gh\s+pr\s+merge'; then
   IS_PR_MERGE=true
+  echo "[$(date -Iseconds)] trigger=PR_MERGE" >> "$DEBUG_LOG"
 else
+  echo "[$(date -Iseconds)] no trigger matched, exiting" >> "$DEBUG_LOG"
   exit 0
 fi
 
@@ -62,6 +71,7 @@ read_state() {
   STATUS=$(grep -E '^STATUS=' "$STATE_FILE" 2>/dev/null | head -1 | cut -d= -f2-)
   ROUND=${ROUND:-1}
   STATUS=${STATUS:-needs_review}
+  echo "[$(date -Iseconds)] read_state | file=$STATE_FILE round=$ROUND status=$STATUS" >> "$DEBUG_LOG"
   # Validate PR_URL looks like a GitHub URL (reject anything else)
   if [ -n "$PR_URL" ] && ! echo "$PR_URL" | grep -qE '^https://github\.com/[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+/pull/[0-9]+$'; then
     PR_URL=""
@@ -77,10 +87,12 @@ write_state() {
   local status="$3"
   printf 'PR_URL=%s\nROUND=%s\nSTATUS=%s\n' "$url" "$round" "$status" > "$STATE_FILE"
   chmod 600 "$STATE_FILE" 2>/dev/null
+  echo "[$(date -Iseconds)] write_state | file=$STATE_FILE round=$round status=$status" >> "$DEBUG_LOG"
 }
 
 # Clean up state file
 cleanup_state() {
+  echo "[$(date -Iseconds)] cleanup_state | file=$STATE_FILE" >> "$DEBUG_LOG"
   rm -f "$STATE_FILE" 2>/dev/null
 }
 
