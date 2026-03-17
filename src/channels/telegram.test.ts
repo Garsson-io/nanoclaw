@@ -701,34 +701,161 @@ describe('TelegramChannel', () => {
       );
     });
 
-    it('stores document with filename', async () => {
+    it('downloads document and stores with container path', async () => {
       const opts = createTestOpts();
       const channel = new TelegramChannel('test-token', opts);
       await channel.connect();
 
       const ctx = createMediaCtx({
-        extra: { document: { file_name: 'report.pdf' } },
+        messageId: 55,
+        extra: {
+          document: { file_id: 'doc_file_id', file_name: 'report.pdf' },
+        },
       });
+      ctx.api.getFile.mockResolvedValue({ file_path: 'documents/file_1.pdf' });
       await triggerMediaMessage('message:document', ctx);
 
+      expect(ctx.api.getFile).toHaveBeenCalledWith('doc_file_id');
+      expect(mockDownloadFile).toHaveBeenCalledWith(
+        'https://api.telegram.org/file/bottest-token/documents/file_1.pdf',
+        '/tmp/test-groups/test-group/uploads/55-report.pdf',
+      );
       expect(opts.onMessage).toHaveBeenCalledWith(
         'tg:100200300',
-        expect.objectContaining({ content: '[Document: report.pdf]' }),
+        expect.objectContaining({
+          content:
+            '[Document: /workspace/group/uploads/55-report.pdf — original name: "report.pdf", use Read tool or Bash to process]',
+        }),
       );
     });
 
-    it('stores document with fallback name when filename missing', async () => {
+    it('downloads document and includes caption', async () => {
       const opts = createTestOpts();
       const channel = new TelegramChannel('test-token', opts);
       await channel.connect();
 
-      const ctx = createMediaCtx({ extra: { document: {} } });
+      const ctx = createMediaCtx({
+        messageId: 56,
+        caption: 'Here is the file',
+        extra: { document: { file_id: 'doc_file_id', file_name: 'data.csv' } },
+      });
+      ctx.api.getFile.mockResolvedValue({ file_path: 'documents/file_2.csv' });
       await triggerMediaMessage('message:document', ctx);
 
       expect(opts.onMessage).toHaveBeenCalledWith(
         'tg:100200300',
-        expect.objectContaining({ content: '[Document: file]' }),
+        expect.objectContaining({
+          content:
+            '[Document: /workspace/group/uploads/56-data.csv — original name: "data.csv", use Read tool or Bash to process] Here is the file',
+        }),
       );
+    });
+
+    it('sanitizes special characters in document filename', async () => {
+      const opts = createTestOpts();
+      const channel = new TelegramChannel('test-token', opts);
+      await channel.connect();
+
+      const ctx = createMediaCtx({
+        messageId: 57,
+        extra: {
+          document: {
+            file_id: 'doc_file_id',
+            file_name: 'engagement landscape (1).pdf',
+          },
+        },
+      });
+      ctx.api.getFile.mockResolvedValue({ file_path: 'documents/file_3.pdf' });
+      await triggerMediaMessage('message:document', ctx);
+
+      expect(mockDownloadFile).toHaveBeenCalledWith(
+        expect.any(String),
+        '/tmp/test-groups/test-group/uploads/57-engagement_landscape__1_.pdf',
+      );
+    });
+
+    it('falls back to placeholder when document download fails', async () => {
+      const opts = createTestOpts();
+      const channel = new TelegramChannel('test-token', opts);
+      await channel.connect();
+
+      const ctx = createMediaCtx({
+        extra: {
+          document: { file_id: 'doc_file_id', file_name: 'report.pdf' },
+        },
+      });
+      ctx.api.getFile.mockRejectedValue(new Error('Network error'));
+      await triggerMediaMessage('message:document', ctx);
+
+      expect(opts.onMessage).toHaveBeenCalledWith(
+        'tg:100200300',
+        expect.objectContaining({
+          content: '[Document: report.pdf — download failed]',
+        }),
+      );
+    });
+
+    it('falls back to placeholder when getFile returns no file_path for document', async () => {
+      const opts = createTestOpts();
+      const channel = new TelegramChannel('test-token', opts);
+      await channel.connect();
+
+      const ctx = createMediaCtx({
+        extra: {
+          document: { file_id: 'doc_file_id', file_name: 'report.pdf' },
+        },
+      });
+      ctx.api.getFile.mockResolvedValue({ file_path: undefined });
+      await triggerMediaMessage('message:document', ctx);
+
+      expect(opts.onMessage).toHaveBeenCalledWith(
+        'tg:100200300',
+        expect.objectContaining({
+          content: '[Document: report.pdf — download failed]',
+        }),
+      );
+    });
+
+    it('uses fallback name "file" when document filename is missing', async () => {
+      const opts = createTestOpts();
+      const channel = new TelegramChannel('test-token', opts);
+      await channel.connect();
+
+      const ctx = createMediaCtx({
+        messageId: 58,
+        extra: { document: { file_id: 'doc_file_id' } },
+      });
+      ctx.api.getFile.mockResolvedValue({ file_path: 'documents/file_4' });
+      await triggerMediaMessage('message:document', ctx);
+
+      expect(mockDownloadFile).toHaveBeenCalledWith(
+        expect.any(String),
+        '/tmp/test-groups/test-group/uploads/58-file',
+      );
+      expect(opts.onMessage).toHaveBeenCalledWith(
+        'tg:100200300',
+        expect.objectContaining({
+          content:
+            '[Document: /workspace/group/uploads/58-file — original name: "file", use Read tool or Bash to process]',
+        }),
+      );
+    });
+
+    it('ignores documents from unregistered chats', async () => {
+      const opts = createTestOpts();
+      const channel = new TelegramChannel('test-token', opts);
+      await channel.connect();
+
+      const ctx = createMediaCtx({
+        chatId: 999999,
+        extra: {
+          document: { file_id: 'doc_file_id', file_name: 'secret.pdf' },
+        },
+      });
+      await triggerMediaMessage('message:document', ctx);
+
+      expect(opts.onMessage).not.toHaveBeenCalled();
+      expect(mockDownloadFile).not.toHaveBeenCalled();
     });
 
     it('stores sticker with emoji', async () => {
