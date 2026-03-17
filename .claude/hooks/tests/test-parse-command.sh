@@ -90,6 +90,50 @@ EOF
 )"')"
 
 echo ""
+echo "=== is_gh_pr_command ==="
+
+# Direct gh pr commands — should match
+is_gh_pr_command "gh pr create --title test" "create" && \
+  assert_eq "direct gh pr create matches" "0" "0" || \
+  assert_eq "direct gh pr create matches" "0" "1"
+
+is_gh_pr_command "gh pr merge 42" "merge" && \
+  assert_eq "direct gh pr merge matches" "0" "0" || \
+  assert_eq "direct gh pr merge matches" "0" "1"
+
+is_gh_pr_command "gh pr merge 42 --repo Garsson-io/nanoclaw" "create|merge" && \
+  assert_eq "merge matches create|merge" "0" "0" || \
+  assert_eq "merge matches create|merge" "0" "1"
+
+# After pipe — should match
+is_gh_pr_command "npm build && gh pr create --title test" "create" && \
+  assert_eq "gh pr create after && matches" "0" "0" || \
+  assert_eq "gh pr create after && matches" "0" "1"
+
+is_gh_pr_command "cat file | gh pr create" "create" && \
+  assert_eq "gh pr create after pipe matches" "0" "0" || \
+  assert_eq "gh pr create after pipe matches" "0" "1"
+
+# FALSE POSITIVE: gh pr create inside echo/string — should NOT match
+is_gh_pr_command "echo 'gh pr create' | bash hook.sh" "create" && \
+  assert_eq "gh pr create inside echo should NOT match" "0" "1" || \
+  assert_eq "gh pr create inside echo should NOT match" "0" "0"
+
+is_gh_pr_command "echo '{\"command\":\"gh pr merge 42\"}' | bash -x hook.sh" "merge" && \
+  assert_eq "gh pr merge inside JSON echo should NOT match" "0" "1" || \
+  assert_eq "gh pr merge inside JSON echo should NOT match" "0" "0"
+
+# Wrong subcommand — should NOT match
+is_gh_pr_command "gh pr create --title test" "merge" && \
+  assert_eq "create should not match merge" "0" "1" || \
+  assert_eq "create should not match merge" "0" "0"
+
+# git push — should NOT match gh pr
+is_gh_pr_command "git push origin main" "create|merge" && \
+  assert_eq "git push should not match gh pr" "0" "1" || \
+  assert_eq "git push should not match gh pr" "0" "0"
+
+echo ""
 echo "=== get_pr_changed_files (with mocked gh/git) ==="
 
 # Create temp dir with mock commands

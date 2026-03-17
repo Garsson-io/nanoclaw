@@ -24,9 +24,9 @@ CMD_LINE=$(strip_heredoc_body "$COMMAND")
 
 IS_CREATE=false
 IS_MERGE=false
-if echo "$CMD_LINE" | grep -qE 'gh\s+pr\s+create'; then
+if is_gh_pr_command "$CMD_LINE" "create"; then
   IS_CREATE=true
-elif echo "$CMD_LINE" | grep -qE 'gh\s+pr\s+merge'; then
+elif is_gh_pr_command "$CMD_LINE" "merge"; then
   IS_MERGE=true
 else
   exit 0

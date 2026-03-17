@@ -24,11 +24,11 @@ IS_PR_CREATE=false
 IS_GIT_PUSH=false
 IS_PR_MERGE=false
 
-if echo "$CMD_LINE" | grep -qE 'gh\s+pr\s+create'; then
+if is_gh_pr_command "$CMD_LINE" "create"; then
   IS_PR_CREATE=true
-elif echo "$CMD_LINE" | grep -qE 'git\s+push'; then
+elif echo "$CMD_LINE" | sed 's/[|;&]\{1,\}/\n/g' | sed 's/^[[:space:]]*//' | grep -qE '^git[[:space:]]+push'; then
   IS_GIT_PUSH=true
-elif echo "$CMD_LINE" | grep -qE 'gh\s+pr\s+merge'; then
+elif is_gh_pr_command "$CMD_LINE" "merge"; then
   IS_PR_MERGE=true
 else
   exit 0

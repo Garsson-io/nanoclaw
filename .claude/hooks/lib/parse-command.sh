@@ -24,6 +24,18 @@ strip_heredoc_body() {
   echo "$result"
 }
 
+# Check if a command line contains an actual `gh pr <subcommand>` invocation,
+# not just the text inside a string argument (e.g., echo '...gh pr create...').
+# Splits by pipe/chain operators and checks if any segment starts with `gh pr`.
+# Usage: is_gh_pr_command "$CMD_LINE" "create|merge"
+is_gh_pr_command() {
+  local cmd_line="$1"
+  local subcommands="$2"
+  # Split by |, &&, ||, ; then check if any segment starts with gh pr <sub>
+  echo "$cmd_line" | sed 's/[|;&]\{1,\}/\n/g' | sed 's/^[[:space:]]*//' | \
+    grep -qE "^gh[[:space:]]+pr[[:space:]]+($subcommands)"
+}
+
 # Extract PR number from a gh pr <subcommand> invocation.
 # Usage: PR_NUM=$(extract_pr_number "$CMD_LINE" "merge")
 # Returns the number if present, empty string otherwise.
