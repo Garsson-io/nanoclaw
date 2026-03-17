@@ -1,5 +1,5 @@
 #!/bin/bash
-# pr-review-loop.sh — Level 2 kaizen enforcement (Issue #29)
+# pr-review-loop.sh — Level 3 kaizen enforcement (Issue #29, #46)
 # Multi-round PR self-review with state tracking.
 #
 # Triggers on:
@@ -9,7 +9,9 @@
 #   4. gh pr merge   — cleans up state file
 #
 # Uses state file to track review progress across tool calls.
-# Always exits 0 — advisory, not blocking.
+# Always exits 0 (PostToolUse). Enforcement is done by the PreToolUse
+# gate in enforce-pr-review.sh (Issue #46), which blocks non-review
+# commands while STATUS=needs_review.
 
 source "$(dirname "$0")/lib/parse-command.sh"
 
