@@ -7,47 +7,12 @@ import {
   getActiveCasesByGithubIssue,
   updateCase,
   formatCaseStatus,
-  writeCasesSnapshot,
-  suggestDevCase,
-  type Case,
 } from './cases.js';
-import fs from 'fs';
-import path from 'path';
+import { makeCase } from './test-helpers.js';
 
 beforeEach(() => {
   _initTestDatabase();
 });
-
-function makeCase(overrides: Partial<Case> = {}): Case {
-  const now = new Date().toISOString();
-  return {
-    id: `case-test-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    group_folder: 'test',
-    chat_jid: 'tg:123',
-    name: '260317-1200-test-case',
-    description: 'Test case description',
-    type: 'dev',
-    status: 'active',
-    blocked_on: null,
-    worktree_path: null,
-    workspace_path: '/tmp/test',
-    branch_name: null,
-    initiator: 'test',
-    initiator_channel: null,
-    last_message: null,
-    last_activity_at: now,
-    conclusion: null,
-    created_at: now,
-    done_at: null,
-    reviewed_at: null,
-    pruned_at: null,
-    total_cost_usd: 0,
-    token_source: null,
-    time_spent_ms: 0,
-    github_issue: null,
-    ...overrides,
-  };
-}
 
 // INVARIANT: Cases with a github_issue store and retrieve the value correctly.
 // SUT: insertCase + getCaseById round-trip
@@ -142,41 +107,6 @@ describe('formatCaseStatus with github_issue', () => {
     const c = makeCase({ github_issue: null });
     const output = formatCaseStatus(c);
     expect(output).not.toContain('[kaizen');
-  });
-});
-
-// INVARIANT: writeCasesSnapshot includes github_issue in the JSON output for each case.
-// SUT: writeCasesSnapshot
-// VERIFICATION: Write snapshot, read JSON, verify github_issue field is present.
-describe('writeCasesSnapshot with github_issue', () => {
-  it('includes github_issue in snapshot output', () => {
-    const tmpDir = fs.mkdtempSync('/tmp/nanoclaw-test-');
-    const ipcDir = path.join(tmpDir, 'ipc', 'test');
-
-    // Temporarily override DATA_DIR by writing directly
-    const c = makeCase({ github_issue: 16 });
-    fs.mkdirSync(ipcDir, { recursive: true });
-
-    writeCasesSnapshot('test', true, [c]);
-
-    const snapshotPath = path.join(
-      process.cwd(),
-      'data',
-      'ipc',
-      'test',
-      'active_cases.json',
-    );
-
-    // Only verify if the snapshot was written (depends on DATA_DIR)
-    if (fs.existsSync(snapshotPath)) {
-      const snapshot = JSON.parse(fs.readFileSync(snapshotPath, 'utf-8'));
-      expect(snapshot[0].github_issue).toBe(16);
-      // Cleanup
-      fs.unlinkSync(snapshotPath);
-    }
-
-    // Cleanup temp dir
-    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });
 

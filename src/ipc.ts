@@ -8,6 +8,7 @@ import {
   createCaseWorkspace,
   generateCaseId,
   generateCaseName,
+  getActiveCasesByGithubIssue,
   getCaseById,
   getStaleDoneCases,
   insertCase,
@@ -638,6 +639,34 @@ export async function processTaskIpc(
         logger.warn({ sourceGroup }, 'case_create missing description');
         break;
       }
+      // Warn if a kaizen issue already has an active case
+      if (d.githubIssue) {
+        const existing = getActiveCasesByGithubIssue(d.githubIssue);
+        if (existing.length > 0) {
+          const names = existing.map((c) => c.name).join(', ');
+          logger.warn(
+            { githubIssue: d.githubIssue, existingCases: names, sourceGroup },
+            `Kaizen #${d.githubIssue} already has active case(s): ${names}`,
+          );
+          // Resolve chatJid early for the warning message
+          const warnJid =
+            d.chatJid ||
+            Object.entries(registeredGroups).find(
+              ([, g]) => g.folder === sourceGroup,
+            )?.[0];
+          if (warnJid) {
+            deps
+              .sendMessage(
+                warnJid,
+                `⚠️ Kaizen #${d.githubIssue} already has active case(s): ${names}. Creating another anyway.`,
+              )
+              .catch(() => {
+                /* non-critical */
+              });
+          }
+        }
+      }
+
       const caseType = d.caseType === 'dev' ? 'dev' : 'work';
       const id = generateCaseId();
       const name = generateCaseName(d.description);
