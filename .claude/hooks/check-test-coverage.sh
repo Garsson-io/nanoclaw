@@ -24,22 +24,7 @@ if echo "$CMD_LINE" | grep -qE 'gh\s+pr\s+merge'; then
 fi
 
 # Get the list of changed files — from PR diff for merges, git diff for creates
-if [ "$IS_MERGE" = true ]; then
-  # Extract PR number from command (e.g., "gh pr merge 42" or "gh pr merge")
-  PR_NUM=$(echo "$CMD_LINE" | grep -oP 'gh\s+pr\s+merge\s+\K[0-9]+' || true)
-  if [ -n "$PR_NUM" ]; then
-    ALL_CHANGED=$(gh pr diff "$PR_NUM" --name-only --repo Garsson-io/nanoclaw 2>/dev/null || true)
-  else
-    # No PR number — try current branch's PR
-    ALL_CHANGED=$(gh pr diff --name-only --repo Garsson-io/nanoclaw 2>/dev/null || true)
-  fi
-  # Fallback to git diff if gh pr diff fails (e.g., no PR exists yet)
-  if [ -z "$ALL_CHANGED" ]; then
-    ALL_CHANGED=$(git diff --name-only main...HEAD 2>/dev/null || true)
-  fi
-else
-  ALL_CHANGED=$(git diff --name-only main...HEAD 2>/dev/null || true)
-fi
+ALL_CHANGED=$(get_pr_changed_files "$CMD_LINE" "$IS_MERGE")
 
 # Get changed source files (exclude tests, config, docs, hooks)
 CHANGED_SRC=$(echo "$ALL_CHANGED" | \

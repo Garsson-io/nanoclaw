@@ -23,3 +23,40 @@ strip_heredoc_body() {
   fi
   echo "$result"
 }
+
+# Extract PR number from a gh pr <subcommand> invocation.
+# Usage: PR_NUM=$(extract_pr_number "$CMD_LINE" "merge")
+# Returns the number if present, empty string otherwise.
+# Works with: "gh pr merge 42", "gh pr merge 42 --repo ...", "gh pr merge"
+extract_pr_number() {
+  local cmd_line="$1"
+  local subcommand="$2"
+  echo "$cmd_line" | sed -n "s/.*gh[[:space:]]\{1,\}pr[[:space:]]\{1,\}${subcommand}[[:space:]]\{1,\}\([0-9]\{1,\}\).*/\1/p" | head -1
+}
+
+# Get changed file list for a PR command.
+# For merge: uses gh pr diff (actual PR files on GitHub).
+# For create: uses git diff (local branch vs base).
+# Usage: CHANGED_FILES=$(get_pr_changed_files "$CMD_LINE" "$is_merge")
+get_pr_changed_files() {
+  local cmd_line="$1"
+  local is_merge="$2"
+
+  if [ "$is_merge" = true ]; then
+    local pr_num
+    pr_num=$(extract_pr_number "$cmd_line" "merge")
+    local result=""
+    if [ -n "$pr_num" ]; then
+      result=$(gh pr diff "$pr_num" --name-only 2>/dev/null || true)
+    else
+      result=$(gh pr diff --name-only 2>/dev/null || true)
+    fi
+    if [ -z "$result" ]; then
+      echo "⚠️  Could not fetch PR diff from GitHub, falling back to local git diff" >&2
+      result=$(git diff --name-only main...HEAD 2>/dev/null || true)
+    fi
+    echo "$result"
+  else
+    git diff --name-only main...HEAD 2>/dev/null || true
+  fi
+}
