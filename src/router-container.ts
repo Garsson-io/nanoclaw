@@ -142,9 +142,9 @@ async function runRouterContainer(
   const routerIpcDir = path.join(DATA_DIR, 'ipc', ROUTER_GROUP_FOLDER);
   fs.mkdirSync(path.join(routerIpcDir, 'input'), { recursive: true });
 
-  // Write _close sentinel so the agent-runner exits after the first query.
-  // Phase 1: one-shot containers. Phase 2 will remove this for persistent routing.
-  fs.writeFileSync(path.join(routerIpcDir, 'input', '_close'), '');
+  // _close sentinel path — written AFTER container spawn + stdin (see below).
+  // Writing it here races with agent-runner startup cleanup that deletes stale sentinels.
+  const closeSentinelPath = path.join(routerIpcDir, 'input', '_close');
 
   // Prepare router group directory (minimal — just needs to exist)
   const routerGroupDir = path.join(DATA_DIR, 'router-group');
@@ -266,6 +266,11 @@ async function runRouterContainer(
     // Write input and close stdin
     container.stdin.write(JSON.stringify(containerInput));
     container.stdin.end();
+
+    // Write _close sentinel AFTER stdin so agent-runner's startup cleanup
+    // (which deletes stale sentinels) runs before this file appears.
+    // The IPC poller inside the query will find it and exit after one turn.
+    fs.writeFileSync(closeSentinelPath, '');
 
     container.stdout.on('data', (data) => {
       const chunk = data.toString();

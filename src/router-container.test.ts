@@ -481,4 +481,43 @@ describe('routeMessage', () => {
     expect(parsed.isMain).toBe(false);
     expect(parsed.prompt).toContain('message router');
   });
+
+  /**
+   * INVARIANT: _close sentinel exists on disk when the container process is running.
+   * SUT: runRouterContainer _close lifecycle
+   * VERIFICATION: After container.stdin.end(), _close file has been written.
+   *   This ensures the agent-runner's startup cleanup (which deletes stale sentinels)
+   *   cannot race with the sentinel — the sentinel is written after the container starts.
+   */
+  it('_close sentinel exists after container starts (not deleted by startup cleanup)', async () => {
+    const mockProc = createMockProcess();
+    const writtenFiles: string[] = [];
+
+    // Track which files are written after container spawn
+    mockFs.writeFileSync.mockImplementation(
+      (filePath: string, ..._args: unknown[]) => {
+        writtenFiles.push(String(filePath));
+      },
+    );
+
+    mockSpawn.mockReturnValue(mockProc);
+
+    const routeDecision = {
+      requestId: 'test-req-1',
+      decision: 'suggest_new',
+      confidence: 0.3,
+      reason: 'test',
+    };
+    mockFs.readFileSync.mockReturnValue(JSON.stringify(routeDecision));
+
+    const { routeMessage } = await import('./router-container.js');
+    const request = makeRouterRequest();
+    const routePromise = routeMessage(request);
+    mockProc.emit('close', 0);
+    await routePromise;
+
+    // _close sentinel must have been written (so the container can find and consume it)
+    const closeWrites = writtenFiles.filter((f) => f.includes('_close'));
+    expect(closeWrites.length).toBe(1);
+  });
 });
