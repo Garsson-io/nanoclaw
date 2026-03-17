@@ -944,6 +944,24 @@ describe('TelegramChannel', () => {
       );
     });
 
+    it('falls back to generic text when sendPhoto fails without caption', async () => {
+      const opts = createTestOpts();
+      const channel = new TelegramChannel('test-token', opts);
+      await channel.connect();
+
+      currentBot().api.sendPhoto.mockRejectedValueOnce(
+        new Error('File too large'),
+      );
+
+      await channel.sendImage('tg:100200300', '/tmp/big.png');
+
+      expect(currentBot().api.sendMessage).toHaveBeenCalledWith(
+        '100200300',
+        '(Image could not be sent)',
+        { parse_mode: 'Markdown' },
+      );
+    });
+
     it('does nothing when bot is not initialized', async () => {
       const opts = createTestOpts();
       const channel = new TelegramChannel('test-token', opts);

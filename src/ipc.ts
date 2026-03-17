@@ -117,6 +117,17 @@ export async function dispatchIpcImage(
     hostPath = path.join(resolveGroupFolderPath(sourceGroup), relativePath);
   }
 
+  // Path traversal guard: resolved path must stay within the group folder
+  const groupDir = resolveGroupFolderPath(sourceGroup);
+  const resolved = path.resolve(hostPath);
+  if (!resolved.startsWith(groupDir)) {
+    logger.warn(
+      { chatJid: data.chatJid, imagePath: data.imagePath, resolved, groupDir },
+      'IPC image path traversal blocked',
+    );
+    return 'unauthorized';
+  }
+
   if (!fs.existsSync(hostPath)) {
     logger.warn(
       { chatJid: data.chatJid, imagePath: data.imagePath, hostPath },

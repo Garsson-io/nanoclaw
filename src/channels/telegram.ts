@@ -449,10 +449,11 @@ export class TelegramChannel implements Channel {
       logger.info({ jid, imagePath }, 'Telegram image sent');
     } catch (err) {
       logger.error({ jid, imagePath, err }, 'Failed to send Telegram image');
-      // Fallback: send as text with path info
-      if (caption) {
-        await this.sendMessage(jid, `${caption}\n\n(Image could not be sent)`);
-      }
+      // Fallback: notify user that the image couldn't be sent
+      const fallbackText = caption
+        ? `${caption}\n\n(Image could not be sent)`
+        : '(Image could not be sent)';
+      await this.sendMessage(jid, fallbackText);
     }
   }
 

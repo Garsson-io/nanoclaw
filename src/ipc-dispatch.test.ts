@@ -2,6 +2,15 @@ import { describe, test, expect, vi, beforeEach } from 'vitest';
 
 import fs from 'fs';
 
+// Mock group-folder to use predictable test paths
+vi.mock('./group-folder.js', async (importOriginal) => {
+  const original = (await importOriginal()) as Record<string, unknown>;
+  return {
+    ...original,
+    resolveGroupFolderPath: (folder: string) => `/test-groups/${folder}`,
+  };
+});
+
 import { dispatchIpcMessage, dispatchIpcImage, IpcDeps } from './ipc.js';
 import { RegisteredGroup } from './types.js';
 
@@ -182,7 +191,11 @@ describe('dispatchIpcImage', () => {
     vi.spyOn(fs, 'existsSync').mockReturnValue(true);
 
     const result = await dispatchIpcImage(
-      { chatJid: 'tg:111', imagePath: '/some/host/path.png', caption: 'chart' },
+      {
+        chatJid: 'tg:111',
+        imagePath: '/test-groups/telegram_main/output/chart.png',
+        caption: 'chart',
+      },
       'telegram_main',
       true,
       makeDeps({ withImage: true }),
@@ -191,7 +204,7 @@ describe('dispatchIpcImage', () => {
     expect(result).toBe('sent');
     expect(sendImage).toHaveBeenCalledWith(
       'tg:111',
-      '/some/host/path.png',
+      '/test-groups/telegram_main/output/chart.png',
       'chart',
     );
     expect(sendMessage).not.toHaveBeenCalled();
@@ -204,7 +217,11 @@ describe('dispatchIpcImage', () => {
     vi.spyOn(fs, 'existsSync').mockReturnValue(true);
 
     const result = await dispatchIpcImage(
-      { chatJid: 'tg:111', imagePath: '/some/path.png', caption: 'chart' },
+      {
+        chatJid: 'tg:111',
+        imagePath: '/test-groups/telegram_main/output/img.png',
+        caption: 'chart',
+      },
       'telegram_main',
       true,
       makeDeps({ withImage: false }),
@@ -221,7 +238,10 @@ describe('dispatchIpcImage', () => {
     vi.spyOn(fs, 'existsSync').mockReturnValue(true);
 
     const result = await dispatchIpcImage(
-      { chatJid: 'tg:111', imagePath: '/some/path.png' },
+      {
+        chatJid: 'tg:111',
+        imagePath: '/test-groups/telegram_main/output/img.png',
+      },
       'telegram_main',
       true,
       makeDeps({ withImage: false }),
@@ -283,7 +303,11 @@ describe('dispatchIpcImage', () => {
     vi.spyOn(fs, 'existsSync').mockReturnValue(false);
 
     const result = await dispatchIpcImage(
-      { chatJid: 'tg:111', imagePath: '/missing.png', caption: 'A chart' },
+      {
+        chatJid: 'tg:111',
+        imagePath: '/test-groups/telegram_main/output/missing.png',
+        caption: 'A chart',
+      },
       'telegram_main',
       true,
       makeDeps({ withImage: true }),
@@ -295,6 +319,27 @@ describe('dispatchIpcImage', () => {
       'tg:111',
       expect.stringContaining('Image not found'),
     );
+
+    vi.restoreAllMocks();
+  });
+
+  // INVARIANT: Path traversal via ../ is blocked
+  test('blocks path traversal attempts', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+
+    const result = await dispatchIpcImage(
+      {
+        chatJid: 'tg:111',
+        imagePath: '/workspace/group/../../.env',
+      },
+      'telegram_main',
+      true,
+      makeDeps({ withImage: true }),
+    );
+
+    expect(result).toBe('unauthorized');
+    expect(sendImage).not.toHaveBeenCalled();
+    expect(sendMessage).not.toHaveBeenCalled();
 
     vi.restoreAllMocks();
   });
