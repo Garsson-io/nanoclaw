@@ -17,7 +17,12 @@ if [ "$EXIT_CODE" != "0" ]; then
   exit 0
 fi
 
-# Only trigger when a PR URL appears in output (confirms gh pr create succeeded)
+# Only trigger on gh pr create commands (not gh pr view, gh pr list, etc.)
+if ! echo "$COMMAND" | grep -qE 'gh\s+pr\s+create'; then
+  exit 0
+fi
+
+# Extract PR URL from output to embed in review instructions
 PR_URL=$(echo "$STDOUT" | grep -oE 'https://github\.com/[^/]+/[^/]+/pull/[0-9]+' | head -1)
 if [ -z "$PR_URL" ]; then
   PR_URL=$(echo "$STDERR" | grep -oE 'https://github\.com/[^/]+/[^/]+/pull/[0-9]+' | head -1)
@@ -71,8 +76,13 @@ PROCESS:
 5. If clean: state "REVIEW PASSED (round N/4)" and proceed
 
 After 4 rounds with remaining issues:
-1. Comment on the PR summarizing unresolved issues and what was attempted
-2. Ping Aviad: use \`gh pr comment $PR_URL --body "@aviadr1 Self-review hit 4 rounds. Remaining issues: [list]. Need human eyes."\`
+1. Comment on the PR summarizing unresolved issues and what was attempted:
+   \`gh pr comment $PR_URL --body "@aviadr1 Self-review hit 4 rounds. Remaining issues: [list]. Need human eyes."\`
+2. Ping Aviad on Telegram with the PR URL and a short summary of the problem:
+   Write a JSON file to notify via IPC:
+   \`cat > data/ipc/main/messages/review-escalation-\$(date +%s).json << MSGEOF
+   {"type":"message","chatJid":"tg:-5128317012","text":"🔍 PR self-review stuck after 4 rounds: $PR_URL\\n\\n[Write a short paragraph: what the PR does, what issues remain, and why you couldn't resolve them]"}
+   MSGEOF\`
 3. Then proceed — do not loop further
 
 Track your round: "ROUND N/4: [reviewing|issues found|clean]"
