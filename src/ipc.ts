@@ -134,35 +134,7 @@ export function startIpcWatcher(deps: IpcDeps): void {
             try {
               const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
               if (data.type === 'message' && data.chatJid && data.text) {
-                // Authorization: verify this group can send to this chatJid
-                const targetGroup = registeredGroups[data.chatJid];
-                if (
-                  isMain ||
-                  (targetGroup && targetGroup.folder === sourceGroup)
-                ) {
-                  if (data.sender && deps.sendPoolMessage) {
-                    const sent = await deps.sendPoolMessage(
-                      data.chatJid,
-                      data.text,
-                      data.sender,
-                      sourceGroup,
-                    );
-                    if (!sent) {
-                      await deps.sendMessage(data.chatJid, data.text);
-                    }
-                  } else {
-                    await deps.sendMessage(data.chatJid, data.text);
-                  }
-                  logger.info(
-                    { chatJid: data.chatJid, sourceGroup, sender: data.sender },
-                    'IPC message sent',
-                  );
-                } else {
-                  logger.warn(
-                    { chatJid: data.chatJid, sourceGroup },
-                    'Unauthorized IPC message attempt blocked',
-                  );
-                }
+                await dispatchIpcMessage(data, sourceGroup, isMain, deps);
               }
               fs.unlinkSync(filePath);
             } catch (err) {

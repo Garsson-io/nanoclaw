@@ -159,6 +159,66 @@ describe('BotPool', () => {
     expect(sentMessages[1].length).toBe(904);
   });
 
+  // INVARIANT: Message exactly at 4096 chars is sent as a single message
+  test('exactly 4096 chars sends as single message', async () => {
+    const sentMessages: string[] = [];
+    const mockDeps: BotPoolDeps = {
+      createApi: () =>
+        ({
+          getMe: async () => ({
+            username: 'bot',
+            id: 1,
+            is_bot: true,
+            first_name: 'bot',
+          }),
+          setMyName: async () => true,
+          sendMessage: async (_chatId: string | number, text: string) => {
+            sentMessages.push(text);
+            return { message_id: 1 } as any;
+          },
+        }) as any,
+      renameDelayMs: 0,
+    };
+
+    const pool = new BotPool(mockDeps);
+    await pool.init(['token1']);
+
+    await pool.send('tg:123', 'x'.repeat(4096), 'Writer', 'main');
+
+    expect(sentMessages.length).toBe(1);
+    expect(sentMessages[0].length).toBe(4096);
+  });
+
+  // INVARIANT: Empty string is sent as a single message (no split)
+  test('empty string sends as single message', async () => {
+    const sentMessages: string[] = [];
+    const mockDeps: BotPoolDeps = {
+      createApi: () =>
+        ({
+          getMe: async () => ({
+            username: 'bot',
+            id: 1,
+            is_bot: true,
+            first_name: 'bot',
+          }),
+          setMyName: async () => true,
+          sendMessage: async (_chatId: string | number, text: string) => {
+            sentMessages.push(text);
+            return { message_id: 1 } as any;
+          },
+        }) as any,
+      renameDelayMs: 0,
+    };
+
+    const pool = new BotPool(mockDeps);
+    await pool.init(['token1']);
+
+    await pool.send('tg:123', '', 'Writer', 'main');
+
+    expect(sentMessages.length).toBe(1);
+    expect(sentMessages[0]).toBe('');
+  });
+
   // INVARIANT: Failed token init doesn't crash, just skips that bot
   test('gracefully handles failed token initialization', async () => {
     let callCount = 0;
