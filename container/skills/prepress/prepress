@@ -176,8 +176,13 @@ def cmd_inspect(pdf_path):
         print(f"--- Page {i + 1} ---")
 
         boxes = {}
+        # pikepdf property names → PDF spec key names
+        box_keys = {
+            'mediabox': '/MediaBox', 'cropbox': '/CropBox',
+            'bleedbox': '/BleedBox', 'trimbox': '/TrimBox', 'artbox': '/ArtBox',
+        }
         for box_name in ['mediabox', 'cropbox', 'bleedbox', 'trimbox', 'artbox']:
-            key = f'/{box_name[0].upper()}{box_name[1:]}'
+            key = box_keys[box_name]
             # Check if explicitly defined (not inherited/defaulted)
             explicitly_set = key in page
             box_val = getattr(page, box_name)
@@ -424,7 +429,6 @@ def cmd_preflight(pdf_path):
     try:
         from pikepdf import PdfImage
         img_count = 0
-        low_res = 0
         rgb_images = 0
 
         for i, page in enumerate(pdf.pages):
