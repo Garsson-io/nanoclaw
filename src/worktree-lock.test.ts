@@ -44,6 +44,7 @@ function makeCase(overrides: Partial<Case> = {}): Case {
     total_cost_usd: 0,
     token_source: null,
     time_spent_ms: 0,
+    github_issue: null,
     ...overrides,
   };
 }

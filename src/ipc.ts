@@ -632,6 +632,7 @@ export async function processTaskIpc(
         caseType?: string;
         chatJid?: string;
         initiator?: string;
+        githubIssue?: number;
       };
       if (!d.description) {
         logger.warn({ sourceGroup }, 'case_create missing description');
@@ -680,6 +681,7 @@ export async function processTaskIpc(
         total_cost_usd: 0,
         token_source: null,
         time_spent_ms: 0,
+        github_issue: d.githubIssue ?? null,
       };
 
       insertCase(newCase);
@@ -722,6 +724,7 @@ export async function processTaskIpc(
           description: string;
           sourceCaseId: string;
           chatJid?: string;
+          githubIssue?: number;
         };
         suggestDevCase({
           groupFolder: sourceGroup,
@@ -730,6 +733,7 @@ export async function processTaskIpc(
           sourceWorkCaseId: d.sourceCaseId,
           initiator: 'agent',
           initiatorChannel: undefined,
+          githubIssue: d.githubIssue,
         });
         // Notify user about the suggestion
         const targetJid = Object.entries(registeredGroups).find(

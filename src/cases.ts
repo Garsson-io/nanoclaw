@@ -47,6 +47,7 @@ export interface Case {
   total_cost_usd: number;
   token_source: string | null;
   time_spent_ms: number;
+  github_issue: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -84,12 +85,20 @@ export function createCasesSchema(database: Database.Database): void {
       pruned_at TEXT,
       total_cost_usd REAL DEFAULT 0,
       token_source TEXT,
-      time_spent_ms INTEGER DEFAULT 0
+      time_spent_ms INTEGER DEFAULT 0,
+      github_issue INTEGER
     );
     CREATE INDEX IF NOT EXISTS idx_cases_status ON cases(status);
     CREATE INDEX IF NOT EXISTS idx_cases_group ON cases(group_folder);
     CREATE INDEX IF NOT EXISTS idx_cases_chat ON cases(chat_jid);
   `);
+
+  // Migration: add github_issue column to existing tables
+  try {
+    database.exec('ALTER TABLE cases ADD COLUMN github_issue INTEGER');
+  } catch {
+    // Column already exists — expected on non-first run
+  }
 }
 
 /** Attach to an already-initialized DB (called after initDatabase). */
@@ -107,8 +116,8 @@ export function insertCase(c: Case): void {
       status, blocked_on, worktree_path, workspace_path, branch_name,
       initiator, initiator_channel, last_message, last_activity_at,
       conclusion, created_at, done_at, reviewed_at, pruned_at,
-      total_cost_usd, token_source, time_spent_ms)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      total_cost_usd, token_source, time_spent_ms, github_issue)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     c.id,
     c.group_folder,
@@ -133,6 +142,7 @@ export function insertCase(c: Case): void {
     c.total_cost_usd,
     c.token_source,
     c.time_spent_ms,
+    c.github_issue,
   );
 }
 
@@ -216,6 +226,17 @@ export function getAllCases(): Case[] {
     .all() as Case[];
 }
 
+/** Get active/backlog cases linked to a GitHub issue number. */
+export function getActiveCasesByGithubIssue(issueNumber: number): Case[] {
+  return db
+    .prepare(
+      `SELECT * FROM cases
+       WHERE github_issue = ? AND status IN ('suggested', 'backlog', 'active', 'blocked')
+       ORDER BY created_at DESC`,
+    )
+    .all(issueNumber) as Case[];
+}
+
 export function getCasesByStatus(status: Case['status']): Case[] {
   return db
     .prepare(
@@ -254,6 +275,7 @@ export function updateCase(
       | 'token_source'
       | 'time_spent_ms'
       | 'description'
+      | 'github_issue'
     >
   >,
 ): void {
@@ -563,9 +585,10 @@ export function formatCaseStatus(c: Case): string {
   const time = formatDuration(c.time_spent_ms);
   const source = c.token_source ? ` (${c.token_source})` : '';
   const blocked = c.blocked_on ? ` — blocked on: ${c.blocked_on}` : '';
+  const issue = c.github_issue ? ` [kaizen #${c.github_issue}]` : '';
 
   return [
-    `${c.name} (${c.type}, ${c.status}${blocked})`,
+    `${c.name} (${c.type}, ${c.status}${blocked})${issue}`,
     `  ${c.description}`,
     `  Last: "${(c.last_message || 'no activity').slice(0, 80)}" — ${age}`,
     `  Cost: ${cost}${source} | Time: ${time}`,
@@ -602,6 +625,7 @@ export function writeCasesSnapshot(
     total_cost_usd: c.total_cost_usd,
     time_spent_ms: c.time_spent_ms,
     initiator: c.initiator,
+    github_issue: c.github_issue,
   }));
 
   fs.writeFileSync(
@@ -622,6 +646,7 @@ export function suggestDevCase(opts: {
   sourceWorkCaseId: string;
   initiator: string;
   initiatorChannel?: string;
+  githubIssue?: number;
 }): Case {
   const id = generateCaseId();
   const fullDescription = `[from case ${opts.sourceWorkCaseId}] ${opts.description}`;
@@ -652,6 +677,7 @@ export function suggestDevCase(opts: {
     total_cost_usd: 0,
     token_source: null,
     time_spent_ms: 0,
+    github_issue: opts.githubIssue ?? null,
   };
 
   insertCase(c);
