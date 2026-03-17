@@ -832,10 +832,6 @@ Allowed labels: work-agent, needs-dev, kaizen, bug, enhancement.`,
   },
 );
 
-// Start the stdio transport
-const transport = new StdioServerTransport();
-await server.connect(transport);
-
 // Router-specific tool — only registered when running as the message router
 if (groupFolder === '__router__') {
   const ROUTER_RESULTS_DIR = path.join(IPC_DIR, 'results');
@@ -901,3 +897,7 @@ Decisions:
     },
   );
 }
+
+// Start the stdio transport
+const transport = new StdioServerTransport();
+await server.connect(transport);
