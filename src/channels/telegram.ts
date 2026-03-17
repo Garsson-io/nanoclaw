@@ -1,7 +1,7 @@
 import fs from 'fs';
 import https from 'https';
 import path from 'path';
-import { Api, Bot } from 'grammy';
+import { Api, Bot, InputFile } from 'grammy';
 
 import { ASSISTANT_NAME, TRIGGER_PATTERN } from '../config.js';
 import { downloadFile } from '../download.js';
@@ -426,6 +426,33 @@ export class TelegramChannel implements Channel {
       logger.info({ jid, length: text.length }, 'Telegram message sent');
     } catch (err) {
       logger.error({ jid, err }, 'Failed to send Telegram message');
+    }
+  }
+
+  async sendImage(
+    jid: string,
+    imagePath: string,
+    caption?: string,
+  ): Promise<void> {
+    if (!this.bot) {
+      logger.warn('Telegram bot not initialized');
+      return;
+    }
+
+    try {
+      const numericId = jid.replace(/^tg:/, '');
+      const file = new InputFile(imagePath);
+      await this.bot.api.sendPhoto(numericId, file, {
+        caption,
+        ...(caption ? { parse_mode: 'Markdown' as const } : {}),
+      });
+      logger.info({ jid, imagePath }, 'Telegram image sent');
+    } catch (err) {
+      logger.error({ jid, imagePath, err }, 'Failed to send Telegram image');
+      // Fallback: send as text with path info
+      if (caption) {
+        await this.sendMessage(jid, `${caption}\n\n(Image could not be sent)`);
+      }
     }
   }
 

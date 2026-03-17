@@ -1,6 +1,8 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 
-import { dispatchIpcMessage, IpcDeps } from './ipc.js';
+import fs from 'fs';
+
+import { dispatchIpcMessage, dispatchIpcImage, IpcDeps } from './ipc.js';
 import { RegisteredGroup } from './types.js';
 
 const MAIN_GROUP: RegisteredGroup = {
@@ -20,13 +22,17 @@ const OTHER_GROUP: RegisteredGroup = {
 
 let groups: Record<string, RegisteredGroup>;
 let sendMessage: ReturnType<typeof vi.fn<IpcDeps['sendMessage']>>;
+let sendImage: ReturnType<typeof vi.fn<NonNullable<IpcDeps['sendImage']>>>;
 let sendPoolMessage: ReturnType<
   typeof vi.fn<NonNullable<IpcDeps['sendPoolMessage']>>
 >;
 
-function makeDeps(opts: { withPool?: boolean } = {}): IpcDeps {
+function makeDeps(
+  opts: { withPool?: boolean; withImage?: boolean } = {},
+): IpcDeps {
   return {
     sendMessage,
+    sendImage: opts.withImage ? sendImage : undefined,
     sendPoolMessage: opts.withPool ? sendPoolMessage : undefined,
     registeredGroups: () => groups,
     registerGroup: vi.fn(),
@@ -42,6 +48,7 @@ beforeEach(() => {
     'tg:222': OTHER_GROUP,
   };
   sendMessage = vi.fn().mockResolvedValue(undefined);
+  sendImage = vi.fn().mockResolvedValue(undefined);
   sendPoolMessage = vi.fn().mockResolvedValue(true);
 });
 
@@ -166,5 +173,129 @@ describe('dispatchIpcMessage', () => {
     expect(result).toBe('sent');
     expect(sendPoolMessage).not.toHaveBeenCalled();
     expect(sendMessage).toHaveBeenCalledWith('wa:123@g.us', 'hello');
+  });
+});
+
+describe('dispatchIpcImage', () => {
+  // INVARIANT: Image messages are sent via sendImage when channel supports it
+  test('sends image via sendImage when available', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+
+    const result = await dispatchIpcImage(
+      { chatJid: 'tg:111', imagePath: '/some/host/path.png', caption: 'chart' },
+      'telegram_main',
+      true,
+      makeDeps({ withImage: true }),
+    );
+
+    expect(result).toBe('sent');
+    expect(sendImage).toHaveBeenCalledWith(
+      'tg:111',
+      '/some/host/path.png',
+      'chart',
+    );
+    expect(sendMessage).not.toHaveBeenCalled();
+
+    vi.restoreAllMocks();
+  });
+
+  // INVARIANT: When sendImage is not available, caption is sent as text
+  test('falls back to sendMessage when sendImage not available', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+
+    const result = await dispatchIpcImage(
+      { chatJid: 'tg:111', imagePath: '/some/path.png', caption: 'chart' },
+      'telegram_main',
+      true,
+      makeDeps({ withImage: false }),
+    );
+
+    expect(result).toBe('sent');
+    expect(sendMessage).toHaveBeenCalledWith('tg:111', 'chart');
+
+    vi.restoreAllMocks();
+  });
+
+  // INVARIANT: When sendImage is not available and no caption, sends default text
+  test('sends default text when no sendImage and no caption', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+
+    const result = await dispatchIpcImage(
+      { chatJid: 'tg:111', imagePath: '/some/path.png' },
+      'telegram_main',
+      true,
+      makeDeps({ withImage: false }),
+    );
+
+    expect(result).toBe('sent');
+    expect(sendMessage).toHaveBeenCalledWith(
+      'tg:111',
+      '(Image sent but channel does not support images)',
+    );
+
+    vi.restoreAllMocks();
+  });
+
+  // INVARIANT: Container paths are translated to host paths
+  test('translates /workspace/group/ container paths to host paths', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+
+    await dispatchIpcImage(
+      {
+        chatJid: 'tg:111',
+        imagePath: '/workspace/group/output/chart.png',
+        caption: 'A chart',
+      },
+      'telegram_main',
+      true,
+      makeDeps({ withImage: true }),
+    );
+
+    // The path should be translated from container to host
+    expect(sendImage).toHaveBeenCalledWith(
+      'tg:111',
+      expect.stringContaining('telegram_main/output/chart.png'),
+      'A chart',
+    );
+
+    vi.restoreAllMocks();
+  });
+
+  // INVARIANT: Non-main groups cannot send images to other groups
+  test('blocks unauthorized cross-group image sends', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+
+    const result = await dispatchIpcImage(
+      { chatJid: 'tg:111', imagePath: '/tmp/img.png' },
+      'telegram_other',
+      false,
+      makeDeps({ withImage: true }),
+    );
+
+    expect(result).toBe('unauthorized');
+    expect(sendImage).not.toHaveBeenCalled();
+
+    vi.restoreAllMocks();
+  });
+
+  // INVARIANT: When image file doesn't exist, falls back to text with error
+  test('sends fallback text when image file not found', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+
+    const result = await dispatchIpcImage(
+      { chatJid: 'tg:111', imagePath: '/missing.png', caption: 'A chart' },
+      'telegram_main',
+      true,
+      makeDeps({ withImage: true }),
+    );
+
+    expect(result).toBe('sent');
+    expect(sendImage).not.toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenCalledWith(
+      'tg:111',
+      expect.stringContaining('Image not found'),
+    );
+
+    vi.restoreAllMocks();
   });
 });

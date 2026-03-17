@@ -90,6 +90,56 @@ server.tool(
 );
 
 server.tool(
+  'send_image',
+  `Send an image file to the user or group. The image must exist in the container filesystem (e.g., /workspace/group/output/chart.png). Use this for screenshots, charts, generated images, downloaded photos, etc.
+
+The file must be accessible from the container. Common locations:
+• /workspace/group/output/ — for generated content
+• /workspace/group/images/ — for downloaded/processed images
+• /workspace/case/ — for case-specific files`,
+  {
+    image_path: z
+      .string()
+      .describe(
+        'Absolute path to the image file inside the container (e.g., /workspace/group/output/chart.png)',
+      ),
+    caption: z
+      .string()
+      .optional()
+      .describe('Optional caption/description to accompany the image'),
+  },
+  async (args) => {
+    // Verify the file exists before sending IPC
+    if (!fs.existsSync(args.image_path)) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Image file not found: ${args.image_path}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const data: Record<string, string | undefined> = {
+      type: 'image',
+      chatJid,
+      imagePath: args.image_path,
+      caption: args.caption || undefined,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(MESSAGES_DIR, data);
+
+    return {
+      content: [{ type: 'text' as const, text: 'Image sent.' }],
+    };
+  },
+);
+
+server.tool(
   'schedule_task',
   `Schedule a recurring or one-time task. The task will run as a full agent with access to all tools. Returns the task ID for future reference. To modify an existing task, use update_task instead.
 

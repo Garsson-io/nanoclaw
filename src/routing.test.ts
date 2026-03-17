@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { _initTestDatabase, getAllChats, storeChatMetadata } from './db.js';
 import { getAvailableGroups, _setRegisteredGroups } from './index.js';
+import { routeOutboundImage } from './router.js';
+import { Channel } from './types.js';
 
 beforeEach(() => {
   _initTestDatabase();
@@ -166,5 +168,49 @@ describe('getAvailableGroups', () => {
   it('returns empty array when no chats exist', () => {
     const groups = getAvailableGroups();
     expect(groups).toHaveLength(0);
+  });
+});
+
+// --- routeOutboundImage ---
+
+describe('routeOutboundImage', () => {
+  function createMockChannel(
+    name: string,
+    jidPrefix: string,
+    hasSendImage: boolean,
+  ): Channel {
+    return {
+      name,
+      connect: vi.fn(),
+      sendMessage: vi.fn(),
+      isConnected: () => true,
+      ownsJid: (jid: string) => jid.startsWith(jidPrefix),
+      disconnect: vi.fn(),
+      sendImage: hasSendImage ? vi.fn() : undefined,
+    };
+  }
+
+  it('routes image to the correct channel', async () => {
+    const tg = createMockChannel('telegram', 'tg:', true);
+    await routeOutboundImage([tg], 'tg:123', '/tmp/img.png', 'caption');
+    expect(tg.sendImage).toHaveBeenCalledWith(
+      'tg:123',
+      '/tmp/img.png',
+      'caption',
+    );
+  });
+
+  it('throws when no channel owns the JID', () => {
+    const tg = createMockChannel('telegram', 'tg:', true);
+    expect(() => routeOutboundImage([tg], 'wa:123', '/tmp/img.png')).toThrow(
+      'No channel for JID: wa:123',
+    );
+  });
+
+  it('throws when channel does not support sendImage', () => {
+    const tg = createMockChannel('telegram', 'tg:', false);
+    expect(() => routeOutboundImage([tg], 'tg:123', '/tmp/img.png')).toThrow(
+      'does not support sending images',
+    );
   });
 });
