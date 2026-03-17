@@ -1,5 +1,7 @@
 #!/bin/bash
 # check-test-coverage.sh — Level 2 kaizen enforcement (Issue #8)
+# Part of the shared automated development flow described in
+# docs/agent-control-flow.md. This hook covers test expectations around PR flow.
 # Intercepts `gh pr create` and `gh pr merge` to verify that changed source
 # files have corresponding test coverage changes.
 #

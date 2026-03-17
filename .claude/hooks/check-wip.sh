@@ -1,5 +1,7 @@
 #!/bin/bash
 # check-wip.sh — SessionStart hook
+# Part of the shared automated development flow described in
+# docs/agent-control-flow.md. This hook covers startup awareness and WIP surfacing.
 # Detects in-progress work when starting a new session in the main checkout.
 # Only fires in main checkout (not in worktrees).
 # Outputs a reminder so the agent is aware of existing WIP.

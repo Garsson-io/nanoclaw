@@ -1,5 +1,7 @@
 #!/bin/bash
 # verify-before-stop.sh — Level 2 kaizen enforcement
+# Part of the shared automated development flow described in
+# docs/agent-control-flow.md. This hook covers stop-time verification before completion.
 # Runs when Claude Code agent finishes. Checks if source files were
 # modified and verifies they compile and tests pass.
 #

@@ -1,5 +1,7 @@
 #!/bin/bash
 # pr-review-loop.sh — Level 2 kaizen enforcement (Issue #29)
+# Part of the shared automated development flow described in
+# docs/agent-control-flow.md. This hook manages the multi-round PR review state machine.
 # Multi-round PR self-review with state tracking.
 #
 # Triggers on:

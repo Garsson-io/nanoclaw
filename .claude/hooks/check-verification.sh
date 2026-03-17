@@ -1,5 +1,7 @@
 #!/bin/bash
 # check-verification.sh — Level 2 kaizen enforcement (Issue #10)
+# Part of the shared automated development flow described in
+# docs/agent-control-flow.md. This hook covers PR verification metadata.
 # Intercepts `gh pr create` to ensure the PR body contains a Verification
 # section with concrete success criteria. Also checks `gh pr merge` to
 # remind about post-deploy verification.

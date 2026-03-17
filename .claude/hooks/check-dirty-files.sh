@@ -1,5 +1,7 @@
 #!/bin/bash
 # check-dirty-files.sh — Level 3 kaizen enforcement
+# Part of the shared automated development flow described in
+# docs/agent-control-flow.md. This hook covers the pre-ship dirty-file gate.
 # Ensures the agent makes a conscious choice about every file in the worktree
 # before creating PRs or pushing code. Prevents forgotten work, debug artifacts,
 # and blind stashing.

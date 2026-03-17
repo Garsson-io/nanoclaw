@@ -1,5 +1,7 @@
 #!/bin/bash
 # kaizen-reflect.sh — Level 2 kaizen enforcement (Issue #9)
+# Part of the shared automated development flow described in
+# docs/agent-control-flow.md. This hook covers reflection at PR workflow boundaries.
 # Triggers after `gh pr create` or `gh pr merge` to prompt structured
 # kaizen reflection. Outputs reflection prompts on stdout so the agent
 # sees them in the transcript (PostToolUse exit 0 → stdout shown).

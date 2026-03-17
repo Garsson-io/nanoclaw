@@ -1,5 +1,7 @@
 #!/bin/bash
 # enforce-pr-review.sh — Level 3 kaizen enforcement (Issue #46)
+# Part of the shared automated development flow described in
+# docs/agent-control-flow.md. This hook enforces the post-PR self-review gate.
 # PreToolUse gate: blocks all Bash commands until the agent completes
 # the mandatory PR self-review after `gh pr create` or `git push`.
 #

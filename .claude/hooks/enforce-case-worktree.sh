@@ -1,5 +1,7 @@
 #!/bin/bash
 # enforce-case-worktree.sh — Level 2 kaizen enforcement
+# Part of the shared automated development flow described in
+# docs/agent-control-flow.md. This hook covers worktree-only commit/push rules.
 # Blocks git commit/push if not running inside a git worktree.
 # Runs as PreToolUse hook on Bash tool calls.
 #

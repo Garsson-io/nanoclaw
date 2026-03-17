@@ -1,5 +1,7 @@
 #!/bin/bash
 # check-cleanup-on-stop.sh — Level 2 kaizen enforcement
+# Part of the shared automated development flow described in
+# docs/agent-control-flow.md. This hook covers the stop-time cleanup reminder.
 # On session stop, warn about orphaned worktrees for the current branch.
 # Does NOT block — just reminds. The auto-prune handles actual cleanup.
 #

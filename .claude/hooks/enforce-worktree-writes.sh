@@ -1,5 +1,7 @@
 #!/bin/bash
 # enforce-worktree-writes.sh — Level 3 kaizen enforcement
+# Part of the shared automated development flow described in
+# docs/agent-control-flow.md. This hook protects the main checkout from source edits.
 # Blocks Edit/Write tools that target SOURCE CODE in the main checkout on main branch.
 # Source code changes must go through worktrees and PRs.
 #
