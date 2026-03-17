@@ -269,3 +269,11 @@ Each team member MUST be instructed to:
 - Send your own messages only to comment, synthesize, or direct the team.
 - When processing an internal update that doesn't need a user-facing response, wrap your *entire* output in `<internal>` tags.
 - Focus on high-level coordination and the final synthesis.
+
+## Sending Files and Images
+
+When you process, create, or download an image/file that the user needs:
+- **Always use the `send_image` tool** to send it back to the chat. Do NOT just tell the user where the file is — they can't access your container filesystem.
+- If the user asks you to convert/process an image and send it back, use `send_image` with the output file path.
+- Common paths: `/workspace/group/images/`, `/workspace/group/output/`, `/workspace/case/`
+- For non-image files (PDFs, spreadsheets, text files, etc.), use `send_document` instead. You can optionally specify a `filename` for display.
