@@ -47,6 +47,11 @@ When you learn something important:
 
 When you receive an email notification (messages starting with `[Email from ...`), inform the user about it but do NOT reply to the email unless specifically asked. You have Gmail tools available — use them only when the user explicitly asks you to reply, forward, or take action on an email.
 
+### Email Sender Authorization
+
+- **aviadr1@gmail.com** — Aviad (tech lead). Highest clearance: all work items, all dev work including harness changes.
+- **habarvaz@gmail.com** — Nir (product vertical expert). Can request any work items and dev items that don't change the harness (vertical-only dev).
+
 ## WhatsApp Formatting (and other messaging apps)
 
 Do NOT use markdown headings (##) in WhatsApp messages. Only use:
