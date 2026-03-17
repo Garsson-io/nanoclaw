@@ -69,15 +69,23 @@ pr_url_to_state_file() {
   echo "$STATE_DIR/$(echo "$url" | sed 's|https://github\.com/||;s|/pull/|_|;s|/|_|g')"
 }
 
-# Find the most recent active state file (for push/diff triggers that don't know the PR URL).
-find_active_state() {
+# Find the most recent state file matching given statuses (for push/diff triggers).
+# Usage: find_state_by_status "needs_review" or find_state_by_status "needs_review" "passed"
+find_state_by_status() {
   local latest=""
   local latest_mtime=0
   for f in "$STATE_DIR"/*; do
     [ -f "$f" ] || continue
     local status
     status=$(grep -E '^STATUS=' "$f" 2>/dev/null | head -1 | cut -d= -f2-)
-    if [ "$status" = "needs_review" ]; then
+    local matched=false
+    for want in "$@"; do
+      if [ "$status" = "$want" ]; then
+        matched=true
+        break
+      fi
+    done
+    if $matched; then
       local mtime
       mtime=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null || echo "0")
       if [ "$mtime" -gt "$latest_mtime" ]; then
@@ -87,6 +95,11 @@ find_active_state() {
     fi
   done
   echo "$latest"
+}
+
+# Convenience: find state needing review (for gh pr diff)
+find_active_state() {
+  find_state_by_status "needs_review"
 }
 
 # Safe state read — grep/cut instead of source to prevent code injection
@@ -231,19 +244,20 @@ EOF
   exit 0
 fi
 
-# For git push and gh pr diff, find the most recent active state file
-STATE_FILE=$(find_active_state)
-if ! read_state; then
-  exit 0
-fi
-
-# If review already passed or escalated, don't nag
-if [ "$STATUS" = "passed" ] || [ "$STATUS" = "escalated" ]; then
-  exit 0
-fi
-
 # TRIGGER 2: git push — agent pushed fixes, enforce next review round
+# Must come before the gh pr diff handler because push needs to find
+# state files with STATUS=passed (review done, then agent pushed fixes).
 if $IS_GIT_PUSH; then
+  # Find state with needs_review OR passed (push after passed = new round)
+  STATE_FILE=$(find_state_by_status "needs_review" "passed")
+  if ! read_state; then
+    exit 0
+  fi
+  # If already escalated, don't re-engage
+  if [ "$STATUS" = "escalated" ]; then
+    exit 0
+  fi
+
   NEXT_ROUND=$((ROUND + 1))
 
   if [ "$NEXT_ROUND" -gt "$MAX_ROUNDS" ]; then
@@ -274,6 +288,17 @@ Run \`gh pr diff $PR_URL\` now and walk through the checklist again.
 
 Track your round: "ROUND $NEXT_ROUND/$MAX_ROUNDS: [reviewing|issues found|clean]"
 EOF
+  exit 0
+fi
+
+# For gh pr diff, find only needs_review state
+STATE_FILE=$(find_active_state)
+if ! read_state; then
+  exit 0
+fi
+
+# If review already passed or escalated, don't nag
+if [ "$STATUS" = "passed" ] || [ "$STATUS" = "escalated" ]; then
   exit 0
 fi
 
