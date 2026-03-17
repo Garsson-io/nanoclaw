@@ -1,6 +1,6 @@
 #!/bin/bash
 # enforce-case-worktree.sh — Level 2 kaizen enforcement
-# Blocks git commit/push if not in a case worktree or recognized branch.
+# Blocks git commit/push if not running inside a git worktree.
 # Runs as PreToolUse hook on Bash tool calls.
 #
 # Exit 0 = allow
