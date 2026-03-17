@@ -96,8 +96,11 @@ export function createCasesSchema(database: Database.Database): void {
   // Migration: add github_issue column to existing tables
   try {
     database.exec('ALTER TABLE cases ADD COLUMN github_issue INTEGER');
-  } catch {
-    // Column already exists — expected on non-first run
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : '';
+    if (!msg.includes('duplicate column')) {
+      throw err; // Re-throw unexpected errors
+    }
   }
 }
 

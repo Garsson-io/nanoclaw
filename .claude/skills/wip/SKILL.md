@@ -69,7 +69,7 @@ Present a concise summary table:
 ### Kaizen Issues with Active Cases
 | Kaizen # | Case | Status |
 |----------|------|--------|
-| #16      | 260317-track-kaizen-issue | active |
+| #N       | YYMMDD-HHMM-case-name | active/backlog/blocked |
 ```
 
 If any section has zero items, still show it with "None" to confirm it was checked.
