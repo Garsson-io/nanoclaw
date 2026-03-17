@@ -3,7 +3,13 @@
 
 FROM node:22-slim
 
-# Install system dependencies for Chromium
+# Add GitHub CLI apt repository (must precede apt-get install)
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+      -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+      > /etc/apt/sources.list.d/github-cli.list
+
+# Install system dependencies (Chromium, git, gh CLI)
 RUN apt-get update && apt-get install -y \
     chromium \
     fonts-liberation \
@@ -25,13 +31,7 @@ RUN apt-get update && apt-get install -y \
     poppler-utils \
     curl \
     git \
-    && rm -rf /var/lib/apt/lists/* \
-    # Install GitHub CLI (used by dev cases for push/PR operations)
-    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-       -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
-       > /etc/apt/sources.list.d/github-cli.list \
-    && apt-get update && apt-get install -y gh \
+    gh \
     && rm -rf /var/lib/apt/lists/*
 
 # Set Chromium path for agent-browser
@@ -59,11 +59,13 @@ RUN npm run build
 # Create workspace directories
 RUN mkdir -p /workspace/group /workspace/global /workspace/extra /workspace/ipc/messages /workspace/ipc/tasks /workspace/ipc/input
 
-# Create entrypoint script
+# Copy entrypoint script
 # Container input (prompt, group info) is passed via stdin JSON.
-# Credentials are injected by the host's credential proxy — never passed here.
+# Anthropic credentials are injected by the host's credential proxy — never passed here.
+# GitHub credentials are passed as env vars for dev cases only (see container-runner.ts).
 # Follow-up messages arrive via IPC files in /workspace/ipc/input/
-RUN printf '#!/bin/bash\nset -e\n# If GITHUB_TOKEN is set (dev cases), configure git to use it for HTTPS auth\nif [ -n "$GITHUB_TOKEN" ]; then\n  git config --global credential.helper "!f() { echo username=x-access-token; echo password=$GITHUB_TOKEN; }; f"\n  git config --global user.email "nanoclaw-dev@garsson.io"\n  git config --global user.name "NanoClaw Dev Agent"\nfi\ncd /app && npx tsc --outDir /tmp/dist 2>&1 >&2\nln -s /app/node_modules /tmp/dist/node_modules\nchmod -R a-w /tmp/dist\ncat > /tmp/input.json\nnode /tmp/dist/index.js < /tmp/input.json\n' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 # Set ownership to node user (non-root) for writable directories
 RUN chown -R node:node /workspace && chmod 777 /home/node
