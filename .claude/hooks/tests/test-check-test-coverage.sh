@@ -17,48 +17,8 @@ HOOKS_DIR="$(dirname "$SCRIPT_DIR")"
 HOOK="$HOOKS_DIR/check-test-coverage.sh"
 source "$SCRIPT_DIR/test-helpers.sh"
 
-# Create mock dir
-MOCK_DIR=$(mktemp -d)
+setup_mock_dir
 trap 'rm -rf "$MOCK_DIR"' EXIT
-
-setup_mocks() {
-  local gh_files="$1"
-  local git_files="$2"
-
-  cat > "$MOCK_DIR/gh" << MOCK
-#!/bin/bash
-if echo "\$@" | grep -q "pr diff"; then
-  echo "$gh_files"
-  exit 0
-fi
-exit 1
-MOCK
-  chmod +x "$MOCK_DIR/gh"
-
-  cat > "$MOCK_DIR/git" << MOCK
-#!/bin/bash
-if echo "\$@" | grep -q "diff --name-only"; then
-  echo "$git_files"
-  exit 0
-fi
-/usr/bin/git "\$@"
-MOCK
-  chmod +x "$MOCK_DIR/git"
-}
-
-run_hook() {
-  local command="$1"
-  local input
-  input=$(jq -n --arg cmd "$command" '{"tool_input":{"command":$cmd}}')
-  echo "$input" | PATH="$MOCK_DIR:$PATH" bash "$HOOK" 2>/dev/null
-}
-
-run_hook_stderr() {
-  local command="$1"
-  local input
-  input=$(jq -n --arg cmd "$command" '{"tool_input":{"command":$cmd}}')
-  echo "$input" | PATH="$MOCK_DIR:$PATH" bash "$HOOK" 2>&1 1>/dev/null
-}
 
 echo "=== Non-PR commands are ignored ==="
 
@@ -71,21 +31,20 @@ assert_eq "git push exits silently" "" "$OUTPUT"
 echo ""
 echo "=== Merge: PR with no source files → allow ==="
 
-setup_mocks ".claude/hooks/check-test-coverage.sh" "src/index.ts
+setup_gh_git_mocks ".claude/hooks/check-test-coverage.sh" "src/index.ts
 src/unrelated.ts"
 
-OUTPUT=$(run_hook "gh pr merge 42")
+OUTPUT=$(run_hook "$HOOK" "gh pr merge 42")
 assert_eq "no src in PR diff → no output (allow)" "" "$OUTPUT"
 
 echo ""
 echo "=== Merge: PR with source + tests → allow ==="
 
-setup_mocks "src/index.ts
+setup_gh_git_mocks "src/index.ts
 src/index.test.ts" "src/index.ts
 src/unrelated-dirty.ts"
 
-OUTPUT=$(run_hook "gh pr merge 42")
-assert_contains "src with matching test → allow message" "Test coverage check" "$(run_hook_stderr "gh pr merge 42")"
+assert_contains "src with matching test → allow message" "Test coverage check" "$(run_hook_stderr "$HOOK" "gh pr merge 42")"
 
 echo ""
 echo "=== CRITICAL: Merge uses PR diff, not worktree diff ==="
@@ -93,29 +52,29 @@ echo "=== CRITICAL: Merge uses PR diff, not worktree diff ==="
 # gh pr diff returns ONLY .claude/ files (no src)
 # git diff returns src/index.ts (dirty worktree)
 # Merge should use gh pr diff → no src files → allow
-setup_mocks ".claude/hooks/some-hook.sh" "src/index.ts
+setup_gh_git_mocks ".claude/hooks/some-hook.sh" "src/index.ts
 src/config.ts"
 
-OUTPUT=$(run_hook "gh pr merge 42")
+OUTPUT=$(run_hook "$HOOK" "gh pr merge 42")
 assert_eq "merge with clean PR but dirty worktree → allow" "" "$OUTPUT"
 assert_not_contains "merge should not see worktree src files" "deny" "$OUTPUT"
 
 echo ""
 echo "=== Merge: PR with untested source → deny ==="
 
-setup_mocks "src/index.ts
+setup_gh_git_mocks "src/index.ts
 src/config.ts" ""
 
-OUTPUT=$(run_hook "gh pr merge 42")
+OUTPUT=$(run_hook "$HOOK" "gh pr merge 42")
 assert_contains "untested source in PR → deny" "deny" "$OUTPUT"
 assert_contains "deny message lists files" "Test coverage policy" "$OUTPUT"
 
 echo ""
 echo "=== Create: uses git diff (local) ==="
 
-setup_mocks "" "src/new-feature.ts"
+setup_gh_git_mocks "" "src/new-feature.ts"
 
-OUTPUT=$(run_hook_stderr "gh pr create --title test --body 'test'")
+OUTPUT=$(run_hook_stderr "$HOOK" "gh pr create --title test --body 'test'")
 assert_contains "create sees local git diff files" "Test coverage policy" "$OUTPUT"
 
 print_results

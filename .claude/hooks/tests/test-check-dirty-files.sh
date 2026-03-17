@@ -15,70 +15,42 @@ HOOKS_DIR="$(dirname "$SCRIPT_DIR")"
 HOOK="$HOOKS_DIR/check-dirty-files.sh"
 source "$SCRIPT_DIR/test-helpers.sh"
 
-# Create mock dir
-MOCK_DIR=$(mktemp -d)
+setup_mock_dir
 trap 'rm -rf "$MOCK_DIR"' EXIT
-
-setup_git_mock() {
-  local status_output="$1"
-  cat > "$MOCK_DIR/git" << MOCK
-#!/bin/bash
-if echo "\$@" | grep -q "status --porcelain"; then
-  printf '%s' "$status_output"
-  exit 0
-fi
-/usr/bin/git "\$@"
-MOCK
-  chmod +x "$MOCK_DIR/git"
-}
-
-run_hook() {
-  local command="$1"
-  local input
-  input=$(jq -n --arg cmd "$command" '{"tool_input":{"command":$cmd}}')
-  echo "$input" | PATH="$MOCK_DIR:$PATH" bash "$HOOK" 2>/dev/null
-}
-
-run_hook_stderr() {
-  local command="$1"
-  local input
-  input=$(jq -n --arg cmd "$command" '{"tool_input":{"command":$cmd}}')
-  echo "$input" | PATH="$MOCK_DIR:$PATH" bash "$HOOK" 2>&1 1>/dev/null
-}
 
 echo "=== Non-triggering commands are ignored ==="
 
-setup_git_mock " M src/dirty.ts"
-OUTPUT=$(run_hook "npm run build")
+setup_git_status_mock " M src/dirty.ts"
+OUTPUT=$(run_hook "$HOOK" "npm run build")
 assert_eq "npm command ignored" "" "$OUTPUT"
 
-OUTPUT=$(run_hook "git add .")
+OUTPUT=$(run_hook "$HOOK" "git add .")
 assert_eq "git add ignored" "" "$OUTPUT"
 
-OUTPUT=$(run_hook "git commit -m test")
+OUTPUT=$(run_hook "$HOOK" "git commit -m test")
 assert_eq "git commit ignored" "" "$OUTPUT"
 
 echo ""
 echo "=== Clean worktree allows all commands ==="
 
-setup_git_mock ""
+setup_git_status_mock ""
 
-OUTPUT=$(run_hook "gh pr create --title test --body test")
+OUTPUT=$(run_hook "$HOOK" "gh pr create --title test --body test")
 assert_eq "clean worktree allows pr create" "" "$OUTPUT"
 
-OUTPUT=$(run_hook "git push origin main")
+OUTPUT=$(run_hook "$HOOK" "git push origin main")
 assert_eq "clean worktree allows push" "" "$OUTPUT"
 
-OUTPUT=$(run_hook "gh pr merge 42")
+OUTPUT=$(run_hook "$HOOK" "gh pr merge 42")
 assert_eq "clean worktree allows merge" "" "$OUTPUT"
 
 echo ""
 echo "=== Dirty worktree BLOCKS pr create ==="
 
-setup_git_mock " M src/index.ts
+setup_git_status_mock " M src/index.ts
 ?? debug-notes.txt"
 
-OUTPUT=$(run_hook "gh pr create --title test --body test")
+OUTPUT=$(run_hook "$HOOK" "gh pr create --title test --body test")
 assert_contains "pr create blocked with deny" "deny" "$OUTPUT"
 assert_contains "pr create lists dirty files" "DIRTY FILES" "$OUTPUT"
 assert_contains "pr create demands kaizen" "KAIZEN REFLECTION" "$OUTPUT"
@@ -87,48 +59,48 @@ assert_contains "pr create warns against stash" "DO NOT use" "$OUTPUT"
 echo ""
 echo "=== Dirty worktree BLOCKS git push ==="
 
-OUTPUT=$(run_hook "git push origin case/my-branch")
+OUTPUT=$(run_hook "$HOOK" "git push origin case/my-branch")
 assert_contains "push blocked with deny" "deny" "$OUTPUT"
 assert_contains "push says 'pushing code'" "pushing code" "$OUTPUT"
 
 echo ""
 echo "=== Dirty worktree WARNS on merge (advisory, not blocking) ==="
 
-OUTPUT=$(run_hook "gh pr merge 42")
+OUTPUT=$(run_hook "$HOOK" "gh pr merge 42")
 assert_eq "merge not blocked (no JSON deny)" "" "$OUTPUT"
 
-STDERR=$(run_hook_stderr "gh pr merge 42")
+STDERR=$(run_hook_stderr "$HOOK" "gh pr merge 42")
 assert_contains "merge warns on stderr" "DIRTY FILES DETECTED" "$STDERR"
 assert_contains "merge demands kaizen on stderr" "KAIZEN REFLECTION" "$STDERR"
 
 echo ""
 echo "=== Noise patterns excluded ==="
 
-setup_git_mock "?? node_modules/foo/bar.js
+setup_git_status_mock "?? node_modules/foo/bar.js
 ?? .DS_Store
 ?? dist/bundle.js"
 
-OUTPUT=$(run_hook "gh pr create --title test --body test")
+OUTPUT=$(run_hook "$HOOK" "gh pr create --title test --body test")
 assert_eq "noise-only files → allow" "" "$OUTPUT"
 
 echo ""
 echo "=== Mixed noise + real dirty files ==="
 
-setup_git_mock "?? node_modules/foo.js
+setup_git_status_mock "?? node_modules/foo.js
  M src/real-change.ts"
 
-OUTPUT=$(run_hook "gh pr create --title test --body test")
+OUTPUT=$(run_hook "$HOOK" "gh pr create --title test --body test")
 assert_contains "real dirty file causes block" "deny" "$OUTPUT"
 assert_contains "real file listed" "real-change" "$OUTPUT"
 
 echo ""
 echo "=== Categorization: staged vs modified vs untracked ==="
 
-setup_git_mock "M  src/staged.ts
+setup_git_status_mock "M  src/staged.ts
  M src/modified.ts
 ?? src/untracked.ts"
 
-OUTPUT=$(run_hook "gh pr create --title test --body test")
+OUTPUT=$(run_hook "$HOOK" "gh pr create --title test --body test")
 assert_contains "shows staged category" "Staged but not committed" "$OUTPUT"
 assert_contains "shows modified category" "Modified" "$OUTPUT"
 assert_contains "shows untracked category" "Untracked" "$OUTPUT"

@@ -77,6 +77,84 @@ assert_fails() {
   fi
 }
 
+# Create a temp directory for mock commands. Sets MOCK_DIR.
+# Caller must set trap: trap 'rm -rf "$MOCK_DIR"' EXIT
+setup_mock_dir() {
+  MOCK_DIR=$(mktemp -d)
+}
+
+# Run a hook script with a simulated PreToolUse JSON input.
+# Usage: OUTPUT=$(run_hook "$HOOK" "gh pr merge 42")
+# Captures stdout only (stderr suppressed). Use run_hook_stderr for stderr.
+run_hook() {
+  local hook="$1"
+  local command="$2"
+  local input
+  input=$(jq -n --arg cmd "$command" '{"tool_input":{"command":$cmd}}')
+  echo "$input" | PATH="$MOCK_DIR:$PATH" bash "$hook" 2>/dev/null
+}
+
+# Run a hook and capture stderr only (stdout suppressed).
+run_hook_stderr() {
+  local hook="$1"
+  local command="$2"
+  local input
+  input=$(jq -n --arg cmd "$command" '{"tool_input":{"command":$cmd}}')
+  echo "$input" | PATH="$MOCK_DIR:$PATH" bash "$hook" 2>&1 1>/dev/null
+}
+
+# Create mock gh and git commands in MOCK_DIR.
+# Usage: setup_gh_git_mocks "file1.ts\nfile2.ts" "file3.ts\nfile4.ts"
+#   $1 = files returned by gh pr diff --name-only
+#   $2 = files returned by git diff --name-only
+setup_gh_git_mocks() {
+  local gh_files="$1"
+  local git_files="$2"
+
+  cat > "$MOCK_DIR/gh" << MOCK
+#!/bin/bash
+if echo "\$@" | grep -q "pr diff"; then
+  echo "$gh_files"
+  exit 0
+fi
+if echo "\$@" | grep -q "pr view"; then
+  # Return empty body by default
+  echo ""
+  exit 0
+fi
+exit 1
+MOCK
+  chmod +x "$MOCK_DIR/gh"
+
+  cat > "$MOCK_DIR/git" << MOCK
+#!/bin/bash
+if echo "\$@" | grep -q "diff --name-only"; then
+  echo "$git_files"
+  exit 0
+fi
+if echo "\$@" | grep -q "status --porcelain"; then
+  exit 0
+fi
+/usr/bin/git "\$@"
+MOCK
+  chmod +x "$MOCK_DIR/git"
+}
+
+# Create a mock git that returns specific status --porcelain output.
+# Usage: setup_git_status_mock " M src/dirty.ts"
+setup_git_status_mock() {
+  local status_output="$1"
+  cat > "$MOCK_DIR/git" << MOCK
+#!/bin/bash
+if echo "\$@" | grep -q "status --porcelain"; then
+  printf '%s' "$status_output"
+  exit 0
+fi
+/usr/bin/git "\$@"
+MOCK
+  chmod +x "$MOCK_DIR/git"
+}
+
 # Print final results and exit with appropriate code
 print_results() {
   echo ""
