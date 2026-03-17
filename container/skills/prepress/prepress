@@ -70,10 +70,11 @@ def match_standard_size(w_pt, h_pt, tolerance_pt=2.0):
 
 
 def bleed_verdict(bleed_pt):
-    """Rate a bleed amount."""
-    if bleed_pt >= BLEED_GOOD_PT:
+    """Rate a bleed amount. Allows 0.1pt tolerance for PDF coordinate rounding."""
+    TOLERANCE = 0.1  # PDF coords often get rounded
+    if bleed_pt >= BLEED_GOOD_PT - TOLERANCE:
         return "good (>=3mm)"
-    elif bleed_pt >= BLEED_ACCEPTABLE_PT:
+    elif bleed_pt >= BLEED_ACCEPTABLE_PT - TOLERANCE:
         return "acceptable (>=2mm)"
     elif bleed_pt >= BLEED_MARGINAL_PT:
         return "marginal (>=1mm)"
@@ -417,9 +418,10 @@ def cmd_preflight(pdf_path):
                 mb[2] - tb[2], mb[3] - tb[3]
             ]
             min_bleed = min(bleeds)
-            if min_bleed < BLEED_ACCEPTABLE_PT:
+            tolerance = 0.1  # PDF coords often get rounded
+            if min_bleed < BLEED_ACCEPTABLE_PT - tolerance:
                 issues.append(f"Page {pn}: Insufficient bleed ({format_mm(min_bleed)} min, need >=2mm)")
-            elif min_bleed < BLEED_GOOD_PT:
+            elif min_bleed < BLEED_GOOD_PT - tolerance:
                 warnings.append(f"Page {pn}: Bleed is acceptable but not ideal ({format_mm(min_bleed)} min, recommend 3mm)")
             else:
                 info.append(f"Page {pn}: Bleed OK ({format_mm(min_bleed)} min)")
