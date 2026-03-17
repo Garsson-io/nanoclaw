@@ -71,13 +71,10 @@ fi
 
 parse_claude_wt_args "$@"
 
-# Generate nonce for worktree name
+# Generate nonce for worktree name (YYMMDD-HHMM-random)
 NONCE=$(date +%y%m%d-%H%M)-$(printf '%04x' $RANDOM)
-
-# Build claude -w args
-WORKTREE_ARGS=(-w "${NONCE}")
 
 # Run claude with -w (Claude handles worktree creation and cleanup)
 echo "Starting Claude with worktree: ${NONCE}"
 echo ""
-claude "${WORKTREE_ARGS[@]}" "${CLAUDE_ARGS[@]}"
+claude -w "${NONCE}" "${CLAUDE_ARGS[@]}"
