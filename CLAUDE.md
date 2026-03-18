@@ -146,17 +146,22 @@ Cases and kaizen are **strongly integrated but conceptually distinct**:
 | `/qodo-pr-resolver` | Fetch and fix Qodo PR review issues interactively or in batch |
 | `/get-qodo-rules` | Load org- and repo-level coding rules from Qodo before code tasks |
 | `/kaizen` | Recursive process improvement — escalation framework (Level 1→2→3) |
+| `/pick-work` | Intelligently select next kaizen issue — filters claimed, balances epic momentum vs diversity |
 
 ### Dev work skill chain — MUST follow this workflow
 
 When the conversation involves **selecting, evaluating, or starting dev work**, activate the right skills in sequence. Do NOT jump straight to writing code.
 
 ```
-User discusses an issue, PR, case, or spec
-  → /accept-case  (evaluate: is this the right work? what's the low-hanging fruit?)
+User asks "what's next", "pick work", "pick a kaizen", "what should we work on"
+  → /pick-work  (filter claimed issues, score by momentum/diversity, present options)
+
+User discusses a specific issue, PR, case, or spec
+  → /accept-case  (collision check, evaluate, find low-hanging fruit, get admin input)
 
 User greenlights: "lets do it", "go ahead", "build it", "do it", "yes", etc.
   → /implement-spec  (five-step algorithm, create case + worktree, then execute)
+  → MUST pass githubIssue number when creating case for a kaizen issue
 
 Work is large enough to need multiple PRs
   → /plan-work  (break into sequenced PRs with dependency graph)
@@ -166,9 +171,11 @@ Work is done
 ```
 
 **Key triggers to recognize:**
-- **Browsing/selecting work:** "look at issue #N", "check PR #N", "what should we work on", "find low hanging fruit", "what's next" → `/accept-case`
+- **Selecting work from backlog:** "pick a kaizen", "what's next", "what should we work on", "find work", "choose issue" → `/pick-work`
+- **Evaluating specific work:** "look at issue #N", "check PR #N", "find low hanging fruit", "evaluate this" → `/accept-case`
 - **Greenlighting work:** "lets do it", "go ahead", "build it", "start on this", "ship it", "make it happen" → `/implement-spec`
 - **All dev work MUST be in a case.** If `/implement-spec` activates, create a case with worktree before writing any code.
+- **Kaizen issue lifecycle:** When working on a kaizen issue, the `status:active`/`status:done` labels are auto-synced by `case-backend-github.ts`. Collision detection in `ipc-cases.ts` blocks duplicate case creation for the same issue.
 
 ## Dev Agent Policies (Kaizen)
 
