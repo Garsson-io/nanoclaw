@@ -196,6 +196,38 @@ describe('case_create collision detection', () => {
     expect(mockInsertCase).toHaveBeenCalled();
   });
 
+  test('sanitizes requestId to prevent path traversal in collision result file', async () => {
+    const existingCase = {
+      name: '260318-existing-case',
+      status: 'active',
+    } as Case;
+    mockGetActiveCasesByGithubIssue.mockReturnValue([existingCase]);
+
+    const deps = makeDeps();
+    await processCaseIpc(
+      {
+        type: 'case_create',
+        description: 'Path traversal attempt',
+        caseType: 'dev',
+        githubIssue: 55,
+        requestId: '../../etc/evil',
+      },
+      'telegram_test',
+      true,
+      deps,
+    );
+
+    // The sanitized file should be written with safe name, not the traversal path
+    const safePath =
+      '/tmp/test-nanoclaw-ipc-collision/ipc/telegram_test/case_results/etcevil.json';
+    expect(fs.existsSync(safePath)).toBe(true);
+
+    // The traversal path must NOT exist
+    const evilPath =
+      '/tmp/test-nanoclaw-ipc-collision/ipc/telegram_test/case_results/../../etc/evil.json';
+    expect(fs.existsSync(evilPath)).toBe(false);
+  });
+
   test('allows case creation when no collision exists', async () => {
     mockGetActiveCasesByGithubIssue.mockReturnValue([]);
 
