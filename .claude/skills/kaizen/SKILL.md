@@ -161,12 +161,34 @@ When the kaizen system itself fails (e.g., reflections happen but don't produce 
 | CLAUDE.md policies | 1 | Both repos | Direction, guidelines, decision frameworks |
 | Global agent CLAUDE.md | 1 | `groups/global/CLAUDE.md` | Response timing, close-the-loop, formatting |
 | Prettier pre-commit | 2 | `.husky/pre-commit` | Code formatting |
-| CI pipeline | 2 | `.github/workflows/ci.yml` | Typecheck, tests, format |
+| Pre-commit main-checkout block | 2 | `.husky/pre-commit` | Blocks commits from main checkout |
+| Pre-push main-checkout block | 2 | `.husky/pre-push` | Blocks pushes from main checkout (defense-in-depth) |
+| `check-wip.sh` | 2 | SessionStart hook | Surface existing WIP at session start |
+| `enforce-case-worktree.sh` | 2 | PreToolUse(Bash) | Warn before commit/push outside worktree |
+| `enforce-worktree-writes.sh` | 2 | PreToolUse(Edit/Write) | Block source edits in main checkout |
+| `enforce-pr-review.sh` | 2 | PreToolUse(Bash) | Block non-review commands during PR review |
+| `enforce-pr-review-tools.sh` | 2 | PreToolUse(Edit/Write/Agent) | Block editing/agents during PR review |
+| `enforce-pr-review-stop.sh` | 2 | Stop hook | Block agent from stopping with pending review |
+| `pr-review-loop.sh` | 2 | PostToolUse(Bash) | Multi-round PR self-review state machine |
+| `check-test-coverage.sh` | 2 | PreToolUse(Bash) | Warn when source changes lack tests |
+| `check-verification.sh` | 2 | PreToolUse(Bash) | Warn about missing verification section |
+| `check-dirty-files.sh` | 2 | PreToolUse(Bash) | Block push/PR create with dirty files |
+| `verify-before-stop.sh` | 2 | Stop hook | Run tsc/vitest before agent finishes |
+| `check-cleanup-on-stop.sh` | 2 | Stop hook | Warn about orphaned worktree state |
+| `kaizen-reflect.sh` | 2 | PostToolUse(Bash) | Trigger kaizen reflection at workflow boundaries |
+| CI: typecheck + unit tests | 2 | `.github/workflows/ci.yml` (ci job) | Typecheck, format, contract check, unit tests (harness + agent-runner) |
+| CI: PR policy | 2 | `.github/workflows/ci.yml` (pr-policy job) | Test coverage for changed source files, verification section in PR body |
+| CI: E2E tests | 2 | `.github/workflows/ci.yml` (e2e job) | Container build + Tier 1 (MCP tool registration) + Tier 2 (IPC round-trip with stub API). BuildKit + GHA cache, path-filtered |
+| Branch protection | 2 | GitHub repo settings | `strict: true`, requires ci + pr-policy + e2e status checks to pass |
+| Collision detection | 3 | `src/ipc-cases.ts` | Blocks duplicate case creation for same kaizen issue |
+| Case-GitHub issue sync | 3 | `src/case-backend-github.ts` | Auto-syncs status:active/done labels, closes issues on completion |
+| IPC requestId sanitization | 3 | `src/ipc-sanitize.ts` | Prevents path traversal in IPC handlers |
 | Git LFS | 3 | `.gitattributes` | Binary files tracked correctly |
 | Container read-only mounts | 3 | `container-runner.ts` | Work agents can't modify tools |
+| Mount security allowlist | 3 | `mount-security.ts` | Validates container mount paths against allowlist |
 | Credential proxy | 3 | `credential-proxy.ts` | Secrets never exposed to containers |
 | Mechanistic error notifications | 3 | `src/index.ts` | Users always informed of failures (no silent errors) |
-| Immediate ⏳ ack | 3 | `src/index.ts` | Users always know message was received |
+| Immediate ack | 3 | `src/index.ts` | Users always know message was received |
 
 ## Pending Escalations
 
@@ -176,4 +198,3 @@ These are currently Level 1 (instructions) but should be higher:
 |-------|---------|--------|-------------|
 | Cookie expired, human response ignored | L1 (CLAUDE.md) | L3 (auto-detect cookie JSON, save, test) | TODO: file |
 | Agent silent during long processing | L1 (CLAUDE.md "send early reply") | L3 (harness timeout sends progress) | TODO: file |
-| Untested code merged | L1 (CLAUDE.md "test first") | L2 (Stop hook runs tests) | TODO: file |
