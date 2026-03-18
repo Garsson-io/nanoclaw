@@ -4,6 +4,7 @@ import { _initTestDatabase } from './db.js';
 import {
   insertCase,
   getCaseById,
+  getActiveCaseByBranch,
   getActiveCasesByGithubIssue,
   getStaleActiveCases,
   updateCase,
@@ -141,6 +142,75 @@ describe('getActiveCasesByGithubIssue', () => {
   it('returns empty array when no cases exist', () => {
     const results = getActiveCasesByGithubIssue(999);
     expect(results).toHaveLength(0);
+  });
+});
+
+// INVARIANT: getActiveCaseByBranch returns the first non-terminal case matching
+//   a branch name, or undefined if none exists.
+// SUT: getActiveCaseByBranch
+// VERIFICATION: Insert cases with matching/non-matching branches and various
+//   statuses, confirm only active non-terminal cases are returned.
+describe('getActiveCaseByBranch', () => {
+  it('returns active case matching branch name', () => {
+    insertCase(
+      makeCase({
+        id: 'branch-case',
+        status: 'active',
+        branch_name: 'case/260318-k94-fix',
+      }),
+    );
+
+    const result = getActiveCaseByBranch('case/260318-k94-fix');
+    expect(result).toBeDefined();
+    expect(result!.id).toBe('branch-case');
+  });
+
+  it('returns undefined for non-existent branch', () => {
+    const result = getActiveCaseByBranch('no-such-branch');
+    expect(result).toBeUndefined();
+  });
+
+  it('excludes done/reviewed/pruned cases', () => {
+    insertCase(
+      makeCase({
+        id: 'done-branch',
+        status: 'done',
+        branch_name: 'case/done-work',
+      }),
+    );
+    insertCase(
+      makeCase({
+        id: 'pruned-branch',
+        status: 'pruned',
+        branch_name: 'case/done-work',
+      }),
+    );
+
+    const result = getActiveCaseByBranch('case/done-work');
+    expect(result).toBeUndefined();
+  });
+
+  it('includes suggested/backlog/blocked cases', () => {
+    insertCase(
+      makeCase({
+        id: 'suggested-branch',
+        status: 'suggested',
+        branch_name: 'case/pending',
+      }),
+    );
+
+    const result = getActiveCaseByBranch('case/pending');
+    expect(result).toBeDefined();
+    expect(result!.id).toBe('suggested-branch');
+  });
+
+  it('returns undefined when branch is null', () => {
+    insertCase(
+      makeCase({ id: 'no-branch', status: 'active', branch_name: null }),
+    );
+
+    const result = getActiveCaseByBranch('case/anything');
+    expect(result).toBeUndefined();
   });
 });
 
