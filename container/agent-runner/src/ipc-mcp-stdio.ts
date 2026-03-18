@@ -671,6 +671,18 @@ Case types:
       .describe(
         'Customer organization or business name, if mentioned in the conversation.',
       ),
+    gap_type: z
+      .string()
+      .optional()
+      .describe(
+        'Escalation gap type when this case needs admin input or approval. Common types: "information_expected" (missing business data from admin), "capability_expected" (missing tool/feature), "approval_required" (needs explicit sign-off). The gap type determines priority, routing, and notification behavior per the vertical\'s escalation config.',
+      ),
+    signals: z
+      .record(z.string(), z.boolean())
+      .optional()
+      .describe(
+        'Context signals that affect escalation priority. Known signals: "admin_initiated" (request came from an admin), "customer_waiting" (customer is actively waiting for a response), "main_channel" (request originated from the main control group). Each true signal adds weight to the priority score.',
+      ),
   },
   async (args) => {
     const requestId = `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -686,6 +698,8 @@ Case types:
       groupFolder,
       requestId,
       timestamp: new Date().toISOString(),
+      ...(args.gap_type ? { gapType: args.gap_type } : {}),
+      ...(args.signals ? { signals: args.signals } : {}),
     };
     if (args.customer_name) data.customer_name = args.customer_name;
     if (args.customer_phone) data.customer_phone = args.customer_phone;
@@ -710,11 +724,27 @@ Case types:
           ],
         };
       }
+      const parts = [
+        `Case created:\n  ID: ${result.id}\n  Name: ${result.name}\n  Workspace: ${result.workspace_path}${result.issue_url ? `\n  GitHub: ${result.issue_url}` : ''}`,
+      ];
+      if (result.priority) {
+        parts.push(
+          `  Priority: ${result.priority}${result.gap_type ? ` (gap: ${result.gap_type})` : ''}`,
+        );
+      }
+      if (result.meanwhile) {
+        parts.push(
+          `\nMeanwhile message for the customer: "${result.meanwhile}"`,
+        );
+      }
+      parts.push(
+        '\nThe case is now ACTIVE. Future messages about this topic will be routed to it.',
+      );
       return {
         content: [
           {
             type: 'text' as const,
-            text: `Case created:\n  ID: ${result.id}\n  Name: ${result.name}\n  Workspace: ${result.workspace_path}${result.issue_url ? `\n  GitHub: ${result.issue_url}` : ''}\n\nThe case is now ACTIVE. Future messages about this topic will be routed to it.`,
+            text: parts.join('\n'),
           },
         ],
       };
