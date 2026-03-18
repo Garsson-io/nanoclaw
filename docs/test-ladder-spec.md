@@ -333,9 +333,9 @@ Unauthorized actions are rejected at the gate. Covers: sender allowlist, case cr
 | IPC task auth | Main can manage all; non-main restricted to self | L2 | L6 | Real SQLite |
 | IPC message auth | Main sends anywhere; non-main to own chat only | L2 | L6 | Real SQLite |
 | Group registration | Only main can register groups | L2 | L6 | Real SQLite |
-| Mount security | Allowlist, blocked patterns, symlink resolution | **None** | L6 | **CRITICAL: Zero tests** |
+| Mount security | Allowlist, blocked patterns, symlink resolution | L2 | L6 | Phase 0: 50 tests covering all validation paths |
 
-**Critical gap: `mount-security.ts` has zero unit tests** despite being an authoritative security gate (per CLAUDE.md policy #15). It validates all volume mounts before container creation. Untested attack vectors include symlink traversal (e.g., `/tmp/link` → `~/.aws`), blocked pattern bypass (`.dotenv` vs `.env`), and race conditions between validation and mounting.
+**~~Critical gap~~ Resolved (Phase 0):** `mount-security.ts` now has 50 unit tests at L2. Covers symlink traversal, blocked pattern matching, allowlist loading/caching, container path validation, and read-write policy enforcement. Remaining gap: L6 (pipeline-level verification that validated mounts are actually applied to containers).
 
 ### S3: Mount & Filesystem Isolation
 **Minimum level:** L3 (build verification). **Target:** L6 (host pipeline).
@@ -345,7 +345,7 @@ Containers can only access files they're authorized to see. Read-only mounts are
 | Capability | What's tested | Current | Target | Notes |
 |-----------|--------------|---------|--------|-------|
 | Read-only project mount | Non-main groups get read-only | L1 | L6 | Mocked, never tested real mount |
-| Blocked path enforcement | `.ssh`, `.aws`, `.env` inaccessible | **None** | L5 | Should verify inside container |
+| Blocked path enforcement | `.ssh`, `.aws`, `.env` inaccessible | L2 | L5 | Phase 0: validation logic tested; L5: verify inside container |
 | Vertical mount isolation | Each vertical mounted at correct path | L1 | L5 | Mocked |
 | Case workspace mount | Case gets own workspace directory | L1 | L6 | Mocked |
 
@@ -445,7 +445,7 @@ Every NanoClaw capability, its current test level, and its target. Organized by 
 |----|-----------|---------|--------|-------|
 | X1 | Container spawn (Docker run) | L1 | L5 | Mocked; real in Tier 2 |
 | X2 | Volume mounts (correct paths) | L1 | L5 | Mocked; Tier 1 validates tools |
-| X3 | Mount security (allowlist enforcement) | **None** | L6 | **CRITICAL GAP** |
+| X3 | Mount security (allowlist enforcement) | L2 | L6 | Phase 0 complete — 50 unit tests |
 | X4 | Output parsing (sentinel markers) | L1 | L5 | Tested in Tier 2 |
 | X5 | Session resumption (pass session ID) | L1 | L6 | Mocked, never real |
 | X6 | Credential proxy (OAuth/API key) | L1 | L5 | Unit tested |
@@ -550,8 +550,8 @@ Every NanoClaw capability, its current test level, and its target. Organized by 
 **1. L6 Host Pipeline — nobody tests the orchestrator.**
 `processGroupMessages()` in `index.ts` is the heart of the system and has zero test coverage. All dependencies are module-level globals, making it untestable without refactoring to dependency injection. This is the single highest-value improvement.
 
-**2. Mount security — zero tests on an authoritative security gate.**
-`mount-security.ts` validates all container volume mounts. It's the only defense against container filesystem escapes. Zero unit tests. Symlink traversal, blocked pattern bypass, and race conditions are all untested attack vectors.
+**2. ~~Mount security — zero tests on an authoritative security gate.~~ RESOLVED (Phase 0).**
+`mount-security.ts` now has 50 unit tests (L2) covering blocked patterns, allowlist loading, symlink traversal, container path validation, and read-write policy. Internal functions were exported with minimal source changes. See `src/mount-security.test.ts`.
 
 **3. No test crosses the host-container boundary with a real host.**
 Tier 2 tests the container in isolation (stdin → stub API → stdout). L6 would test the host orchestrating a container. Nobody tests the seam between them — the code that assembles container input, passes session IDs, parses output markers, and persists state.
@@ -568,7 +568,7 @@ Every channel test mocks the channel library (Grammy for Telegram, Gmail API). N
 
 | Component | Implementation | Status |
 |-----------|---------------|--------|
-| Unit test framework | Vitest 4.0.18, 54 test files | Mature |
+| Unit test framework | Vitest 4.0.18, 51 test files (832 tests) | Mature |
 | E2E test framework | `vitest.config.e2e.ts`, 3min timeout, sequential | Mature |
 | Stub Anthropic server | `tests/e2e/stub-anthropic-server.ts` | Working |
 | Container lifecycle helpers | `tests/e2e/helpers.ts` (build, spawn, cleanup) | Working |
@@ -578,12 +578,12 @@ Every channel test mocks the channel library (Grammy for Telegram, Gmail API). N
 | Test conventions | Invariant statements, `patch.object`, model factories | Documented |
 | In-memory test DB | `_initTestDatabase()` in db.ts | Working |
 | Test case factory | `makeCase()` in `test-helpers.test-util.ts` | Working |
+| Mount security tests | 50 tests in `mount-security.test.ts` — blocked patterns, allowlist, symlinks, read-write policy | Working (Phase 0) |
 
 ### Needs Building
 
 | Component | What | Why | Ladder rung |
 |-----------|------|-----|-------------|
-| Mount security tests | Unit tests for `mount-security.ts` | Authoritative security gate with zero coverage | L1-L2 |
 | Host pipeline DI refactor | Extract `ProcessMessagesDeps` from `index.ts` | Unlock L6 testing | L6 prerequisite |
 | Host pipeline smoke tests | Test message → orchestration → response | Biggest coverage gap | L6 |
 | Processing event emitter | Structured events at each pipeline step | Enable observable testing + production telemetry | L7 |
@@ -627,8 +627,11 @@ Lean: Shared test bot for CI, per-developer optional for local testing.
 ## 9. Implementation Sequencing
 
 ```
-Phase 0: Quick wins (no infrastructure changes)
-  └── Mount security unit tests (L1-L2, critical security gap)
+Phase 0: Quick wins — DONE
+  └── Mount security unit tests (50 tests, L2)
+      Learnings: pure validation functions were directly testable once exported.
+      Minimal source changes (export + cache reset). No DI interface needed
+      for this module — the simpler approach of vi.mock on config + pino worked.
 
 Phase 1: L6 Foundation
   ├── Refactor processGroupMessages for dependency injection
@@ -650,7 +653,7 @@ Phase 4: LLM Testing
   └── Behavioral test framework (L12)
 ```
 
-Each phase is independently valuable. Phase 0 can start immediately. Phase 1 is the highest-value investment. Phases 2-4 can proceed incrementally.
+Each phase is independently valuable. Phase 1 is the highest-value investment. Phases 2-4 can proceed incrementally.
 
 ## 10. Keeping the Ladder Current
 

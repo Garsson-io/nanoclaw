@@ -103,13 +103,30 @@ What's the smallest change that:
 
 This is your first PR. Ship it. Get feedback. Then repeat.
 
-### 4. After each PR, re-enter the loop
+### 4. After each phase, update the PRD
 
-After shipping, the landscape has changed:
-- The spec is partially implemented — update it (or note what's done)
+When you complete a phase (or a meaningful chunk of a phase), **update the spec document before moving on**. This is not optional — a stale spec is actively harmful because it creates false confidence about what's planned vs what's real.
+
+**The update follows the progressive detail principle:**
+
+1. **Move completed work to "Already Solved"** (Section 7 or equivalent). Record what was actually built, not what the spec predicted. Include learnings — e.g., "DI refactor was simpler than expected because the module had few callers" or "blocked pattern matching had a subtle bug the spec didn't anticipate."
+
+2. **Refine the next phase with real detail.** Now that you've done Phase N, you know things the spec author didn't. Phase N+1's rough outline should become concrete: specific files, specific test counts, specific DI interfaces. This is the detail level that Phase N had before you started it.
+
+3. **Be selective about touching future phases.** A spec has two kinds of content: *problem taxonomy* (what the levels/categories/capabilities are, what each proves, what each misses) and *solution detail* (specific files to change, test counts, implementation strategies). Problem taxonomy is the Kardashev scale — it ages well and must never be trimmed. For solution detail in future phases: **most of the time, leave it alone.** It was written thoughtfully and will be re-examined when that phase begins. The main action is **adding** implementation hints when the current phase produced genuine insight relevant to a future phase — e.g., "the DI pattern in mount-security.ts was simpler than expected; index.ts may benefit from the same approach." As the spec matures through multiple phases, future steps will already be well-specified and rarely need changes. Trim future solution detail if it's actively misleading (contradicts what you just learned) or if the spec is genuinely too prescriptive about implementation for distant phases — but never as a routine cleanup step. The judgment call is: "Is this detail constraining future implementors more than it's helping them?"
+
+4. **Update the gap analysis.** Capabilities that climbed a rung should be updated in the inventory. New gaps discovered during implementation should be added.
+
+**The rhythm:** implement → update spec → implement next → update spec. The spec evolves as a living document, getting more detailed at the frontier and more abstract in the distance. Git history preserves the original detail for anyone who wants it.
+
+**Anti-pattern: "I'll update the spec later."** You won't. The learnings are freshest right after implementation. The update is part of the phase, not an afterthought.
+
+### 5. Re-enter the loop
+
+After updating the spec, the landscape has changed:
 - New information may have emerged — does it change the plan?
 - The next step may be different than you expected — re-apply the five steps
-- Progressive detail: now that you're one level higher, the next level's rough outline should be refined into concrete detail
+- The refined Phase N+1 section is now your implementation target
 
 **Don't treat the spec as a checklist to grind through.** Treat it as a map that gets more detailed as you explore the territory.
 

@@ -273,6 +273,28 @@ EOF
 )"
 ```
 
+## PRD Lifecycle — Living Documents
+
+A PRD is not done when the PR merges. It evolves as implementation proceeds. The `/implement-spec` skill owns the update cycle, but the principles are defined here because they follow from how the PRD was written.
+
+### The progressive refinement pattern
+
+After each implementation phase completes, the PRD should be updated:
+
+1. **Completed work → "Already Solved."** Move it out of "Needs Building" with a note about what was actually built and what was learned.
+2. **Next phase → full detail.** Refine the next phase's rough outline into concrete implementation detail, informed by what you just learned.
+3. **Be selective about touching future phases.** A spec contains two kinds of content: *problem taxonomy* (what the levels/categories/capabilities are, what each proves, what each misses — the "Kardashev scale") and *solution detail* (specific files, test counts, implementation strategies). Problem taxonomy ages well and must never be trimmed. For solution detail in future phases: **most of the time, leave it alone.** The main action is selectively **adding** implementation hints when the current phase produced genuine insight — not routine trimming. As the spec matures through multiple phases, future steps will already be well-specified and rarely need changes. Trim future solution detail if it's actively misleading (contradicts what you just learned) or if the spec is genuinely too prescriptive about implementation for distant phases — but never as routine cleanup. The judgment call is: "Is this detail constraining future implementors more than it's helping them?"
+4. **Gap analysis → update.** Reflect current reality.
+
+**Why replace rather than keep both:** Two plans (vague + detailed) diverge immediately. The detailed version for distant phases creates false confidence — it looks decided but isn't. Replace in place; git history preserves the original for anyone who needs it.
+
+**Why not rewrite before starting:** If the current phase is already well-specified enough to implement, rewriting the PRD first just delays real work. Update *after* the phase, when you have real learnings to incorporate.
+
+### When to trigger a PRD rewrite vs update
+
+- **Update (common):** Completed a phase, need to refine the next one. Done inline as part of `/implement-spec`.
+- **Rewrite (rare):** Implementation revealed the problem taxonomy itself was wrong — not just the solutions, but the framing. This means re-running `/write-prd` for the affected sections. Signal: you keep discovering capabilities or failure modes the spec doesn't have categories for.
+
 ## Anti-Patterns
 
 Things this skill is NOT for:

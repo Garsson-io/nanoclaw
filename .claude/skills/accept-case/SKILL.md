@@ -80,11 +80,31 @@ Read the spec with the incidents in hand. Evaluate:
 - **Is the most important question buried?** Specs sometimes bury the pivotal decision as an "open question" instead of resolving it first.
 - **Is there a simpler framing?** Sometimes the spec is solving the wrong problem at the right scope, or the right problem at the wrong scope.
 
+**If this case is one phase of a larger spec**, also assess the spec's progressive detail:
+- Is the current phase detailed enough to implement without guessing?
+- Are distant phases over-specified with solution details that will be wrong by the time we get there?
+- Does the spec need updating *before* implementation (current phase is unclear) or *after* (current phase is fine, future phases need trimming)?
+- If the spec doesn't need updating before implementation, say so — don't block real work on spec maintenance.
+
+The `/implement-spec` skill handles PRD updates after each phase. Your job here is to flag if the spec's current state would *block or mislead* implementation, not to preemptively rewrite it.
+
 Write the critique into the spec document itself (new section at the end). The critique is part of the artifact — future readers need to see it.
 
 ### Phase 5: Ask the admin
 
-Present your findings and ask targeted questions. Not open-ended "what do you think?" but specific choices that need a human decision.
+Present your findings clearly so the admin can make a decision without reading the spec or the code. Lead with three TLDRs, then offer depth.
+
+**Required structure — always present these first:**
+
+1. **Problem TLDR** (2-3 sentences): What's broken or missing, stated concretely. Not "test coverage is low" but "mount-security.ts validates every container mount but has zero tests — if the validation logic has a bug, containers could access .ssh, .aws, or other sensitive paths."
+
+2. **How it works now TLDR** (2-3 sentences): How the current system handles this today. Help the admin understand whether the existing code is sound (just needs tests/hardening) or is itself the problem (hacky, needs rework). Be honest — "the validation logic is clean but untestable due to global cache state" is more useful than "it works."
+
+3. **What changes TLDR** (2-3 sentences): What you'd actually do, concretely. Not "improve test coverage" but "add a deps interface to mount-security.ts (matching the existing pattern in send-response.ts), write 15-20 unit tests covering blocked patterns, allowlist matching, and read-write policy."
+
+4. **Deep dive pointers** (1 paragraph): Where the admin can read more if they want — which spec sections, which source files, which incidents are most informative. This respects their time: they can stop at the TLDRs or dig in.
+
+**Then ask targeted questions.** Not open-ended "what do you think?" but specific choices that need a human decision.
 
 **Structure your questions as:**
 - "I found N incidents over M weeks. The pattern is X. Does this match your experience?"
