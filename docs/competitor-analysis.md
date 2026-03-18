@@ -261,13 +261,14 @@ Each venture is a partnership between Garsson (harness infrastructure) and a **d
 
 The harness brings agent orchestration, case isolation, CRM, and multi-tenant security. The domain operator brings everything the harness cannot know.
 
-### Three wedges
+### Four wedges
 
-The strategy rests on three reinforcing wedges:
+The strategy rests on four reinforcing wedges:
 
 - **Technical wedge**: Case-level isolation plus scoped access — the architecture that makes multi-company deployment safe.
 - **Commercial wedge**: Domain-operator-led deployment — small businesses adopt automation through a trusted industry peer, not through a software sales process.
 - **Market wedge**: Under-served local and niche verticals — too small individually for global platforms, collectively large enough to build a portfolio.
+- **Operational wedge**: Recursive kaizen — every case that runs feeds improvements upward (company → vertical → harness), and the system applies kaizen to itself (getting better at getting better). This is compound interest applied to operational learning. A competitor that starts later doesn't just have less code — they have less accumulated operational knowledge at every level.
 
 ### Ramp per vertical
 
