@@ -1,4 +1,4 @@
-# Competitor Analysis: Customer-Facing Agent Platforms
+# Case-Level Isolation in Customer-Facing Agent Platforms
 
 Status: **Draft** | Date: 2026-03-18
 
@@ -8,18 +8,20 @@ Related: [Case Isolation Spec](case-isolation-spec.md) | [kaizen#65](https://git
 
 ## 1. Thesis
 
-Most customer-facing agent systems rely on tenant-aware application layers for data isolation — database row filtering, retrieval scoping, prompt-level boundaries. Garsson Harness is betting that certain vertical workflows need a stronger primitive: **case-level execution isolation** combined with customer-scoped data access and narrow agent capabilities.
+Most customer-facing agent platforms assume application-layer isolation is enough. Garsson Harness is betting that for some vertical workflows, it is not. The required primitive is **case-level execution isolation**: a work item gets its own execution environment, scoped data access, and bounded capabilities.
 
-The point is not just safer agents. It is a reusable operating harness for multiple vertical ventures, each run by a domain operator who brings industry expertise while the harness provides infrastructure, isolation, and agent orchestration.
+The point is not only safety. It is operational separation that makes multi-company vertical deployment possible — a reusable harness for multiple ventures, each run by a domain operator who brings industry expertise while the harness provides infrastructure, isolation, and agent orchestration.
 
 This document surveys existing systems to test that thesis: who else solves the isolation problem, who solves it differently, where are they stronger, and where does our approach appear differentiated.
+
+**The thesis is wrong if** shared application-layer systems can safely and reliably handle the target workflows at lower cost and complexity — including document processing, artifact generation, and multi-company deployment within a single vertical where companies are direct competitors.
 
 ### What "case isolation" means
 
 A case is a single work item for a single customer. Case isolation means:
 
 - **Isolated execution environment**: separate container per case (OS-level process/filesystem boundary)
-- **Isolated session and memory**: separate LLM context, no conversational bleed between cases
+- **Isolated session and memory**: separate LLM context, no cross-case context bleed
 - **Isolated customer-scoped data access**: agent can only query CRM data for its assigned customer, enforced by the data layer
 - **Isolated filesystem and artifacts**: separate scratch directory, no access to other cases' working files
 - **Isolated credentials and capabilities**: different agent roles receive different MCP tools and permissions
@@ -29,18 +31,18 @@ A case is a single work item for a single customer. Case isolation means:
 
 Not all isolation is equal. Systems can be roughly placed on a ladder:
 
-| Level | What's separated | Who does this |
-|-------|-----------------|---------------|
+| Level | Typical separation | Representative examples |
+|-------|-------------------|------------------------|
 | **Shared platform** | Nothing — all agents share context | Basic chatbot deployments |
-| **Per-tenant isolation** | Each organization gets its own data partition | Salesforce, ServiceNow (inherited from platform) |
-| **Per-customer isolation** | Each end-customer's data is scoped | Sierra AI (application-level), some CRM-native agents |
+| **Per-tenant isolation** | Each organization gets its own data partition | Enterprise CRM-native agents (e.g., Salesforce, ServiceNow) |
+| **Per-customer isolation** | Each end-customer's data is scoped | Application-level scoping in customer-facing platforms (e.g., Sierra AI) |
 | **Per-case isolation** | Each work item gets its own execution environment, session, and data scope | Garsson Harness (planned) |
 
 Per-case is stricter than per-customer because a single customer may have multiple concurrent cases. Without case-level separation, an agent working on Customer A's billing dispute could see context from Customer A's unrelated insurance claim — leading to hallucinated cross-references, leaked details between cases, or simply confused reasoning.
 
 ### Why case isolation matters: concrete scenarios
 
-- **Competing companies on the same vertical**: A printing workshop and its competitor both use the same Garsson vertical. An agent processing Workshop A's order must never access Workshop B's pricing, customer list, or pending orders. Per-case isolation makes the data physically unavailable, not just filtered.
+- **Competing companies on the same vertical**: A printing workshop and its competitor both use the same Garsson vertical. An agent processing Workshop A's order must never access Workshop B's pricing, customer list, or pending orders. The goal is to make unrelated case data unavailable by default at the execution, filesystem, and tool-access layers, rather than relying only on filtering inside a shared application context.
 - **Concurrent cases for one customer**: Customer asks about a refund (Case 1) while also requesting a new quote (Case 2). Two different agents work these simultaneously. Without case isolation, the quoting agent might reference the refund dispute — confusing the customer or leaking negotiation context.
 - **Sensitive document processing**: One case involves processing a medical referral PDF. Another is a routine status check. The status-check agent should never have the medical document in its filesystem or context window, even if both cases belong to the same customer.
 
@@ -78,11 +80,7 @@ Multi-tenant wrapper for OpenClaw. Seems closest to customer-facing deployment i
 
 Lightweight, security-focused alternative to OpenClaw. One Node.js process, container-isolated agent execution, ~4K lines. Created as a personal assistant — "small enough to understand."
 
-**Likely business trajectory:** Successful open-source AI projects tend to follow an L1/L2 path:
-- **L1 (open-source)**: Fork, customize, self-host. Builds adoption and the creator's reputation.
-- **L2 (cloud SaaS)**: Hosted version with premium features — managed containers, monitoring, team management. This is a common playbook (GitLab, Supabase, PostHog).
-
-NanoClaw has not launched L2, but if they add multi-tenant features and a hosted offering, they would compete at the infrastructure layer.
+If NanoClaw later adds hosted multi-tenant features (following the common L1 open-source → L2 cloud SaaS playbook), it could become an infrastructure-layer competitor.
 
 **Where NanoClaw is stronger:** Simplicity, auditability, container isolation as a first-class design principle, active open-source community.
 
@@ -108,7 +106,9 @@ Appears to be the clearest commercial example of a purpose-built customer-facing
 
 **Where Sierra is stronger:** Mature customer data platform, cross-channel identity resolution, enterprise-grade memory and personalization, production deployments with real customers. They have solved many of the problems we have not yet built (CRM, identity, observability).
 
-**Where it does not appear to solve our problem:** Proprietary SaaS — no self-hosting, no code access. Isolation model appears to be application-level (we do not have evidence of container-per-case isolation). Not designed for a venture-portfolio deployment model.
+**Where it does not appear to solve our technical problem:** Proprietary SaaS — no self-hosting, no code access. Isolation model appears to be application-level (we do not have evidence of container-per-case isolation).
+
+**Where it does not match our operating model:** Not designed for domain-operator-led vertical ventures.
 
 #### Salesforce Agentforce / ServiceNow AI Agents
 
@@ -116,7 +116,9 @@ AI agents built on top of existing enterprise CRM/ITSM platforms. Tenant isolati
 
 **Where they are stronger:** Mature multi-tenant data platforms with years of production hardening. Hundreds of integrations. Enterprise sales and support.
 
-**Where they do not appear to solve our problem:** Full ecosystem lock-in. Not designed for small businesses or independent vertical operators. Agent isolation is inherited from the platform's tenant model, not enforced per case.
+**Where they do not appear to solve our technical problem:** Agent isolation is inherited from the platform's tenant model, not enforced per case.
+
+**Where they do not match our operating model:** Full ecosystem lock-in. Not designed for small businesses or independent vertical operators.
 
 #### Intercom Fin / Zendesk AI / Ada / Forethought
 
@@ -142,45 +144,9 @@ These are not competitors but potential building blocks or architectural referen
 
 ---
 
-## 3. What Appears Differentiated
+## 3. What Must Be Built
 
-We avoid claiming novelty. The individual techniques are well-known (containers, CRM scoping, named bots, role-based access). What appears uncommon is the specific combination and the depth of enforcement at each layer.
-
-| Capability | Nearest comparable | How our approach differs |
-|-----------|-------------------|------------------------|
-| **Container per case** (not per channel or per tenant) | Lobu (per-channel), Praktor (per-invocation) | Lifecycle-bound: container tied to a work item, not a conversation or a channel |
-| **Customer-scoped CRM at the MCP boundary** | Sierra (app-level scoping) | The MCP server enforces access control — agent cannot query other customers' data at the tool level, not just the prompt level |
-| **Role-based agent types with OS-level enforcement** | ServiceNow (multiple agent types, app-level) | Router / work / dev have different container mounts, different MCP tools, different credentials. The separation is in what's physically available, not just what's instructed. Benefit: tighter blast radius, cheaper models for intake, clearer escalation paths |
-| **Harness/vertical separation** | We did not find an equivalent in the survey | Domain code (vertical repo) separated from infrastructure (harness). Allows multiple competing companies on the same vertical with the same harness. |
-| **Kaizen feedback loop** | We did not find an equivalent | Case completion triggers structured reflection → suggested improvements. This is a mechanism for the harness to improve from operational experience. |
-
-### What is not a differentiator
-
-- **Small codebase**: Nice for auditability but not a moat. A small orchestrator with complex surrounding infrastructure is not necessarily simpler in practice.
-- **Bot identity as routing**: A useful implementation detail that reduces dependence on probabilistic routing, but not a strategic pillar. It is an optimization, not a moat.
-
----
-
-## 4. Tradeoffs and Costs of Our Approach
-
-Our approach likely trades simplicity, resource efficiency, and operational maturity for stronger execution isolation and clearer trust boundaries. Container-per-case is not free. It creates costs that application-layer systems avoid:
-
-| Cost | Description |
-|------|-------------|
-| **Container startup latency** | Each new case pays a cold-start cost. Active cases kept warm, but idle cases that resume pay again. |
-| **Resource density** | One container per active case means memory and CPU scale linearly with concurrent cases. Application-layer systems can serve many cases from one process. |
-| **Orchestration complexity** | Container lifecycle management, health checks, idle timeout, session persistence across recycles — all must be built and maintained. |
-| **Observability** | Debugging across multiple isolated containers is harder than debugging within a single application process. Logs, traces, and state are distributed. |
-| **CRM control plane** | Application-layer platforms inherit tenant isolation from their data platform. We must build equivalent isolation from scratch in the CRM MCP server. |
-| **Persistence model** | State must survive container recycling — session files, scratch directories, CRM data all need explicit persistence strategies. |
-
-The bet is that for sensitive, customer-facing, multi-company workflows, the tighter boundary is worth these costs. If the workflows are simple (Q&A, knowledge base lookups), application-layer isolation is probably sufficient and more efficient. If the workflows involve processing customer documents, producing artifacts, or operating across competing companies, the stronger boundary is likely necessary.
-
----
-
-## 5. What Must Be Built
-
-The container runtime exists. The isolation boundary exists. The hard part is everything above:
+The runtime isolation primitive exists. The hard part is everything above it:
 
 | Component | Why it's hard | Current state |
 |-----------|---------------|--------------|
@@ -192,6 +158,54 @@ The container runtime exists. The isolation boundary exists. The hard part is ev
 | **Vertical configuration contract** | What lives in the harness vs the vertical repo. How verticals declare their workflows, tools, and escalation policies. | Partially exists (escalation.yaml, materials.json). Needs formalization. |
 
 Containerization is the easy part. Safe scoped data access and identity resolution are the hard part. The control plane is likely more strategic than the runtime.
+
+---
+
+## 4. What Appears Differentiated
+
+We avoid claiming novelty. The individual techniques are well-known (containers, CRM scoping, role-based access). What appears uncommon is the specific combination and the depth of enforcement at each layer.
+
+**Execution and isolation:**
+
+| Capability | Nearest comparable | How our approach differs |
+|-----------|-------------------|------------------------|
+| **Container per case** (not per channel or per tenant) | Lobu (per-channel), Praktor (per-invocation) | Lifecycle-bound: container tied to a work item, not a conversation or a channel |
+| **Role-based agent types with OS-level enforcement** | ServiceNow (multiple agent types, app-level) | Router / work / dev have different container mounts, different MCP tools, different credentials. The separation is in what's physically available, not just what's instructed. Benefit: tighter blast radius, cheaper models for intake, clearer escalation paths |
+
+**Control plane and access model:**
+
+| Capability | Nearest comparable | How our approach differs |
+|-----------|-------------------|------------------------|
+| **Customer-scoped CRM at the MCP boundary** | Sierra (app-level scoping) | The MCP server enforces access control — agent cannot query other customers' data at the tool level, not just the prompt level |
+
+**Operating model:**
+
+| Capability | Nearest comparable | How our approach differs |
+|-----------|-------------------|------------------------|
+| **Harness/vertical separation** | We did not find an equivalent in the survey | Domain code (vertical repo) separated from infrastructure (harness). Allows multiple competing companies on the same vertical with the same harness. |
+| **Kaizen feedback loop** | We did not find an equivalent | Case completion triggers structured reflection → suggested improvements. A mechanism for the harness to improve from operational experience. |
+
+### What is not a differentiator
+
+- **Small codebase**: Nice for auditability but not a moat. A small orchestrator with complex surrounding infrastructure is not necessarily simpler in practice.
+- **Bot identity as routing**: A useful implementation detail that reduces dependence on probabilistic routing. An optimization, not a moat.
+
+---
+
+## 5. Tradeoffs and Costs
+
+Our approach likely trades simplicity, resource efficiency, and operational maturity for stronger execution isolation and clearer trust boundaries. Container-per-case is not free:
+
+| Cost | Description |
+|------|-------------|
+| **Container startup latency** | Each new case pays a cold-start cost. Active cases kept warm, but idle cases that resume pay again. |
+| **Resource density** | One container per active case means memory and CPU scale linearly with concurrent cases. Application-layer systems can serve many cases from one process. |
+| **Orchestration complexity** | Container lifecycle management, health checks, idle timeout, session persistence across recycles — all must be built and maintained. |
+| **Observability** | Debugging across multiple isolated containers is harder than debugging within a single application process. Logs, traces, and state are distributed. |
+| **CRM control plane** | Application-layer platforms inherit tenant isolation from their data platform. We must build equivalent isolation from scratch in the CRM MCP server. |
+| **Persistence model** | State must survive container recycling — session files, scratch directories, CRM data all need explicit persistence strategies. |
+
+This architecture is probably wrong for lightweight support chat, FAQ answering, and high-volume low-complexity interactions where application-layer isolation is sufficient and more efficient. It becomes more attractive when cases involve processing customer documents, producing artifacts, executing multi-step workflows, or operating across competing companies sharing infrastructure.
 
 ---
 
@@ -256,7 +270,7 @@ Case isolation is not just a security feature. It is what makes Stage 3 possible
 1. **Case-level isolation must be achievable at reasonable cost.** If container-per-case is too expensive or too slow for real customer interactions, the architecture doesn't hold. The CRM MCP server must provide useful scoped access, not just empty sandboxes.
 2. **Domain operators must exist and be willing to partner.** Each vertical depends on finding someone with industry knowledge who wants to build a business on this harness.
 3. **The harness must compound.** Each vertical must make the harness better for all verticals. If every vertical requires heavy custom harness work, it's consultancy, not a platform.
-4. **Application-layer isolation must be insufficient for our target workflows.** If prompt engineering + DB filtering works well enough for sensitive customer-facing work, our per-case isolation is overengineered. The bet is that it isn't enough — especially for multi-company verticals.
+4. **Application-layer isolation must be insufficient for our target workflows.** If prompt engineering + DB filtering works well enough for sensitive customer-facing work — including document processing, artifact generation, and multi-company deployment — our per-case isolation is overengineered. This is the core empirical question. The bet is that it isn't enough, especially for multi-company verticals where companies are direct competitors.
 
 ### What breaks first as scale increases
 
@@ -285,4 +299,4 @@ What remains defensible:
 - Vertical-specific configurations and operational knowledge (built through Stages 1-3)
 - The kaizen feedback loop and its accumulated improvements (operational discipline, not just architecture)
 
-The defensibility is not primarily in source-closedness. It is in operational learning, control-plane design, vertical partnerships, and deployment discipline. Closed-source protects the window to build those up.
+The defensibility is in operational learning, control-plane design, vertical partnerships, and deployment discipline — not in source availability. Keeping the source closed buys time to build those up, but is not itself the moat.
