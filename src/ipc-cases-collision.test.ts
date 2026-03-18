@@ -58,7 +58,7 @@ vi.mock('./cases.js', () => ({
   insertCase: (...args: unknown[]) => mockInsertCase(...args),
   generateCaseId: () => 'case-test-id',
   generateCaseName: (desc: string) => '260318-test-case',
-  createCaseWorkspace: (...args: unknown[]) => mockCreateCaseWorkspace(...args),
+  createCaseWorkspace: () => mockCreateCaseWorkspace(),
   suggestDevCase: vi.fn(() => ({
     id: 'suggested-id',
     name: 'suggested-name',
