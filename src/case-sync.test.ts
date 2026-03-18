@@ -1,11 +1,7 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 
 import { CaseSyncService } from './case-sync.js';
-import type {
-  CaseSyncAdapter,
-  SyncResult,
-  CaseSyncEvent,
-} from './case-sync.js';
+import type { CaseSyncAdapter } from './case-sync.js';
 import { makeCase } from './test-helpers.js';
 
 function makeAdapter(

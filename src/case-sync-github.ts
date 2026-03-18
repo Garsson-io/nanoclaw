@@ -138,9 +138,8 @@ export class GitHubCaseSyncAdapter implements CaseSyncAdapter {
       try {
         updateCase(c.id, {
           github_issue: result.issueNumber,
+          github_issue_url: result.issueUrl ?? null,
         });
-        // Also store the URL via direct DB update (github_issue_url)
-        // This is handled by the caller if needed
       } catch (err) {
         logger.warn(
           { caseId: c.id, err },
