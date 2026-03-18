@@ -1,6 +1,10 @@
-import { describe, test, expect, vi, beforeEach } from 'vitest';
+import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { CaseSyncService } from './case-sync.js';
+import {
+  CaseSyncService,
+  getCaseSyncService,
+  setActiveSyncService,
+} from './case-sync.js';
 import type { CaseSyncAdapter } from './case-sync.js';
 import { makeCase } from './test-helpers.js';
 
@@ -131,5 +135,31 @@ describe('CaseSyncService', () => {
     const c = makeCase();
     // Should not throw
     await noAdapter.onCaseMutated({ type: 'created', case: c });
+  });
+});
+
+// INVARIANT: Module-level singleton tracks the active sync service
+// SUT: getCaseSyncService, setActiveSyncService
+describe('sync service singleton', () => {
+  afterEach(() => {
+    setActiveSyncService(null);
+  });
+
+  test('returns null when no service is set', () => {
+    setActiveSyncService(null);
+    expect(getCaseSyncService()).toBeNull();
+  });
+
+  test('returns the service after setActiveSyncService', () => {
+    const service = new CaseSyncService(makeAdapter());
+    setActiveSyncService(service);
+    expect(getCaseSyncService()).toBe(service);
+  });
+
+  test('can be cleared back to null', () => {
+    const service = new CaseSyncService(makeAdapter());
+    setActiveSyncService(service);
+    setActiveSyncService(null);
+    expect(getCaseSyncService()).toBeNull();
   });
 });
