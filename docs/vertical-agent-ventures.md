@@ -8,9 +8,9 @@ Related: [Case Isolation Spec](case-isolation-spec.md) | [kaizen#65](https://git
 
 ## Context
 
-Garsson Harness is a closed-source, customer-facing agent platform built on NanoClaw's open-source infrastructure. Each work item (case) runs in an isolated container with per-customer data scoping. The harness powers a portfolio of vertical ventures — each venture is a separate private repo with domain-specific workflows, operated by a product expert who knows the industry.
+Garsson Harness is a closed-source, customer-facing agent platform built on NanoClaw's open-source infrastructure. Each work item (case) runs in an isolated container with per-customer data scoping. The harness powers a portfolio of vertical ventures — each venture is a separate private repo with domain-specific workflows, operated by a domain operator who knows the industry.
 
-This document surveys existing solutions — in the Claw ecosystem, open-source, and commercial — to understand what exists, what gaps remain, and what's genuinely novel about our approach.
+This document surveys existing solutions — in the Claw ecosystem, open-source, and commercial — to understand what exists, what gaps remain, and what appears differentiated about our approach.
 
 ---
 
@@ -84,7 +84,7 @@ Lightweight, security-focused alternative to OpenClaw. One Node.js process, cont
 | Aspect | NanoClaw | Garsson Harness |
 |--------|----------|-----------------|
 | Business model | Open-source, likely cloud SaaS | Closed-source harness + venture portfolio |
-| Target user | Individual developer / power user | Product expert running a vertical business |
+| Target user | Individual developer / power user | Domain operator running a vertical business |
 | Isolation | Per-group (containers) | Per-case (containers + CRM + MCP) |
 | Customer-facing | No (personal assistant) | Yes (router + work agents + bot swarm) |
 | Multi-tenant | No | Yes (case isolation enables competitor companies on same vertical) |
@@ -94,7 +94,7 @@ Lightweight, security-focused alternative to OpenClaw. One Node.js process, cont
 - Purpose-built for customer-facing verticals (they're general-purpose)
 - Deeper isolation (case-level vs group-level)
 - Venture portfolio model (we're the operator, not just the platform vendor)
-- Product experts as partners (they'd sell to developers, we partner with domain experts)
+- Domain operators as partners (they'd sell to developers, we partner with domain operators)
 
 ### 1.6 Ecosystem Summary
 
@@ -123,7 +123,7 @@ No existing Claw ecosystem project combines customer-facing deployment with case
 
 ### 2.1 Sierra AI
 
-The most relevant commercial competitor. Purpose-built for customer-facing AI agents.
+Purpose-built for customer-facing AI agents. The closest commercial analog to what we're building.
 
 | Aspect | Sierra AI | Garsson Harness |
 |--------|-----------|-----------------|
@@ -135,7 +135,7 @@ The most relevant commercial competitor. Purpose-built for customer-facing AI ag
 | Customization | Configuration within their platform | Full code control (fork + modify) |
 | Pricing | Enterprise contracts | Self-hosted (API costs only) |
 
-**Key insight:** Sierra's Agent Data Platform is the gold standard for customer data unification. Their approach of giving agents memory and personalization across sessions is worth studying for our CRM design. But it's a closed platform — no self-hosting, no code access, no container-level isolation guarantees.
+**Key insight:** Sierra's Agent Data Platform is the most mature approach to customer data unification we've seen. Their per-customer memory and personalization model is worth studying for our CRM design. But it's a closed platform — no self-hosting, no code access, no container-level isolation guarantees.
 
 ### 2.2 Salesforce Agentforce
 
@@ -174,7 +174,7 @@ Conversational AI for customer support. Ticket/conversation-scoped.
 | Customization | Configuration UI | Full code control |
 | Data access | Read from knowledge base + CRM | Read/write CRM, scratch files, internet |
 
-**Key gap in all of these:** Isolation is application-level, not OS-level. The AI model may see multiple customers' data within a single inference context. These platforms rely on prompt engineering and DB filtering to prevent leakage — not on making the data physically unavailable to the model.
+**Key difference:** These platforms primarily rely on application-layer scoping — tenant-aware retrieval, policy engines, and authorization layers. This is often legitimate for their use case, but we do not have evidence of equivalent physically separate execution environments per work item.
 
 ### 2.5 Commercial Summary
 
@@ -192,7 +192,7 @@ Conversational AI for customer support. Ticket/conversation-scoped.
     Only             │
 ```
 
-Commercial platforms have strong customer data platforms but rely on application-level isolation. NanoClaw is the only project combining OS-level isolation with customer-facing case management.
+Commercial platforms have strong customer data platforms but primarily rely on application-level isolation. We have not found another project combining OS-level isolation with customer-facing case management.
 
 ---
 
@@ -218,18 +218,18 @@ Open-source agent platform with isolated Docker execution per agent instance. Br
 
 ---
 
-## 4. What's Genuinely Novel
+## 4. What Appears Differentiated
 
-Based on this survey, the following aspects of NanoClaw's planned architecture have no direct equivalent:
+Based on this survey, the following aspects of the harness architecture appear uncommon in combination:
 
 | Capability | Who else does it? | Our approach |
 |-----------|-------------------|--------------|
-| **Case-level OS isolation** (container per work item, not per channel/tenant) | Nobody | Each case gets its own container with only that case's data mounted |
+| **Case-level OS isolation** (container per work item, not per channel/tenant) | Not seen in surveyed projects | Each case gets its own container with only that case's data mounted |
 | **Three agent roles with distinct trust boundaries** | ServiceNow has multiple agent types, but with app-level isolation | Router (intake only), work (per-case CRM), dev (code only). OS-level enforcement per role. |
-| **Bot identity as routing mechanism** | Nobody — all competitors use LLM classifiers or manual routing | Which Telegram bot you message = which case. Mechanistic, zero-cost, zero-hallucination routing. |
+| **Bot identity as routing mechanism** | Not seen — most competitors use LLM classifiers or manual routing | Which Telegram bot you message = which case. Mechanistic, no classifier overhead. |
 | **Customer CRM binding at container boundary** | Sierra does this at app level | CRM MCP server rejects queries for wrong customer. OS-level + data-level + capability-level enforcement. |
-| **Kaizen feedback loop in case lifecycle** | Nobody | Case completion triggers reflection → suggested dev improvements → better tooling → better case outcomes. Example: a recurring quoting mistake becomes a vertical-level prompt fix; a repeated payment-status lookup becomes a harness-level integration. |
-| **Harness/vertical architecture** | Nobody in the Claw ecosystem | Public harness + private vertical repos mounted into containers. Domain code separated from infrastructure. |
+| **Kaizen feedback loop in case lifecycle** | Not seen in surveyed projects | Case completion triggers reflection → suggested dev improvements → better tooling → better case outcomes. Example: a recurring quoting mistake becomes a vertical-level prompt fix; a repeated payment-status lookup becomes a harness-level integration. |
+| **Harness/vertical architecture** | Not seen in the Claw ecosystem | Closed harness + private vertical repos mounted into containers. Domain code separated from infrastructure. |
 
 The individual techniques aren't new (containers, CRM scoping, named bots). The combination and the depth of isolation enforcement is what's novel. These boundaries are enforced at different layers: runtime/container isolation, tool-level access control, and workflow/role-level capability restriction.
 
@@ -265,22 +265,22 @@ The model works only if these wedges reinforce each other: stronger isolation en
 
 Garsson Harness is not a SaaS platform, not an open-source framework, and not a consulting practice. It's a **closed-source harness that powers a portfolio of vertical ventures**.
 
-Each venture is a partnership between Garsson (harness + infrastructure) and a **product expert** who knows the industry. The product expert brings domain knowledge; the harness brings agent orchestration, case isolation, CRM, and multi-tenant security.
+Each venture is a partnership between Garsson (harness + infrastructure) and a **domain operator** who knows the industry. The domain operator brings domain knowledge; the harness brings agent orchestration, case isolation, CRM, and multi-tenant security.
 
 ### Ramp Per Vertical
 
 Each new vertical follows a three-stage ramp, where each stage validates the next:
 
 ```
-Stage 1: Product expert uses agents to run their own work faster
+Stage 1: Domain operator uses agents to run their own work faster
   → Validates: harness works for this vertical, discovers needed tools/workflows
   → Example: Nir uses agents for his own printing workshop operations
 
-Stage 2: Product expert + agents manage one company (humans + agents)
+Stage 2: Domain operator + agents manage one company (humans + agents)
   → Validates: case isolation works with real customers, agent swarm handles concurrent cases
   → Example: Nir's workshop serves customers via Telegram bots + email, agents handle intake/quoting/tracking
 
-Stage 3: Product expert onboards other companies in the same vertical
+Stage 3: Domain operator onboards other companies in the same vertical
   → Validates: multi-tenant isolation, vertical is a platform not a one-off
   → Example: Other printing workshops use the same vertical, each with isolated customer data
 ```
@@ -289,22 +289,22 @@ Stage 3: Product expert onboards other companies in the same vertical
 
 | Advantage | Explanation |
 |-----------|-------------|
-| **Domain expertise is outsourced** | Product experts know their industry. Garsson doesn't need to learn insurance, printing, logistics — the vertical repo encodes that knowledge. |
+| **Domain expertise is provided by partners** | Domain operators bring customer acquisition/trust, workflow knowledge, escalation judgment, and local/regulatory fluency. Garsson does not need to internalize every vertical's operational knowledge — the vertical repo encodes it. |
 | **Infrastructure is shared** | Every venture runs on the same harness. Case isolation, CRM, agent swarm, channels — built once, used by all. |
 | **Each venture validates the harness** | Stage 1 discovers missing tools. Stage 2 stress-tests isolation. Stage 3 proves multi-tenancy. Every vertical makes the harness better for all verticals. |
 | **Isolation enables multi-tenancy** | The case isolation spec (container per case, CRM scoping, MCP restriction) is what makes Stage 3 possible. Without it, Company A's data leaks to Company B — and in a vertical, companies are competitors. |
-| **Low marginal cost per venture** | Adding a new vertical = new private repo + new product expert. No new infrastructure, no new harness code (unless the vertical surfaces a gap, which becomes a kaizen dev case). |
+| **Low marginal cost per venture** | Adding a new vertical = new private repo + new domain operator. No new infrastructure, no new harness code (unless the vertical surfaces a gap, which becomes a kaizen dev case). |
 
 ### How This Differs From Competitors
 
 | Model | Who does it | How we differ |
 |-------|------------|---------------|
-| **SaaS platform** (Sierra, Agentforce) | Customer buys a subscription, configures within the platform's constraints | We own the ventures. Product experts are partners, not customers. Full code control, not configuration. |
+| **SaaS platform** (Sierra, Agentforce) | Customer buys a subscription, configures within the platform's constraints | We own the ventures. Domain operators are partners, not customers. Full code control, not configuration. |
 | **Open-source framework** (OpenClaw, NanoClaw) | User forks, customizes, self-hosts | Closed-source harness. The isolation and orchestration layers are proprietary IP. |
 | **AI consultancy** | Build custom solutions per client | We build a reusable harness, not bespoke projects. Each vertical is a repeatable business, not a one-time engagement. |
-| **Vertical SaaS** (traditional) | One company, one vertical, one product | We're a venture studio with a shared harness. Multiple verticals, each with its own product expert. |
+| **Vertical SaaS** (traditional) | One company, one vertical, one product | We're a venture studio with a shared harness. Multiple verticals, each with its own domain operator. |
 
-The closest analogy is a **franchise model for AI agents**: Garsson provides the infrastructure (harness), the product expert provides the domain knowledge (vertical), and together they serve an industry.
+The closest analogy is a **franchise model for AI agents**: Garsson provides the infrastructure (harness), the domain operator provides the domain knowledge (vertical), and together they serve an industry.
 
 ---
 
@@ -323,11 +323,10 @@ Strategy:
 
 ### Strengths
 
-- **Deepest isolation**: Only platform combining OS-level (container) + data-level (CRM MCP) + capability-level (MCP tools) + branch-level (worktree) isolation
+- **Enforcement across layers**: Isolation enforced at runtime (container), data (CRM MCP), capability (MCP tools), and branch (worktree) levels — not just one boundary
 - **Venture portfolio model**: Shared harness across verticals means each venture improves the platform for all
-- **Small codebase**: Auditable, modifiable, understandable (~4K lines vs OpenClaw's ~500K)
-- **Novel routing**: Bot identity as routing eliminates LLM classifier costs and hallucination risks
-- **Domain expertise outsourced**: Product experts bring industry knowledge; Garsson builds infrastructure
+- **Domain-operator distribution**: Domain operators bring industry knowledge, customer trust, and local fluency; Garsson builds infrastructure
+- **Compounding learning**: Recursive kaizen means each deployment feeds improvements back into the harness
 - **Stage-gated validation**: Each venture ramps through proven stages before scaling
 
 ### Weaknesses
@@ -336,11 +335,11 @@ Strategy:
 - **Single-host**: No clustering or horizontal scaling story yet
 - **Small team**: Limited bandwidth for both harness development and venture support
 - **Unproven at scale**: No production deployment with real paying customers yet (Stage 1 in progress with prints vertical)
-- **Product expert dependency**: Each vertical requires finding and partnering with the right domain expert
+- **Domain operator dependency**: Each vertical requires finding and partnering with the right domain expert
 
 ### Opportunities
 
-- **First mover in OS-level case isolation**: No open-source or commercial competitor offers container-per-case isolation with CRM scoping
+- **Early mover in OS-level case isolation**: We have not found another open-source or commercial project offering container-per-case isolation with CRM scoping
 - **Vertical expansion**: Every industry with customer service + data sensitivity is a potential venture (insurance, legal, healthcare, financial services)
 - **Compounding returns**: Each vertical hardens the harness, surfaces missing tools, and validates the model — making the next vertical faster to launch
 - **Closed-source moat**: Keeping the source closed may buy time to build operational depth, but the moat is operational, not merely legal
@@ -351,4 +350,4 @@ Strategy:
 - **Lobu expansion**: If Lobu adds case-level isolation, they'd compete directly with a larger community
 - **Commercial platforms moving downmarket**: Sierra, Agentforce becoming accessible to small businesses
 - **Upstream divergence cost**: Maintaining NanoClaw compatibility while building proprietary layers creates ongoing merge overhead
-- **Venture execution risk**: Each vertical is a new business — product-market fit, product expert reliability, and customer acquisition are independent risks per venture
+- **Venture execution risk**: Each vertical is a new business — product-market fit, domain operator reliability, and customer acquisition are independent risks per venture
