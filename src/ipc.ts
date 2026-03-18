@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { CronExpressionParser } from 'cron-parser';
+import { sanitizeRequestId } from './ipc-sanitize.js';
 
 import { DATA_DIR, IPC_POLL_INTERVAL, TIMEZONE } from './config.js';
 import {
@@ -20,6 +21,7 @@ import { processCaseIpc } from './ipc-cases.js';
 import { isValidGroupFolder, resolveGroupFolderPath } from './group-folder.js';
 import { logger } from './logger.js';
 import { validateAdditionalMounts } from './mount-security.js';
+import { IpcMessageSchema } from './schemas.js';
 import { RegisteredGroup } from './types.js';
 
 export interface IpcDeps {
@@ -371,20 +373,13 @@ export function startIpcWatcher(deps: IpcDeps): void {
           for (const file of messageFiles) {
             const filePath = path.join(messagesDir, file);
             try {
-              const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-              if (data.type === 'message' && data.chatJid && data.text) {
+              const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+              const data = IpcMessageSchema.parse(raw);
+              if (data.type === 'message') {
                 await dispatchIpcMessage(data, sourceGroup, isMain, deps);
-              } else if (
-                data.type === 'image' &&
-                data.chatJid &&
-                data.imagePath
-              ) {
+              } else if (data.type === 'image') {
                 await dispatchIpcImage(data, sourceGroup, isMain, deps);
-              } else if (
-                data.type === 'document' &&
-                data.chatJid &&
-                data.documentPath
-              ) {
+              } else if (data.type === 'document') {
                 await dispatchIpcDocument(data, sourceGroup, isMain, deps);
               }
               fs.unlinkSync(filePath);
@@ -856,17 +851,20 @@ export async function processTaskIpc(
 
       // Write result file so the MCP tool can read it back
       if (d.requestId) {
-        const resultDir = path.join(
-          DATA_DIR,
-          'ipc',
-          sourceGroup,
-          'issue_results',
-        );
-        fs.mkdirSync(resultDir, { recursive: true });
-        fs.writeFileSync(
-          path.join(resultDir, `${d.requestId}.json`),
-          JSON.stringify(result),
-        );
+        const safeId = sanitizeRequestId(d.requestId);
+        if (safeId) {
+          const resultDir = path.join(
+            DATA_DIR,
+            'ipc',
+            sourceGroup,
+            'issue_results',
+          );
+          fs.mkdirSync(resultDir, { recursive: true });
+          fs.writeFileSync(
+            path.join(resultDir, `${safeId}.json`),
+            JSON.stringify(result),
+          );
+        }
       }
 
       // Notify via Telegram if issue was created successfully

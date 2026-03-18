@@ -10,13 +10,16 @@ Single Node.js process with skill-based channel system. Channels (WhatsApp, Tele
 
 Every piece of work is a **case**. Cases provide isolated containers, sessions, and (for dev) git worktrees. See `.claude/skills/cases/SKILL.md` for full docs.
 
+**Architecture:** Cases are backed by a cloud CRM (GitHub Issues for the demo company, replaceable with any CRM). SQLite is a **local cache** — fast and offline-capable, but not the source of truth. All case access goes through the domain model (`cases.ts`) or MCP abstraction — never raw SQL.
+
 - **work** cases use tooling to do useful work. **dev** cases improve tooling/workflows.
 - Lifecycle: `SUGGESTED → BACKLOG → ACTIVE → DONE → REVIEWED → PRUNED`
 - Kaizen: on completion, agents reflect on impediments and suggest dev improvements.
 - With 2+ active cases, Haiku routes incoming messages to the right case.
 - Replies are prefixed `[case: name]` in Telegram.
-- **All dev work MUST be in a case with its own worktree.** Never modify code in main checkout.
+- **All dev work MUST be in a case with its own worktree.** Never modify code in main checkout. Enforced by `enforce-case-exists.sh` (L2 hook — blocks source edits in worktrees without a case).
 - Case naming: `YYMMDD-HHMM-kebab-description` (e.g., `260315-1430-fix-auth`)
+- **Kaizen case naming:** `YYMMDD-HHMM-kNN-kebab-description` (e.g., `260318-2107-k21-fix-newline-prefix`). The `kNN` embeds the kaizen issue number, making it visible in branch names and `git worktree list`.
 
 ## Harness / Vertical Architecture
 
@@ -45,6 +48,7 @@ NanoClaw (harness, public)              Verticals (private repos)
 
 **Rules:**
 - **NEVER install system packages on the host** (no `sudo apt install`) — system deps go in Dockerfiles. npm deps go in the relevant `package.json` and are installed via `npm install`
+- **Dockerfile cache policy:** Layers are ordered least-frequently-changed → most-frequently-changed. When adding a new dependency, **ADD a new `RUN` layer** at the latest valid position — do NOT modify existing heavy layers (that invalidates all downstream cache and costs minutes in CI). See the cache strategy comments in `container/Dockerfile` for the layer map.
 - **Domain-specific code goes in the vertical repo**, not here
 - **Verticals are mounted into containers** at `/workspace/extra/{name}/`
 - **Work agents** get read-only tools, read-write data. **Dev agents** modify code in worktrees.
@@ -146,6 +150,36 @@ Cases and kaizen are **strongly integrated but conceptually distinct**:
 | `/qodo-pr-resolver` | Fetch and fix Qodo PR review issues interactively or in batch |
 | `/get-qodo-rules` | Load org- and repo-level coding rules from Qodo before code tasks |
 | `/kaizen` | Recursive process improvement — escalation framework (Level 1→2→3) |
+| `/pick-work` | Intelligently select next kaizen issue — filters claimed, balances epic momentum vs diversity |
+
+### Dev work skill chain — MUST follow this workflow
+
+When the conversation involves **selecting, evaluating, or starting dev work**, activate the right skills in sequence. Do NOT jump straight to writing code.
+
+```
+User asks "what's next", "pick work", "pick a kaizen", "what should we work on"
+  → /pick-work  (filter claimed issues, score by momentum/diversity, present options)
+
+User discusses a specific issue, PR, case, or spec
+  → /accept-case  (collision check, evaluate, find low-hanging fruit, get admin input)
+
+User greenlights: "lets do it", "go ahead", "build it", "do it", "yes", etc.
+  → /implement-spec  (five-step algorithm, create case + worktree, then execute)
+  → MUST pass githubIssue number when creating case for a kaizen issue
+
+Work is large enough to need multiple PRs
+  → /plan-work  (break into sequenced PRs with dependency graph)
+
+Work is done
+  → /kaizen  (reflect on impediments, suggest improvements)
+```
+
+**Key triggers to recognize:**
+- **Selecting work from backlog:** "pick a kaizen", "what's next", "what should we work on", "find work", "choose issue" → `/pick-work`
+- **Evaluating specific work:** "look at issue #N", "check PR #N", "find low hanging fruit", "evaluate this" → `/accept-case`
+- **Greenlighting work:** "lets do it", "go ahead", "build it", "start on this", "ship it", "make it happen" → `/implement-spec`
+- **All dev work MUST be in a case.** If `/implement-spec` activates, create a case with worktree before writing any code.
+- **Kaizen issue lifecycle:** When working on a kaizen issue, the `status:active`/`status:done` labels are auto-synced by `case-backend-github.ts`. Collision detection in `ipc-cases.ts` blocks duplicate case creation for the same issue.
 
 ## Dev Agent Policies (Kaizen)
 
@@ -374,12 +408,22 @@ This is a fork of `qwibitai/nanoclaw`. Remotes:
 
 Branch protection has `strict: true` status checks. Auto-merge is enabled. The agent handles the full merge loop autonomously — do NOT ask the user unless something is genuinely broken after retries.
 
+Required status checks (all must pass before merge):
+- **ci** — typecheck, format, contract check, unit tests (harness + agent-runner)
+- **pr-policy** — test coverage for changed source files, verification section in PR body
+- **e2e** — container build + Tier 1 (MCP tool registration) + Tier 2 (IPC round-trip with stub API). Uses BuildKit with GHA cache; skips expensive steps on docs-only PRs via path filter.
+
 ```bash
 # Step 1: Queue auto-merge (non-blocking — GitHub merges when CI passes + branch is current)
 gh pr merge <url> --repo Garsson-io/nanoclaw --squash --delete-branch --auto
 
-# Step 2: Wait for CI
-gh run watch <run-id> --repo Garsson-io/nanoclaw --exit-status
+# Step 2: Actively monitor CI (do NOT use `gh run watch` — it blocks with no visibility)
+# Poll job-level status every 15-30s:
+gh run view <run-id> --repo Garsson-io/nanoclaw --json jobs --jq '.jobs[] | "\(.name): \(.status) \(.conclusion)"'
+# When a job completes, note its duration. When the last job is running, check step-level progress:
+gh run view <run-id> --repo Garsson-io/nanoclaw --json jobs --jq '.jobs[] | select(.status=="in_progress") | .steps[] | "\(.name): \(.status) \(.conclusion)"'
+# If Docker build > 2min, check logs for cache misses. If all layers CACHED but still slow, it's I/O (image export).
+# Report progress proactively: "CI: 2/3 jobs passed, e2e running — Docker build 57s all cached, now running IPC tests"
 
 # Step 3: Verify merge completed
 gh pr view <url> --repo Garsson-io/nanoclaw --json state --jq .state

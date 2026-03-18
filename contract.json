@@ -2,7 +2,6 @@
   "$schema": "https://nanoclaw.dev/contract.schema.json",
   "contractVersion": 1,
   "harnessVersion": "1.2.17",
-  "generatedAt": "2026-03-18T06:15:23Z",
   "surfaces": {
     "mcpTools": [
       "add_case_comment",

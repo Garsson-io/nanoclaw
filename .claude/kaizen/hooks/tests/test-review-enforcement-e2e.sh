@@ -13,22 +13,11 @@ PR_REVIEW_LOOP="$HOOKS_DIR/pr-review-loop.sh"
 ENFORCE_PR_REVIEW="$HOOKS_DIR/enforce-pr-review.sh"
 ENFORCE_PR_REVIEW_STOP="$HOOKS_DIR/enforce-pr-review-stop.sh"
 ENFORCE_PR_REVIEW_TOOLS="$HOOKS_DIR/enforce-pr-review-tools.sh"
-STATE_DIR="/tmp/.pr-review-state-test-e2e-$$"
-export STATE_DIR
-export DEBUG_LOG="/dev/null"
+setup_test_env
 
-setup() {
-  rm -rf "$STATE_DIR"
-  mkdir -p "$STATE_DIR"
-}
+setup() { reset_state; }
+teardown() { reset_state; }
 
-teardown() {
-  rm -rf "$STATE_DIR"
-}
-
-# Helpers: simulate hook invocations for each event type
-
-# Simulate PostToolUse for a Bash command
 sim_post_tool_use() {
   local command="$1"
   local stdout="$2"
@@ -43,19 +32,16 @@ sim_post_tool_use() {
     }' | bash "$PR_REVIEW_LOOP" 2>/dev/null
 }
 
-# Simulate PreToolUse for a Bash command
 sim_pre_tool_use_bash() {
   local command="$1"
   jq -n --arg cmd "$command" '{tool_input: {command: $cmd}}' | bash "$ENFORCE_PR_REVIEW" 2>/dev/null
 }
 
-# Simulate PreToolUse for a non-Bash tool
 sim_pre_tool_use_tool() {
   local tool_name="$1"
   jq -n --arg tool "$tool_name" '{tool_name: $tool, tool_input: {}}' | bash "$ENFORCE_PR_REVIEW_TOOLS" 2>/dev/null
 }
 
-# Simulate Stop event
 sim_stop() {
   local stop_hook_active="${1:-false}"
   jq -n --arg active "$stop_hook_active" '{
@@ -66,14 +52,9 @@ sim_stop() {
   }' | bash "$ENFORCE_PR_REVIEW_STOP" 2>/dev/null
 }
 
-# Decision extractors
-is_stop_blocked() {
-  echo "$1" | jq -e '.decision == "block"' >/dev/null 2>&1
-}
-
-is_tool_denied() {
-  echo "$1" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1
-}
+# Aliases for shared decision extractors (readable names for e2e context)
+is_stop_blocked() { is_blocked "$1"; }
+is_tool_denied() { is_denied "$1"; }
 
 echo "=== SCENARIO 1: Full lifecycle — create → stop blocked → review → stop allowed ==="
 echo "  This is the exact scenario that was broken before the fix."
@@ -313,7 +294,9 @@ else
   ((FAIL++))
 fi
 
-OUTPUT=$(sim_pre_tool_use_bash "ls -la")
+# ls is now allowed during review (kaizen #85, Fix C — read-only commands)
+# Use a work command (npm test) to verify Bash gate blocks
+OUTPUT=$(sim_pre_tool_use_bash "npm test")
 if is_tool_denied "$OUTPUT"; then
   echo "  PASS: S6.2: Bash gate blocks independently"
   ((PASS++))
@@ -342,5 +325,6 @@ else
 fi
 
 teardown
+rm -rf "$E2E_MOCK_DIR"
 
 print_results

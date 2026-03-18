@@ -25,12 +25,17 @@ export DEBUG_LOG="$HARNESS_TEMP/debug.log"
 ENFORCE="$HOOKS_DIR/enforce-pr-review.sh"
 LOOP="$HOOKS_DIR/pr-review-loop.sh"
 
+INTEG_MOCK_DIR="$HARNESS_TEMP/mock-bin"
+setup_default_gh_mock "$INTEG_MOCK_DIR"
+
+HOOK_ENV_VARS=$(printf 'STATE_DIR=%s\nPATH=%s\n' "$STATE_DIR" "$INTEG_MOCK_DIR:$PATH")
+
 # Helpers that use the harness input builders
 run_pre_hook() {
   local command="$1"
   local input
   input=$(build_pre_tool_use_input "Bash" "$(jq -n --arg c "$command" '{command: $c}')")
-  run_single_hook "$ENFORCE" "$input" 10 "STATE_DIR=$STATE_DIR"
+  run_single_hook "$ENFORCE" "$input" 10 "$HOOK_ENV_VARS"
 }
 
 run_post_hook() {
@@ -42,7 +47,7 @@ run_post_hook() {
   input=$(build_post_tool_use_input "Bash" \
     "$(jq -n --arg c "$command" '{command: $c}')" \
     "$stdout" "$stderr" "$exit_code")
-  run_single_hook "$LOOP" "$input" 10 "STATE_DIR=$STATE_DIR"
+  run_single_hook "$LOOP" "$input" 10 "$HOOK_ENV_VARS"
 }
 
 echo "=== Phase 1: Before PR create — no gate ==="

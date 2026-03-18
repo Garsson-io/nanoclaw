@@ -22,6 +22,7 @@ import path from 'path';
 import { authorizeCaseCreation } from './case-auth.js';
 import { getCaseSyncService } from './case-backend.js';
 import { DATA_DIR } from './config.js';
+import { sanitizeRequestId } from './ipc-sanitize.js';
 import {
   computePriority,
   loadEscalationConfig,
@@ -338,6 +339,7 @@ async function handleCaseCreate(
     githubIssue?: number;
     gapType?: string;
     signals?: Record<string, boolean>;
+    allowDuplicate?: boolean;
   };
   if (!d.description) {
     logger.warn({ sourceGroup }, 'case_create missing description');
@@ -348,23 +350,56 @@ async function handleCaseCreate(
     const existing = getActiveCasesByGithubIssue(d.githubIssue);
     if (existing.length > 0) {
       const names = existing.map((c) => c.name).join(', ');
+      if (!d.allowDuplicate) {
+        logger.warn(
+          { githubIssue: d.githubIssue, existingCases: names, sourceGroup },
+          `Blocked: Kaizen #${d.githubIssue} already has active case(s): ${names}`,
+        );
+        const warnJid =
+          d.chatJid ||
+          Object.entries(registeredGroups).find(
+            ([, g]) => g.folder === sourceGroup,
+          )?.[0];
+        if (warnJid) {
+          deps
+            .sendMessage(
+              warnJid,
+              `🚫 Kaizen #${d.githubIssue} already has active case(s): ${names}. Case creation blocked to prevent parallel work. Pass allowDuplicate: true to override.`,
+            )
+            .catch(() => {});
+        }
+        // Write error result file so the requesting agent gets feedback
+        const resultDir = path.join(
+          DATA_DIR,
+          'ipc',
+          sourceGroup,
+          'case_results',
+        );
+        fs.mkdirSync(resultDir, { recursive: true });
+        const rawReqId = (data as Record<string, unknown>).requestId as
+          | string
+          | undefined;
+        const safeReqId = rawReqId ? sanitizeRequestId(rawReqId) : '';
+        const resultFile = safeReqId
+          ? `${safeReqId}.json`
+          : `collision-${d.githubIssue}-${Date.now()}.json`;
+        fs.writeFileSync(
+          path.join(resultDir, resultFile),
+          JSON.stringify({
+            error: 'collision',
+            message: `Kaizen #${d.githubIssue} already has active case(s): ${names}`,
+            existingCases: existing.map((c) => ({
+              name: c.name,
+              status: c.status,
+            })),
+          }),
+        );
+        return;
+      }
       logger.warn(
         { githubIssue: d.githubIssue, existingCases: names, sourceGroup },
-        `Kaizen #${d.githubIssue} already has active case(s): ${names}`,
+        `Kaizen #${d.githubIssue} already has active case(s): ${names} — override via allowDuplicate`,
       );
-      const warnJid =
-        d.chatJid ||
-        Object.entries(registeredGroups).find(
-          ([, g]) => g.folder === sourceGroup,
-        )?.[0];
-      if (warnJid) {
-        deps
-          .sendMessage(
-            warnJid,
-            `⚠️ Kaizen #${d.githubIssue} already has active case(s): ${names}. Creating another anyway.`,
-          )
-          .catch(() => {});
-      }
     }
   }
 
@@ -415,9 +450,10 @@ async function handleCaseCreate(
 
     const resultDir = path.join(DATA_DIR, 'ipc', sourceGroup, 'case_results');
     fs.mkdirSync(resultDir, { recursive: true });
-    const resultFile = data.requestId
-      ? `${data.requestId}.json`
-      : `${suggested.id}.json`;
+    const safeReqId = data.requestId
+      ? sanitizeRequestId(String(data.requestId))
+      : '';
+    const resultFile = safeReqId ? `${safeReqId}.json` : `${suggested.id}.json`;
     fs.writeFileSync(
       path.join(resultDir, resultFile),
       JSON.stringify({
@@ -581,7 +617,10 @@ async function handleCaseCreate(
 
   const resultDir = path.join(DATA_DIR, 'ipc', sourceGroup, 'case_results');
   fs.mkdirSync(resultDir, { recursive: true });
-  const resultFile = data.requestId ? `${data.requestId}.json` : `${id}.json`;
+  const safeReqId = data.requestId
+    ? sanitizeRequestId(String(data.requestId))
+    : '';
+  const resultFile = safeReqId ? `${safeReqId}.json` : `${id}.json`;
   fs.writeFileSync(
     path.join(resultDir, resultFile),
     JSON.stringify({

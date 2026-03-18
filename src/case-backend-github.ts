@@ -146,6 +146,19 @@ export class GitHubCaseSyncAdapter implements CaseSyncAdapter {
           'Failed to store GitHub issue reference in SQLite',
         );
       }
+
+      // Add claim comment so other agents can see who is working on this
+      await addGitHubIssueComment({
+        owner: this.owner,
+        repo: this.repo,
+        issueNumber: result.issueNumber,
+        body: `**Claimed by case** \`${c.name}\`\n- **Type:** ${c.type}\n- **Worktree:** \`${c.worktree_path || 'N/A'}\`\n- **Created:** ${c.created_at}`,
+      }).catch((err) => {
+        logger.warn(
+          { caseId: c.id, issueNumber: result.issueNumber, err },
+          'Failed to add claim comment to GitHub issue',
+        );
+      });
     }
 
     return result;
@@ -170,6 +183,14 @@ export class GitHubCaseSyncAdapter implements CaseSyncAdapter {
 
     if (changes.description) {
       update.title = `[${c.type}] ${c.name}: ${c.description.slice(0, 100)}`;
+    }
+
+    // Close the GitHub issue when case reaches terminal status
+    if (
+      changes.status &&
+      (changes.status === 'done' || changes.status === 'reviewed')
+    ) {
+      update.state = 'closed';
     }
 
     return updateGitHubIssue({

@@ -12,6 +12,7 @@ import path from 'path';
 import pino from 'pino';
 
 import { MOUNT_ALLOWLIST_PATH } from './config.js';
+import { MountAllowlistSchema } from './schemas.js';
 import { AdditionalMount, AllowedRoot, MountAllowlist } from './types.js';
 
 const logger = pino({
@@ -24,9 +25,17 @@ let cachedAllowlist: MountAllowlist | null = null;
 let allowlistLoadError: string | null = null;
 
 /**
+ * Reset the in-memory cache. Exported for testing only.
+ */
+export function _resetCacheForTest(): void {
+  cachedAllowlist = null;
+  allowlistLoadError = null;
+}
+
+/**
  * Default blocked patterns - paths that should never be mounted
  */
-const DEFAULT_BLOCKED_PATTERNS = [
+export const DEFAULT_BLOCKED_PATTERNS = [
   '.ssh',
   '.gnupg',
   '.gpg',
@@ -73,20 +82,9 @@ export function loadMountAllowlist(): MountAllowlist | null {
     }
 
     const content = fs.readFileSync(MOUNT_ALLOWLIST_PATH, 'utf-8');
-    const allowlist = JSON.parse(content) as MountAllowlist;
-
-    // Validate structure
-    if (!Array.isArray(allowlist.allowedRoots)) {
-      throw new Error('allowedRoots must be an array');
-    }
-
-    if (!Array.isArray(allowlist.blockedPatterns)) {
-      throw new Error('blockedPatterns must be an array');
-    }
-
-    if (typeof allowlist.nonMainReadOnly !== 'boolean') {
-      throw new Error('nonMainReadOnly must be a boolean');
-    }
+    const allowlist: MountAllowlist = MountAllowlistSchema.parse(
+      JSON.parse(content),
+    );
 
     // Merge with default blocked patterns
     const mergedBlockedPatterns = [
@@ -121,7 +119,7 @@ export function loadMountAllowlist(): MountAllowlist | null {
 /**
  * Expand ~ to home directory and resolve to absolute path
  */
-function expandPath(p: string): string {
+export function expandPath(p: string): string {
   const homeDir = process.env.HOME || os.homedir();
   if (p.startsWith('~/')) {
     return path.join(homeDir, p.slice(2));
@@ -147,7 +145,7 @@ function getRealPath(p: string): string | null {
 /**
  * Check if a path matches any blocked pattern
  */
-function matchesBlockedPattern(
+export function matchesBlockedPattern(
   realPath: string,
   blockedPatterns: string[],
 ): string | null {
@@ -173,7 +171,7 @@ function matchesBlockedPattern(
 /**
  * Check if a real path is under an allowed root
  */
-function findAllowedRoot(
+export function findAllowedRoot(
   realPath: string,
   allowedRoots: AllowedRoot[],
 ): AllowedRoot | null {
@@ -199,7 +197,7 @@ function findAllowedRoot(
 /**
  * Validate the container path to prevent escaping /workspace/extra/
  */
-function isValidContainerPath(containerPath: string): boolean {
+export function isValidContainerPath(containerPath: string): boolean {
   // Must not contain .. to prevent path traversal
   if (containerPath.includes('..')) {
     return false;

@@ -8,31 +8,11 @@
 source "$(dirname "$0")/test-helpers.sh"
 
 HOOK="$(dirname "$0")/../enforce-pr-review-tools.sh"
-STATE_DIR="/tmp/.pr-review-state-test-tools-$$"
-export STATE_DIR
-export DEBUG_LOG="/dev/null"
+setup_test_env
 
-setup() {
-  rm -rf "$STATE_DIR"
-  mkdir -p "$STATE_DIR"
-}
+setup() { reset_state; }
+teardown() { reset_state; }
 
-teardown() {
-  rm -rf "$STATE_DIR"
-}
-
-# Helper: create a state file with given status
-create_state() {
-  local pr_url="$1"
-  local round="$2"
-  local status="$3"
-  local branch="${4:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'main')}"
-  local filename
-  filename=$(echo "$pr_url" | sed 's|https://github\.com/||;s|/pull/|_|;s|/|_|g')
-  printf 'PR_URL=%s\nROUND=%s\nSTATUS=%s\nBRANCH=%s\n' "$pr_url" "$round" "$status" "$branch" > "$STATE_DIR/$filename"
-}
-
-# Helper: run the PreToolUse hook with a tool name
 run_tool_gate() {
   local tool_name="$1"
   local input
@@ -45,12 +25,6 @@ run_tool_gate() {
     }
   }')
   echo "$input" | bash "$HOOK" 2>/dev/null
-}
-
-# Helper: check if output contains a deny decision
-is_denied() {
-  local output="$1"
-  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1
 }
 
 echo "=== No active review: all tools allowed ==="
@@ -169,7 +143,7 @@ echo "=== Empty tool name: allowed through ==="
 setup
 create_state "https://github.com/Garsson-io/nanoclaw/pull/42" "1" "needs_review"
 
-OUTPUT=$(echo '{"tool_name":""}' | STATE_DIR="$STATE_DIR" bash "$HOOK" 2>/dev/null)
+OUTPUT=$(echo '{"tool_name":""}' | PATH="$TOOLS_MOCK_DIR:$PATH" STATE_DIR="$STATE_DIR" bash "$HOOK" 2>/dev/null)
 if [ -z "$OUTPUT" ]; then
   echo "  PASS: empty tool name allowed through"
   ((PASS++))
@@ -202,7 +176,7 @@ echo "=== Stale state files do not block ==="
 setup
 create_state "https://github.com/Garsson-io/nanoclaw/pull/60" "1" "needs_review"
 STATE_FILE="$STATE_DIR/Garsson-io_nanoclaw_60"
-touch -d "3 hours ago" "$STATE_FILE" 2>/dev/null || touch -t "$(date -d '3 hours ago' +%Y%m%d%H%M.%S 2>/dev/null || date -v-3H +%Y%m%d%H%M.%S)" "$STATE_FILE" 2>/dev/null
+backdate_file "$STATE_FILE" 3
 
 # INVARIANT: Stale state files do not block tools
 # SUT: enforce-pr-review-tools.sh via state-utils.sh staleness check
@@ -216,5 +190,6 @@ else
 fi
 
 teardown
+rm -rf "$TOOLS_MOCK_DIR"
 
 print_results

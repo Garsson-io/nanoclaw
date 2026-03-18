@@ -3,32 +3,8 @@
 source "$(dirname "$0")/test-helpers.sh"
 
 HOOK="$(dirname "$0")/../enforce-pr-review.sh"
-STATE_DIR="/tmp/.pr-review-state-test-$$"
-export STATE_DIR
-export DEBUG_LOG="/dev/null"
+setup_test_env
 
-setup() {
-  rm -rf "$STATE_DIR"
-  mkdir -p "$STATE_DIR"
-}
-
-teardown() {
-  rm -rf "$STATE_DIR"
-}
-
-# Helper: create a state file with given status
-# Optional 4th arg: branch name (defaults to current branch)
-create_state() {
-  local pr_url="$1"
-  local round="$2"
-  local status="$3"
-  local branch="${4:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'main')}"
-  local filename
-  filename=$(echo "$pr_url" | sed 's|https://github\.com/||;s|/pull/|_|;s|/|_|g')
-  printf 'PR_URL=%s\nROUND=%s\nSTATUS=%s\nBRANCH=%s\n' "$pr_url" "$round" "$status" "$branch" > "$STATE_DIR/$filename"
-}
-
-# Helper: run the PreToolUse hook with a command
 run_gate() {
   local command="$1"
   local input
@@ -36,11 +12,8 @@ run_gate() {
   echo "$input" | bash "$HOOK" 2>/dev/null
 }
 
-# Helper: check if output contains a deny decision
-is_denied() {
-  local output="$1"
-  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1
-}
+setup() { reset_state; }
+teardown() { reset_state; }
 
 echo "=== No active review: all commands allowed ==="
 
@@ -102,12 +75,12 @@ else
   ((FAIL++))
 fi
 
-OUTPUT=$(run_gate "ls -la")
+OUTPUT=$(run_gate "node src/index.ts")
 if is_denied "$OUTPUT"; then
-  echo "  PASS: ls blocked during active review"
+  echo "  PASS: node blocked during active review"
   ((PASS++))
 else
-  echo "  FAIL: ls NOT blocked during active review"
+  echo "  FAIL: node NOT blocked during active review"
   ((FAIL++))
 fi
 
@@ -197,6 +170,87 @@ else
   ((FAIL++))
 fi
 
+# git fetch — needed for merge-from-main during review (kaizen #85, Fix C)
+OUTPUT=$(run_gate "git fetch origin main")
+if [ -z "$OUTPUT" ]; then
+  echo "  PASS: git fetch allowed during review"
+  ((PASS++))
+else
+  echo "  FAIL: git fetch blocked during review"
+  ((FAIL++))
+fi
+
+echo ""
+echo "=== Active review: read-only filesystem commands allowed (kaizen #85, Fix C) ==="
+
+# INVARIANT: Read-only filesystem commands are allowed during review gate
+# because they can't "do work" and are useful for debugging hooks and reviewing code
+# SUT: enforce-pr-review.sh is_review_command allowlist
+
+OUTPUT=$(run_gate "ls -la /tmp/.pr-review-state/")
+if [ -z "$OUTPUT" ]; then
+  echo "  PASS: ls allowed during review (hook debugging)"
+  ((PASS++))
+else
+  echo "  FAIL: ls blocked during review"
+  ((FAIL++))
+fi
+
+OUTPUT=$(run_gate "cat /tmp/.pr-review-state/some-file")
+if [ -z "$OUTPUT" ]; then
+  echo "  PASS: cat allowed during review (hook debugging)"
+  ((PASS++))
+else
+  echo "  FAIL: cat blocked during review"
+  ((FAIL++))
+fi
+
+OUTPUT=$(run_gate "stat /tmp/.pr-review-state/some-file")
+if [ -z "$OUTPUT" ]; then
+  echo "  PASS: stat allowed during review"
+  ((PASS++))
+else
+  echo "  FAIL: stat blocked during review"
+  ((FAIL++))
+fi
+
+OUTPUT=$(run_gate "find /tmp/.pr-review-state/ -type f")
+if [ -z "$OUTPUT" ]; then
+  echo "  PASS: find allowed during review"
+  ((PASS++))
+else
+  echo "  FAIL: find blocked during review"
+  ((FAIL++))
+fi
+
+OUTPUT=$(run_gate "head -20 src/index.ts")
+if [ -z "$OUTPUT" ]; then
+  echo "  PASS: head allowed during review"
+  ((PASS++))
+else
+  echo "  FAIL: head blocked during review"
+  ((FAIL++))
+fi
+
+OUTPUT=$(run_gate "wc -l src/index.ts")
+if [ -z "$OUTPUT" ]; then
+  echo "  PASS: wc allowed during review"
+  ((PASS++))
+else
+  echo "  FAIL: wc blocked during review"
+  ((FAIL++))
+fi
+
+# Work commands should still be blocked
+OUTPUT=$(run_gate "npm run build")
+if is_denied "$OUTPUT"; then
+  echo "  PASS: npm run build still blocked during review"
+  ((PASS++))
+else
+  echo "  FAIL: npm run build NOT blocked during review"
+  ((FAIL++))
+fi
+
 echo ""
 echo "=== Passed review: gate opens ==="
 
@@ -260,7 +314,7 @@ echo "=== Empty command: allowed through ==="
 
 # INVARIANT: Empty/missing commands are not blocked
 # SUT: enforce-pr-review.sh edge case handling
-OUTPUT=$(echo '{"tool_input":{}}' | STATE_DIR="$STATE_DIR" bash "$HOOK" 2>/dev/null)
+OUTPUT=$(echo '{"tool_input":{}}' | PATH="$GATE_MOCK_DIR:$PATH" STATE_DIR="$STATE_DIR" bash "$HOOK" 2>/dev/null)
 if [ -z "$OUTPUT" ]; then
   echo "  PASS: empty command allowed through"
   ((PASS++))
@@ -335,7 +389,7 @@ create_state "https://github.com/Garsson-io/nanoclaw/pull/50" "1" "needs_review"
 # SUT: enforce-pr-review.sh staleness check
 # Backdate the state file to 3 hours ago (10800 seconds)
 STATE_FILE="$STATE_DIR/Garsson-io_nanoclaw_50"
-touch -d "3 hours ago" "$STATE_FILE" 2>/dev/null || touch -t "$(date -d '3 hours ago' +%Y%m%d%H%M.%S 2>/dev/null || date -v-3H +%Y%m%d%H%M.%S)" "$STATE_FILE" 2>/dev/null
+backdate_file "$STATE_FILE" 3
 
 OUTPUT=$(MAX_STATE_AGE=7200 run_gate "npm test")
 if [ -z "$OUTPUT" ]; then
@@ -378,5 +432,6 @@ else
 fi
 
 teardown
+cleanup_test_env
 
 print_results
