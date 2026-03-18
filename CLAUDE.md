@@ -386,7 +386,7 @@ gh pr view <url> --repo Garsson-io/nanoclaw --json state --jq .state
 # Expected: "MERGED"
 
 # Step 4: Sync main
-git -C /home/aviadr1/projects/nanoclaw fetch origin main && git -C /home/aviadr1/projects/nanoclaw merge origin/main --no-edit
+git -C /home/aviadr1/projects/nanoclaw fetch origin main && git -C /home/aviadr1/projects/nanoclaw merge --ff-only origin/main
 ```
 
 **If CI fails**: fix the issue, commit, push. Auto-merge stays queued — CI re-runs automatically. Go back to step 2.

@@ -1,8 +1,15 @@
 #!/bin/sh
 
-# Block ALL pushes from the main checkout (not worktrees).
-# Defense-in-depth: if pre-commit blocks all commits in main checkout,
-# there should be nothing to push. This catches --no-verify bypass.
+# Block dev-branch pushes from the main checkout (not worktrees).
+# Allows pushing 'main' from the main checkout — this is legitimate
+# maintenance (syncing locally-merged commits back to origin).
+#
+# WHY: Agents merge PRs on GitHub (origin/main advances), then sync
+# locally with `git fetch origin main && git merge --ff-only origin/main`.
+# Those synced commits need to be pushed back. Blocking main pushes
+# causes commits to pile up locally with no way to sync.
+#
+# Dev branches are still blocked — all dev work must happen in worktrees.
 # Part of kAIzen Agent Control Flow — see .claude/kaizen/README.md
 #
 # Worktrees have git-dir != git-common-dir.
@@ -11,10 +18,22 @@ GIT_COMMON_PATH=$(git rev-parse --git-common-dir 2>/dev/null)
 
 if [ "$GIT_DIR_PATH" = "$GIT_COMMON_PATH" ]; then
   CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+
+  # Allow pushing main from the main checkout (post-merge sync)
+  if [ "$CURRENT_BRANCH" = "main" ]; then
+    exit 0
+  fi
+
   echo "" >&2
-  echo "Blocked: pushes from the main checkout are not allowed (branch: $CURRENT_BRANCH)." >&2
-  echo "The main checkout is the production instance, not a dev workspace." >&2
-  echo "Use a worktree: claude-wt or git worktree add." >&2
+  echo "Blocked: pushing branch '$CURRENT_BRANCH' from the main checkout." >&2
+  echo "" >&2
+  echo "WHY: The main checkout is the production instance. Dev branches" >&2
+  echo "must be pushed from worktrees to prevent agents from accidentally" >&2
+  echo "pushing untested code from the live environment." >&2
+  echo "" >&2
+  echo "FIX: Use a worktree for dev work:" >&2
+  echo "  claude-wt          # auto-creates isolated worktree" >&2
+  echo "  git worktree add   # manual worktree" >&2
   echo "" >&2
   exit 1
 fi
