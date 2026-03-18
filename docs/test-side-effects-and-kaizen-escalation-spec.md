@@ -22,40 +22,48 @@ The kaizen reflection process (triggered by the `check-dirty-files` hook) asks t
 
 But there's no mechanism to enforce it. The reflection is Level 1 (instructions). Repeated Level 1 reflections on the same issue should trigger Level 2 (a hook or automation that prevents the problem) or Level 3 (a code fix that eliminates the problem class entirely).
 
-## 2. Desired End State
+## 2. This Incident as a Case Study for Autonomous Kaizen
 
-After this work:
+This incident is a textbook example of why the autonomous kaizen system (PR #112, `docs/autonomous-kaizen-spec.md`) is needed. Let's trace what happened through the lens of the 7-step enhanced reflection protocol proposed there:
 
-1. **`npm test` does not dirty tracked files.** The generate-contract test writes to a temp path, not `contract.json`. The working tree is clean after tests.
+| Step | What should have happened | What actually happened |
+|------|--------------------------|----------------------|
+| **1. What happened?** | Test overwrites tracked file | Correctly identified both times |
+| **2. What class?** | `test_side_effect` — test modifies tracked artifacts | Not classified. Treated as one-off both times |
+| **3. Root cause chain** | Test calls CLI → CLI writes file → file is tracked → working tree dirty | Identified but stopped at "the test does it" |
+| **4. Blast radius** | Are there other tests that write to tracked files? | Never asked |
+| **5. Fix vs Prevent** | Fix: restore file. Prevent: export function, test in-memory | Fix applied (restore). Prevention described but not implemented |
+| **6. What level?** | L3 — code fix (export function) eliminates the class | Stayed at L1 (instruction to self: "fix it later") |
+| **7. Meta: Did kaizen fail?** | Yes — the reflection protocol produced correct analysis twice but no escalation | Not asked |
 
-2. **Kaizen reflections on repeated issues demand escalation.** When a dev agent writes a kaizen reflection on the same root cause for the second time, the process requires them to implement the fix (not just describe it) before proceeding.
+### What the autonomous kaizen system would have done differently
 
-### Out of scope
+1. **Structured incident record** — First occurrence would have been captured with `bug_class: test_side_effect`, not as ephemeral text in a conversation.
 
-- Changing the `check-dirty-files` hook itself (it's working correctly — the problem is the test)
-- Automated deduplication of kaizen reflections across sessions (useful but separate)
+2. **Recurrence detection** — Second occurrence would have matched the first by class. The system would flag: "This is recurring. L1 failed. Escalate."
 
-## 3. What Exists vs What Needs Building
+3. **Escalation enforcement** — Instead of allowing the agent to write another reflection and move on, the system would require implementing the prevention (export the function) before unblocking the push.
 
-### Already Solved
+4. **Blast radius scan** — "Where else do tests write to tracked files?" — would have been asked automatically as part of the protocol.
 
-| Capability | Current implementation | Status |
-|------------|----------------------|--------|
-| Dirty file detection | `.claude/kaizen/hooks/check-dirty-files.sh` | Working — correctly blocks pushes |
-| Contract generation | `scripts/generate-contract.ts` | Working — deterministic surfaces |
-| Contract check (read-only) | `scripts/generate-contract.ts check` | Working — compares without writing |
-| Kaizen reflection prompt | `check-dirty-files.sh` output | Working — asks the right questions |
+The key insight: **the current kaizen system treats reflections as outputs. The autonomous kaizen system treats them as inputs to a learning loop.** A reflection that doesn't change the system is noise, not signal.
 
-### Needs Building
+### How the kaizen system should improve itself
 
-| Component | What | Why it doesn't exist yet |
-|-----------|------|-------------------------|
-| Test isolation for generate-contract | Test writes to temp file, not `contract.json` | Original test took the simplest path — calling the script directly |
-| Kaizen escalation enforcement | Hook or process that detects repeated reflections and demands a fix | Kaizen reflections are currently fire-and-forget text responses |
+This incident reveals a specific gap in the kaizen process:
 
-## 4. Implementation
+**Current state:** Kaizen reflections are fire-and-forget. The agent writes one, the hook unblocks, and the reflection evaporates. No memory, no recurrence detection, no escalation.
 
-### Fix A: Isolate the generate-contract test
+**What's needed (from PR #112's framework):**
+- **Incident store** — reflections are written to SQLite, not just to conversation text
+- **Recurrence detection** — same `bug_class` appearing twice triggers escalation
+- **Escalation enforcement** — the hook can query the incident store and refuse to unblock if the agent hasn't escalated a recurring issue
+
+This is Phase 1 of the autonomous kaizen spec (incident store + enhanced reflection protocol). This specific incident should be the first seed record in that store.
+
+## 3. Immediate Fix: Isolate the generate-contract test
+
+The autonomous kaizen system is the systemic solution. But the specific bug should still be fixed now. This is the "fix the instance AND prevent the class" principle.
 
 **Current code** (`scripts/generate-contract.test.ts`):
 ```typescript
@@ -64,8 +72,6 @@ function getGeneratedContract() {
   return JSON.parse(fs.readFileSync(contractPath, 'utf-8'));
 }
 ```
-
-This calls the CLI which writes to `contract.json`. The test also has a "check fails when stale" test that tampers with `contract.json` and restores it.
 
 **Fix options:**
 
@@ -77,37 +83,17 @@ This calls the CLI which writes to `contract.json`. The test also has a "check f
 
 **Lean: A3** — the generator already has a `generateContract()` function. Export it, import it in the test, and compare the result in memory. The "check mode" test can use a temp file. This eliminates the side effect entirely.
 
-For the "check fails when stale" test: write a tampered contract to a temp file, then run check against that temp file.
-
-### Fix B: Kaizen escalation for repeated reflections
-
-This is a process/culture fix more than a code fix. The key insight:
-
-> **A kaizen reflection that identifies a fixable root cause but doesn't fix it is incomplete.**
-
-The `check-dirty-files` hook already forces the agent to reflect. What's missing is the forcing function to act on repeated reflections.
-
-**Proposed escalation rule** (for CLAUDE.md):
-
-When writing a kaizen reflection, the agent MUST check: "Have I written a reflection on this same root cause before in this session?" If yes:
-- The previous reflection was Level 1 (instruction to self)
-- Level 1 failed (the problem recurred)
-- The agent MUST now implement a Level 2 or Level 3 fix before proceeding
-- "I'll fix it later" is not acceptable for a repeated issue
-
-This is itself a Level 1 fix (an instruction in CLAUDE.md). If it fails — if agents keep writing repeated reflections without escalating — then it should become a Level 2 hook that checks for duplicate root causes in the session's reflection history.
-
-## 5. Implementation Sequencing
+## 4. Implementation Sequencing
 
 ```
-Fix A (test isolation) ─── standalone, ~15min
-Fix B (CLAUDE.md rule)  ─── standalone, ~5min
+Fix A (test isolation)        ─── standalone, ~15min, fixes the instance
+Autonomous kaizen Phase 1     ─── from PR #112, fixes the class
 ```
 
-No dependencies between them. Fix A is the higher-value change (eliminates the recurring trigger). Fix B prevents the meta-failure pattern across all future kaizen reflections.
+Fix A eliminates this specific recurring trigger. Phase 1 of autonomous kaizen (incident store + enhanced reflection + recurrence detection) prevents the meta-failure pattern across all future kaizen reflections — not just this one.
 
-## 6. Open Questions
+## 5. References
 
-**Q1: Should the generate-contract script accept an output path argument?**
-This would make it testable without any in-memory export. But A3 (export the function) is cleaner for testing. The CLI can keep writing to `contract.json` — only the test changes.
-Lean: A3, no output path argument needed.
+- **PR #112** (`docs/autonomous-kaizen-spec.md`) — the systemic solution
+- **Garsson-io/kaizen#80** — tracking issue for this specific incident
+- **Garsson-io/kaizen#81** — tracking issue for autonomous kaizen initiative
