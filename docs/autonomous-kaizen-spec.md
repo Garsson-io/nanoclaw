@@ -66,26 +66,26 @@ Every stage of the dev lifecycle generates learning. The system captures, classi
                     should the kaizen system itself
                     change? what did it miss? why?
                           |
-                    [6. SIMPLIFY]
+                    [6. SIMPLIFY / CONSOLIDATE]
                     what hooks/tests/processes should
-                    be REMOVED or consolidated?
+                    be consolidated, simplified, or removed?
                           |
                    (loop continues)
 ```
 
-### The Five-Step Algorithm (inspired by Musk's manufacturing process)
+### The Continuous Improvement Algorithm (adapted from Musk's manufacturing process)
 
-Applied to every kaizen reflection, in order:
+The manufacturing algorithm (question → delete → simplify → accelerate → automate) doesn't translate 1:1 to software. Physical parts have clear costs; software abstractions have subtler tradeoffs — DRY/reuse/consolidation is often better than deletion. But the **mindset** is valuable: always ask whether each piece of process is earning its keep.
+
+Applied to every kaizen reflection:
 
 1. **Question the requirement.** Is this hook/test/process even needed? Does the enforcement match a real risk, or is it ceremony? Every piece of enforcement has a maintenance cost — justify it.
 
-2. **Delete.** If we're not adding back 10% of what we delete, we're not deleting enough. Consolidate overlapping hooks. Remove checks that never fire. Kill tests that test mocks instead of behavior.
+2. **Ask: should we delete, simplify, or consolidate?** (Experimental — develop judgment here over time.) In manufacturing, "delete the part" is clear. In software, the answer is often "reuse," "consolidate overlapping checks," or "simplify the interface" rather than outright deletion. The question to ask: "Is this process pulling its weight? Could two checks become one? Could a 50-line hook be 10 lines? Is there a test that tests mocks instead of behavior?" Sometimes the answer IS deletion (a hook that never fires, a test that tests nothing real). But often it's improvement.
 
-3. **Simplify.** Make remaining processes lighter, clearer, less error-prone. A 50-line hook that could be 10 lines is a liability, not an asset.
+3. **Accelerate.** Faster feedback loops. Catch things at edit time, not CI time. Catch things at CI time, not production time. Reduce the distance between mistake and correction.
 
-4. **Accelerate.** Faster feedback loops. Catch things at edit time, not CI time. Catch things at CI time, not production time. Reduce the distance between mistake and correction.
-
-5. **Automate.** Only after steps 1-4. Automation of a bad process just makes it fail faster.
+4. **Automate.** Only after steps 1-3. Automation of a bad process just makes it fail faster.
 
 ### What "Good" Looks Like
 
@@ -93,7 +93,7 @@ Applied to every kaizen reflection, in order:
 - When a PR review catches something the agent should have gotten right, the system asks "why did the agent miss this? what would have made it succeed the first time?"
 - When CI catches an error, the system asks "should we have caught this earlier? At edit time? At the hook level?"
 - When a human corrects the system, the correction is stored structurally and applied to future similar situations — not just as a CLAUDE.md line (L1) but as whatever enforcement level the pattern warrants.
-- The system periodically asks: "what hooks never fire? what tests never fail? what processes add friction without catching real bugs?" — and proposes removals.
+- The system periodically asks: "what hooks never fire? what tests never fail? what processes add friction without catching real bugs?" — and proposes consolidation, simplification, or removal.
 - Over time, the ratio of human interventions to automated catches decreases.
 
 ### What's Out of Scope
@@ -231,19 +231,21 @@ Incident Record:
 
 ### 4.2 Incident Store
 
-**Option A: SQLite table** (in `store/messages.db`)
-- Pros: Already have SQLite infrastructure, queryable, local
-- Cons: Not visible in GitHub, harder to share across machines
+The incident store must be **cloud-accessible** — agents, humans, and future automation all need to reach it from anywhere. Local-only storage (SQLite, JSON files) creates silos.
 
-**Option B: GitHub Issues** (in `Garsson-io/kaizen`)
-- Pros: Already using this, visible, searchable, linkable
-- Cons: API rate limits, harder to query structurally, no schema enforcement
+**Option A: GitHub Issues** (in `Garsson-io/kaizen`)
+- Pros: Already using this for kaizen backlog, visible, searchable, linkable, free, built-in labels/milestones for classification
+- Cons: API rate limits, no structured schema (labels + body template approximate it), harder to run aggregate queries
 
-**Option C: JSON files** (in `data/kaizen/incidents/`)
-- Pros: Simple, git-trackable if wanted, schema-enforced locally
-- Cons: No query engine, grows unboundedly
+**Option B: Linear (free plan)**
+- Pros: Structured fields, fast UI, good filtering/grouping, API-friendly
+- Cons: Another tool to maintain, free plan limits
 
-**Recommendation:** SQLite table for structured data (queryable, fast), with GitHub Issues as the human-facing view for significant incidents. The SQLite table is the source of truth; issues are created for incidents that warrant human attention or action.
+**Option C: GitHub Issues with structured body template**
+- Pros: Same as A, but with a YAML/JSON frontmatter block in the issue body that tools can parse for structured queries
+- Cons: Fragile parsing, depends on agents following the template
+
+**Recommendation:** GitHub Issues in `Garsson-io/kaizen` with a structured body template (Option C). We already use this repo as the kaizen backlog. Add a machine-parseable YAML block at the top of each incident issue for structured fields (bug_class, severity, lifecycle_stage, recurrence_count, fix_level). Labels provide fast filtering. The body provides rich context. This is zero new infrastructure — just a convention on top of what exists. If we outgrow it, Linear or a dedicated tool is an easy migration since the data is already structured.
 
 ### 4.3 Enhanced Reflection Engine
 
@@ -339,7 +341,7 @@ Human Feedback ──────┘                          │
                                                 │
                                         ┌───────▼─────────┐
                                         │  Incident Store  │
-                                        │  (SQLite)        │
+                                        │  (GitHub Issues) │
                                         └───────┬─────────┘
                                                 │
                                         ┌───────▼─────────┐
@@ -371,11 +373,11 @@ Human Feedback ──────┘                          │
 
 | Component | How It Changes |
 |-----------|---------------|
-| `kaizen-reflect.sh` | Enhanced reflection protocol (7-step, not 5-step). Writes structured incident record to SQLite. |
+| `kaizen-reflect.sh` | Enhanced reflection protocol (7-step, not 5-step). Creates structured incident issue in GitHub. |
 | `case_mark_done` MCP tool | Kaizen array gets richer schema: `bug_class`, `root_cause_chain`, `blast_radius`, `prevention_system`. |
 | `pr-review-loop.sh` | Tracks WHAT categories review caught. Feeds into incident store. |
 | `verify-before-stop.sh` | On failure, captures what failed and why as an incident. |
-| New: `kaizen_incidents` SQLite table | Structured incident store. |
+| New: Incident issue template | Structured incident records as GitHub Issues with YAML frontmatter. |
 | New: Pattern analysis scheduled task | Periodic cross-incident analysis. |
 | New: Incident query MCP tool | Agent can query past incidents by class, recurrence, etc. |
 | Existing: `Garsson-io/kaizen` issues | Human-facing view of significant incidents and proposals. |
@@ -394,7 +396,7 @@ Human Feedback ──────┘                          │
    c. Classifies bug class, root cause, blast radius
    d. Proposes prevention system (not just instance fix)
    e. Meta-reflects: "should kaizen itself change?"
-5. Incident record written to SQLite
+5. Incident issue created in Garsson-io/kaizen (with structured YAML block)
 6. If significant: GitHub issue created in Garsson-io/kaizen
 7. If actionable: dev case suggested via case_suggest_dev
 8. Agent continues to merge flow
@@ -452,8 +454,8 @@ Human Feedback ──────┘                          │
 
 | Component | State | Storage | Survives Restart | Recovery |
 |-----------|-------|---------|-----------------|----------|
-| Incident records | Structured incident data | SQLite `kaizen_incidents` table | Yes | N/A — persistent |
-| Pattern analysis results | Latest analysis report | SQLite or JSON file | Yes | Re-run analysis |
+| Incident records | Structured incident data | GitHub Issues in `Garsson-io/kaizen` with YAML frontmatter | Yes (cloud) | N/A — persistent |
+| Pattern analysis results | Latest analysis report | GitHub Issue (pinned) or wiki page | Yes (cloud) | Re-run analysis |
 | Bug class taxonomy | Known categories + descriptions | JSON config file | Yes | N/A — version controlled |
 | Enforcement inventory | List of all hooks, CI steps, tests with metadata | Generated from code scan | Regenerated | Scan on demand |
 
@@ -476,8 +478,8 @@ Human Feedback ──────┘                          │
 | Component | What | Why It Doesn't Exist Yet |
 |-----------|------|-------------------------|
 | **Enhanced reflection protocol** | 7-step structured reflection replacing current 5-step | Current protocol asks "what happened" but not "what class" or "where else" |
-| **Incident store** | `kaizen_incidents` SQLite table with structured schema | Currently reflections are ephemeral — they produce issues/cases but the analysis itself is lost |
-| **Incident record writer** | Hook/tool logic that writes structured records to SQLite | No infrastructure to capture reflections structurally |
+| **Incident issue template** | Structured GitHub Issue template with YAML frontmatter for machine-parseable fields | Currently reflections are ephemeral — they produce issues/cases but the analysis itself is lost |
+| **Incident record writer** | Hook/tool logic that creates structured incident issues via `create_github_issue` | No infrastructure to capture reflections structurally |
 | **Bug class taxonomy** | Initial set of categories (contract_violation, migration_incomplete, etc.) | Currently freeform — no shared vocabulary across incidents |
 | **Blast radius scanner** | Given a bug class, find other instances of the same pattern in the codebase | Currently agents might do this ad-hoc, but it's not part of the protocol |
 | **Cross-incident query tool** | MCP tool for agents to query incident history by class, recurrence, layer | Agents can't currently learn from past incidents |
@@ -498,7 +500,7 @@ Human Feedback ──────┘                          │
 - **Lean: C.** Too much structure too early will produce low-quality checkbox answers. Let the taxonomy emerge from real incidents, then crystallize it.
 
 **Q2: Should pattern analysis use an LLM or be rule-based?**
-- Option A: Rule-based — SQL queries for recurrence, simple category matching.
+- Option A: Rule-based — GitHub API queries for recurrence by label, simple category matching.
 - Option B: LLM-assisted — feed incident records to Claude for cross-cutting pattern identification.
 - Option C: Start with A, add B when rule-based misses patterns humans notice.
 - **Lean: A first, then C.** Rule-based is deterministic and debuggable. LLM adds insight but also hallucination risk. Start simple.
@@ -509,9 +511,11 @@ Human Feedback ──────┘                          │
 - Option C: Emergent from incident records (no fixed list — agent classifies freely)
 - **Lean: B with C as input.** Start with a seed taxonomy from known categories, let agents suggest new classes, periodically review and merge.
 
-**Q4: How do we handle the "delete" step practically?**
-- When the system identifies a hook that never fires, it should propose removal. But hooks exist because of past incidents — removing them feels risky.
-- Mitigation: Track "last fired" timestamp for every hook. If a hook hasn't fired in 60 days, flag it for review. The review asks: "is the risk still real? has the architecture made this impossible? or are we just not triggering the conditions?"
+**Q4: How do we handle simplification/consolidation practically?**
+- Software isn't a physical product — "delete the part" doesn't translate directly. DRY, reuse, and consolidation are often better than deletion. This is an area to develop judgment over time.
+- When the system identifies a hook that never fires, the options are: consolidate it into a broader check, simplify it, or remove it. Pure removal feels risky since hooks exist because of past incidents.
+- Experimental approach: Track "last fired" timestamp for every hook. If a hook hasn't fired in 60 days, flag it for review. The review asks: "is the risk still real? has the architecture made this impossible? could this be consolidated with another check? or should it be removed?"
+- This is explicitly visionary/experimental — develop the instinct for when to simplify vs when to leave alone.
 
 **Q5: Should there be a dedicated kaizen reflection skill?**
 - The current reflection lives in `kaizen-reflect.sh` (a hook). Making it a skill would allow richer interaction (agent can query incident store, do blast radius scans, etc.)
@@ -520,7 +524,7 @@ Human Feedback ──────┘                          │
 
 ### Known Risks
 
-**Risk: Over-kaizening.** Adding too many hooks, checks, and processes creates DX friction that slows development and produces false positives. The "delete" and "simplify" steps exist specifically to counter this, but they require discipline.
+**Risk: Over-kaizening.** Adding too many hooks, checks, and processes creates DX friction that slows development and produces false positives. The "simplify/consolidate" step exists specifically to counter this, but developing the judgment for when to simplify vs when to add is an ongoing experiment.
 
 **Risk: Taxonomy sprawl.** Without curation, bug classes multiply until they're meaningless. Need periodic consolidation (part of the pattern analysis task).
 
@@ -534,7 +538,7 @@ Human Feedback ──────┘                          │
 
 **Goal:** Structured incident capture and enhanced reflection.
 
-1. **Incident store** — `kaizen_incidents` SQLite table, schema, basic CRUD.
+1. **Incident store** — GitHub Issue template with YAML frontmatter, labels for classification, `create_github_issue` integration.
 2. **Enhanced reflection protocol** — Update `kaizen-reflect.sh` with the 7-step protocol. Agent writes free-form following the structure; key fields (bug_class, severity, human_affected) extracted and stored.
 3. **Seed bug class taxonomy** — JSON config with initial categories derived from past incidents.
 
@@ -559,7 +563,7 @@ Human Feedback ──────┘                          │
 **Goal:** The system evaluates and improves itself.
 
 10. **Meta-kaizen reflection** — After each pattern analysis, evaluate whether the kaizen system itself is improving. Self-referential but capped at 2 levels.
-11. **Delete/simplify proposals** — System proposes removal of dead enforcement, consolidation of overlapping checks, simplification of heavyweight processes.
+11. **Simplify/consolidate proposals** — System proposes consolidation of overlapping checks, simplification of heavyweight processes, and (where clearly warranted) removal of dead enforcement. Experimental — develop judgment over time.
 
 ### Dependency Graph
 
