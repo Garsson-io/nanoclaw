@@ -40,6 +40,11 @@
             "type": "command",
             "command": "./.claude/kaizen/hooks/check-dirty-files.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "./.claude/kaizen/hooks/enforce-pr-kaizen.sh",
+            "timeout": 10
           }
         ]
       },
@@ -81,6 +86,11 @@
           {
             "type": "command",
             "command": "./.claude/kaizen/hooks/kaizen-reflect.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "./.claude/kaizen/hooks/pr-kaizen-clear.sh",
             "timeout": 10
           }
         ]
