@@ -1,0 +1,13 @@
+{
+  "$schema": "https://nanoclaw.dev/nanoclaw-compat.schema.json",
+  "name": "example-vertical",
+  "minContractVersion": 1,
+  "uses": {
+    "mcpTools": ["send_message", "send_image", "schedule_task", "create_case", "list_cases"],
+    "ipcTypes": ["message", "image", "schedule_task"],
+    "mountPaths": ["/workspace/group", "/workspace/ipc"],
+    "envVars": ["TZ", "NANOCLAW_CASE_ID"],
+    "configSchema": ["config/escalation.yaml"],
+    "caseSyncAdapter": ["createCase", "updateCase", "closeCase"]
+  }
+}
