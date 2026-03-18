@@ -1,4 +1,4 @@
-# Competitor Analysis: Customer-Facing Agent Platforms with Case Isolation
+# Vertical Agent Ventures: Market, Architecture, and Strategy
 
 Status: **Draft** | Date: 2026-03-18
 
@@ -18,9 +18,9 @@ This document surveys existing solutions — in the Claw ecosystem, open-source,
 
 ### 1.1 OpenClaw
 
-The dominant open-source AI agent platform (~7,000 GitHub stars). Multi-channel (Slack, Discord, Telegram, WhatsApp, webchat). Single-operator model — the official docs explicitly state it is "not designed as a hostile multi-tenant security boundary for multiple adversarial users sharing one agent/gateway."
+One of the largest open-source AI agent projects. Multi-channel (Slack, Discord, Telegram, WhatsApp, webchat). Single-operator model — the official docs explicitly state it is "not designed as a hostile multi-tenant security boundary for multiple adversarial users sharing one agent/gateway."
 
-**Business model:** Talent acquisition / reputation play. The team was acquired by NVIDIA, resulting in Nemoclaw — NVIDIA's AI agent infrastructure play. The open-source project builds adoption and community; NVIDIA's business model is selling GPU/cloud compute (same playbook as CUDA: give away the software, sell the hardware).
+**Business model:** Acquired by NVIDIA (Nemoclaw). Open-source builds adoption; NVIDIA monetizes via GPU/cloud compute.
 
 | Aspect | OpenClaw | Garsson Harness |
 |--------|----------|-----------------|
@@ -79,25 +79,18 @@ Claude Code orchestrator with Telegram I/O, Docker isolation, swarm patterns, Mi
 
 Lightweight, security-focused alternative to OpenClaw. One Node.js process, container-isolated agent execution, ~4K lines. Created by a single developer as a personal assistant — the "small enough to understand" philosophy.
 
-**Business model — L1/L2 trajectory:**
-
-Successful open-source AI projects follow a predictable path. The creator distinguishes themselves, builds reputation, and either gets acquired for talent (OpenClaw → NVIDIA) or builds a company around the project. The most common commercial model is L1/L2:
-
-- **L1 (open-source)**: NanoClaw as it is today — fork, customize, self-host. Free. Builds adoption, community, and the creator's reputation.
-- **L2 (cloud SaaS)**: Hosted NanoClaw with premium features — managed containers, monitoring dashboard, one-click channel setup, team management, backup/restore. The value is convenience + features that are painful to self-host. This is the GitLab / Supabase / PostHog playbook.
-
-NanoClaw hasn't launched L2 yet, but the trajectory is clear. If they add multi-tenant features (the Agents Plane proposal from the OpenClaw ecosystem) and launch a cloud offering, they'd compete at the infrastructure layer.
+**Business model trajectory:** Currently open-source and self-hosted. If NanoClaw later adds hosted multi-tenant features, it could become an infrastructure-layer competitor (the GitLab / Supabase playbook).
 
 | Aspect | NanoClaw | Garsson Harness |
 |--------|----------|-----------------|
-| Business model | Open-source L1, likely cloud SaaS L2 | Closed-source harness + venture portfolio |
+| Business model | Open-source, likely cloud SaaS | Closed-source harness + venture portfolio |
 | Target user | Individual developer / power user | Product expert running a vertical business |
 | Isolation | Per-group (containers) | Per-case (containers + CRM + MCP) |
 | Customer-facing | No (personal assistant) | Yes (router + work agents + bot swarm) |
 | Multi-tenant | No | Yes (case isolation enables competitor companies on same vertical) |
 | Monetization | Reputation → talent acquisition or SaaS | Direct revenue from vertical ventures |
 
-**Threat assessment:** If NanoClaw launches a hosted L2 with multi-tenant support, they'd be a credible infrastructure competitor with an open-source community advantage. Our differentiation would then be:
+**Threat assessment:** If NanoClaw launches a hosted offering with multi-tenant support, they'd be a credible infrastructure competitor with an open-source community advantage. Our differentiation would then be:
 - Purpose-built for customer-facing verticals (they're general-purpose)
 - Deeper isolation (case-level vs group-level)
 - Venture portfolio model (we're the operator, not just the platform vendor)
@@ -235,10 +228,10 @@ Based on this survey, the following aspects of NanoClaw's planned architecture h
 | **Three agent roles with distinct trust boundaries** | ServiceNow has multiple agent types, but with app-level isolation | Router (intake only), work (per-case CRM), dev (code only). OS-level enforcement per role. |
 | **Bot identity as routing mechanism** | Nobody — all competitors use LLM classifiers or manual routing | Which Telegram bot you message = which case. Mechanistic, zero-cost, zero-hallucination routing. |
 | **Customer CRM binding at container boundary** | Sierra does this at app level | CRM MCP server rejects queries for wrong customer. OS-level + data-level + capability-level enforcement. |
-| **Kaizen feedback loop in case lifecycle** | Nobody | Case completion triggers reflection → suggested dev improvements → better tooling → better case outcomes |
+| **Kaizen feedback loop in case lifecycle** | Nobody | Case completion triggers reflection → suggested dev improvements → better tooling → better case outcomes. Example: a recurring quoting mistake becomes a vertical-level prompt fix; a repeated payment-status lookup becomes a harness-level integration. |
 | **Harness/vertical architecture** | Nobody in the Claw ecosystem | Public harness + private vertical repos mounted into containers. Domain code separated from infrastructure. |
 
-The individual techniques aren't new (containers, CRM scoping, named bots). The combination and the depth of isolation enforcement is what's novel.
+The individual techniques aren't new (containers, CRM scoping, named bots). The combination and the depth of isolation enforcement is what's novel. These boundaries are enforced at different layers: runtime/container isolation, tool-level access control, and workflow/role-level capability restriction.
 
 ---
 
@@ -339,7 +332,7 @@ Strategy:
 - **First mover in OS-level case isolation**: No open-source or commercial competitor offers container-per-case isolation with CRM scoping
 - **Vertical expansion**: Every industry with customer service + data sensitivity is a potential venture (insurance, legal, healthcare, financial services)
 - **Compounding returns**: Each vertical hardens the harness, surfaces missing tools, and validates the model — making the next vertical faster to launch
-- **Closed-source moat**: The proprietary layers (case isolation, CRM, agent swarm) are the core value and defensible IP
+- **Closed-source moat**: Keeping the source closed may buy time to build operational depth, but the moat is operational, not merely legal
 
 ### Threats
 
