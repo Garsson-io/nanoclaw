@@ -671,18 +671,6 @@ Case types:
       .describe(
         'Customer organization or business name, if mentioned in the conversation.',
       ),
-    gap_type: z
-      .string()
-      .optional()
-      .describe(
-        'Escalation gap type when this case needs admin input or approval. Common types: "information_expected" (missing business data from admin), "capability_expected" (missing tool/feature), "approval_required" (needs explicit sign-off). The gap type determines priority, routing, and notification behavior per the vertical\'s escalation config.',
-      ),
-    signals: z
-      .record(z.string(), z.boolean())
-      .optional()
-      .describe(
-        'Context signals that affect escalation priority. Known signals: "admin_initiated" (request came from an admin), "customer_waiting" (customer is actively waiting for a response), "main_channel" (request originated from the main control group). Each true signal adds weight to the priority score.',
-      ),
   },
   async (args) => {
     const requestId = `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -902,6 +890,55 @@ Use this when:
         {
           type: 'text' as const,
           text: `Comment added to case ${args.case_id}.`,
+        },
+      ],
+    };
+  },
+);
+
+server.tool(
+  'attach_case_artifact',
+  `Attach a file, link, or reference to a case. Use this to associate deliverables, source files, external URLs, or any other artifact with a case for tracking.
+
+The artifact is recorded as a structured comment on the case and synced to the cloud backend.`,
+  {
+    case_id: z.string().describe('The case ID to attach the artifact to'),
+    artifact_type: z
+      .enum(['file', 'link', 'note'])
+      .describe('Type of artifact: file path, URL/link, or free-text note'),
+    value: z
+      .string()
+      .describe('The artifact value: a file path, URL, or note text'),
+    description: z
+      .string()
+      .optional()
+      .describe('Brief description of what this artifact is'),
+  },
+  async (args) => {
+    const label =
+      args.artifact_type === 'file'
+        ? '📎'
+        : args.artifact_type === 'link'
+          ? '🔗'
+          : '📝';
+    const desc = args.description ? ` — ${args.description}` : '';
+    const text = `${label} **Artifact (${args.artifact_type}):** ${args.value}${desc}`;
+
+    const data = {
+      type: 'case_add_comment',
+      caseId: args.case_id,
+      text,
+      author: 'agent',
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(TASKS_DIR, data);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `Artifact attached to case ${args.case_id}: ${args.artifact_type} — ${args.value}`,
         },
       ],
     };

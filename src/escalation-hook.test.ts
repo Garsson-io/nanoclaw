@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { onCaseEscalationEvent } from './escalation-hook.js';
-import { makeCase } from './test-helpers.js';
+import { makeCase } from './test-helpers.test-util.js';
 
 // INVARIANT: Escalation hook logs relevant mutations without throwing
 // SUT: onCaseEscalationEvent

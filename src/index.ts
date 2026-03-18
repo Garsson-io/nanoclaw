@@ -89,8 +89,8 @@ import { Channel, NewMessage, RegisteredGroup, UsageData } from './types.js';
 import { logger } from './logger.js';
 import { detectAuthMode } from './credential-proxy.js';
 import { CASE_SYNC_ENABLED, CASE_SYNC_REPO } from './config.js';
-import { CaseSyncService, setActiveSyncService } from './case-sync.js';
-import { GitHubCaseSyncAdapter } from './case-sync-github.js';
+import { CaseSyncService, setActiveSyncService } from './case-backend.js';
+import { GitHubCaseSyncAdapter } from './case-backend-github.js';
 import { registerCaseMutationHook } from './cases.js';
 import { onCaseEscalationEvent } from './escalation-hook.js';
 
