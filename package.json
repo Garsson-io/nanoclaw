@@ -18,8 +18,10 @@
     "auth": "tsx src/whatsapp-auth.ts",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "vitest run --config vitest.config.e2e.ts",
     "contract:generate": "tsx scripts/generate-contract.ts",
-    "contract:check": "tsx scripts/generate-contract.ts check"
+    "contract:check": "tsx scripts/generate-contract.ts check",
+    "compat:check": "tsx scripts/check-vertical-compat.ts"
   },
   "dependencies": {
     "better-sqlite3": "^11.8.1",
