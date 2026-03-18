@@ -182,7 +182,7 @@ Before declaring the plan done, check:
 - [ ] **No circular dependencies.** If A depends on B and B depends on A, merge them or restructure.
 - [ ] **Critical path is clear.** Which PR sequence is the longest? That's your bottleneck.
 - [ ] **High-risk PRs are small.** If a PR is both high-risk AND large, split it further.
-- [ ] **Each PR has clear acceptance criteria.** Not "implement the thing" but specific, testable outcomes.
+- [ ] **Each PR row in the epic has clear acceptance criteria.** Not "implement the thing" but specific, testable outcomes in the dependency table.
 - [ ] **The first phase has no dependencies.** Someone can start working immediately.
 
 ## Cross-References
