@@ -1137,6 +1137,15 @@ export async function processTaskIpc(
         token_source: null,
         time_spent_ms: 0,
         github_issue: githubIssue,
+        github_issue_url: issueUrl || null,
+        customer_name:
+          ((d as Record<string, unknown>).customer_name as string) || null,
+        customer_phone:
+          ((d as Record<string, unknown>).customer_phone as string) || null,
+        customer_email:
+          ((d as Record<string, unknown>).customer_email as string) || null,
+        customer_org:
+          ((d as Record<string, unknown>).customer_org as string) || null,
         priority: null,
         gap_type: null,
       };
