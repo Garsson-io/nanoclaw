@@ -10,7 +10,51 @@ Related: [Case Isolation Spec](case-isolation-spec.md) | [kaizen#65](https://git
 
 Garsson Harness is a closed-source, customer-facing agent platform built on NanoClaw's open-source infrastructure. Each work item (case) runs in an isolated container with per-customer data scoping. The harness powers a portfolio of vertical ventures — each venture is a separate private repo with domain-specific workflows, operated by a domain operator who knows the industry.
 
-This document surveys existing solutions — in the Claw ecosystem, open-source, and commercial — to understand what exists, what gaps remain, and what appears differentiated about our approach.
+This memo argues two things: first, that customer-facing AI agents deployed into real business workflows need stronger operational boundaries than current platforms provide. Second, that the business opportunity is in messy, under-served, service-heavy verticals — not in generic support chat or enterprise SaaS.
+
+---
+
+## Thesis
+
+AI can automate exception-heavy service workflows in under-served verticals, but only if deployed through a constrained operating model: case-level isolation, scoped data access, domain operators, and recursive improvement.
+
+This is not a thesis about winning generic customer support. It is about a specific class of workflows: multi-step, multi-party, data-sensitive operations in industries where the current tooling is WhatsApp groups, spreadsheets, and phone calls.
+
+**The thesis is wrong if:**
+
+- Application-level isolation (prompt engineering, DB row filtering, policy engines) turns out to be sufficient for customer-facing deployments in sensitive workflows — making OS-level isolation an unnecessary cost
+- Large platforms (Sierra, Agentforce) move downmarket fast enough to serve small local businesses before we establish vertical footholds
+- Domain operators turn out to be unnecessary — i.e., small businesses adopt AI agent tooling directly from generic SaaS providers without needing a trusted industry partner
+- The operational overhead of per-case containers makes the unit economics unworkable at scale
+
+---
+
+## What Case Isolation Means
+
+Case isolation means each work item runs in its own container with access only to the data it needs. No case can see another case's data, even if both cases belong to the same customer.
+
+These boundaries are enforced at different layers:
+
+- **Runtime isolation**: Each case gets its own container — separate filesystem, process space, network
+- **Data isolation**: CRM MCP server scopes queries to the current case's customer. Queries for other customers are rejected.
+- **Capability isolation**: MCP tools are restricted by agent role. Work agents get read-only CRM. Dev agents get code tools but no customer data.
+- **Identity isolation**: Bot identity determines routing. Which bot you message determines which case handles your request.
+
+Containerization is the easy part. Safe, scoped data access and identity resolution are the hard parts.
+
+---
+
+## Why This Market May Be Open Now
+
+Most small businesses will not build this automation themselves. They lack both the technical capacity and the economic reason to become software integrators.
+
+Large platforms (Salesforce, ServiceNow, Sierra) serve enterprises with dedicated IT teams and six-figure contracts. They are unlikely to prioritize a printing workshop in Holon or an insurance broker in Netanya in the near term.
+
+Open-source agent frameworks (OpenClaw, NanoClaw) give developers tools to build personal assistants, but they are not designed for customer-facing multi-tenant deployment where data leakage between customers is a trust-destroying event.
+
+The gap is: **nobody is building agent infrastructure specifically for domain operators who serve small businesses in local markets.** The value pool is not mainly SaaS budget — it is operator time currently spent on manual coordination, quoting, follow-up, and exception handling.
+
+A vertical tuned for the Israeli printing industry is unlikely to face a deeply localized global competitor in the near term — the market is too small for large platforms to prioritize, but large enough to sustain a focused venture.
 
 ---
 
@@ -35,7 +79,7 @@ One of the largest open-source AI agent projects. Multi-channel (Slack, Discord,
 
 ### 1.2 Lobu
 
-Multi-tenant wrapper for OpenClaw. The closest competitor in the Claw ecosystem.
+Multi-tenant wrapper for OpenClaw. Appears to be the closest competitor in the Claw ecosystem.
 
 | Aspect | Lobu | Garsson Harness |
 |--------|------|-----------------|
@@ -88,7 +132,7 @@ Lightweight, security-focused alternative to OpenClaw. One Node.js process, cont
 | Isolation | Per-group (containers) | Per-case (containers + CRM + MCP) |
 | Customer-facing | No (personal assistant) | Yes (router + work agents + bot swarm) |
 | Multi-tenant | No | Yes (case isolation enables competitor companies on same vertical) |
-| Monetization | Reputation → talent acquisition or SaaS | Direct revenue from vertical ventures |
+| Monetization | Not yet clear | Direct revenue from vertical ventures |
 
 **Threat assessment:** If NanoClaw launches a hosted offering with multi-tenant support, they'd be a credible infrastructure competitor with an open-source community advantage. Our differentiation would then be:
 - Purpose-built for customer-facing verticals (they're general-purpose)
@@ -123,7 +167,7 @@ No existing Claw ecosystem project combines customer-facing deployment with case
 
 ### 2.1 Sierra AI
 
-Purpose-built for customer-facing AI agents. The closest commercial analog to what we're building.
+Purpose-built for customer-facing AI agents. Appears to be the closest commercial analog to what we're building.
 
 | Aspect | Sierra AI | Garsson Harness |
 |--------|-----------|-----------------|
@@ -226,12 +270,11 @@ Based on this survey, the following aspects of the harness architecture appear u
 |-----------|-------------------|--------------|
 | **Case-level OS isolation** (container per work item, not per channel/tenant) | Not seen in surveyed projects | Each case gets its own container with only that case's data mounted |
 | **Three agent roles with distinct trust boundaries** | ServiceNow has multiple agent types, but with app-level isolation | Router (intake only), work (per-case CRM), dev (code only). OS-level enforcement per role. |
-| **Bot identity as routing mechanism** | Not seen — most competitors use LLM classifiers or manual routing | Which Telegram bot you message = which case. Mechanistic, no classifier overhead. |
 | **Customer CRM binding at container boundary** | Sierra does this at app level | CRM MCP server rejects queries for wrong customer. OS-level + data-level + capability-level enforcement. |
 | **Kaizen feedback loop in case lifecycle** | Not seen in surveyed projects | Case completion triggers reflection → suggested dev improvements → better tooling → better case outcomes. Example: a recurring quoting mistake becomes a vertical-level prompt fix; a repeated payment-status lookup becomes a harness-level integration. |
 | **Harness/vertical architecture** | Not seen in the Claw ecosystem | Closed harness + private vertical repos mounted into containers. Domain code separated from infrastructure. |
 
-The individual techniques aren't new (containers, CRM scoping, named bots). The combination and the depth of isolation enforcement is what's novel. These boundaries are enforced at different layers: runtime/container isolation, tool-level access control, and workflow/role-level capability restriction.
+The individual techniques aren't new (containers, CRM scoping, named bots). The combination and the depth of isolation enforcement is what appears uncommon. These boundaries are enforced at different layers: runtime/container isolation, tool-level access control, and workflow/role-level capability restriction.
 
 ---
 
@@ -248,7 +291,32 @@ The individual techniques aren't new (containers, CRM scoping, named bots). The 
 
 ---
 
-## 6. Three Reinforcing Wedges
+## 6. What Must Be Built
+
+The critical-path components that do not yet exist:
+
+- **CRM MCP server**: Per-customer data scoping at the container boundary. This is the hardest component — it must enforce tenant isolation without an enterprise CRM platform underneath. Without it, case isolation is a runtime boundary only, not a data boundary.
+- **Customer identity resolution**: Merging identities across channels (WhatsApp number + Telegram handle + email = one customer). Currently manual.
+- **Agent control plane**: Monitoring, cost tracking, and operational visibility across concurrent cases. Currently ad-hoc.
+- **Multi-vertical deployment**: Running multiple verticals on the same harness instance with separate data stores. Currently single-vertical.
+
+Containerization is already built. The isolation enforcement layers above it are the real work.
+
+---
+
+## 7. Tradeoffs and Costs
+
+This architecture is not free, and it is not right for every use case.
+
+- **Per-case containers are expensive.** Each case gets its own container, model context, and session. For high-volume, low-complexity interactions (FAQ bots, simple lookups), this is overkill. The architecture is designed for multi-step, data-sensitive workflows — not chat.
+- **Domain operators are a bottleneck.** The model requires finding and retaining domain operators for each vertical. Scaling depends on people, not just code. If the right operator doesn't exist for a vertical, the vertical doesn't happen.
+- **Single-host limits scale.** The current architecture runs on one machine. Horizontal scaling (Kubernetes, multi-region) is a future problem, but it is a real one.
+- **Upstream maintenance has a cost.** Keeping NanoClaw as upstream means merging changes, resolving conflicts, and maintaining compatibility with a codebase that has different goals. This cost grows as the harness diverges.
+- **The CRM is the critical risk.** Everything downstream of case isolation depends on scoped data access. If the CRM MCP server is too slow, too rigid, or too hard to integrate with real business data, the architecture falls apart at the most important layer.
+
+---
+
+## 8. Three Reinforcing Wedges
 
 - **Technical wedge**: Case-level isolation plus scoped access make customer-facing agent deployment safer and more trustworthy in sensitive, multi-company workflows.
 - **Commercial wedge**: Domain operators bring trust, workflow knowledge, and escalation judgment that small businesses will not buy from a generic software sales motion.
@@ -259,7 +327,7 @@ The model works only if these wedges reinforce each other: stronger isolation en
 
 ---
 
-## 7. Business Model
+## 9. Business Model
 
 ### What We're Building
 
@@ -308,7 +376,7 @@ The closest analogy is a **franchise model for AI agents**: Garsson provides the
 
 ---
 
-## 8. Competitive Position
+## 10. Strategic Assessment
 
 ### Garsson Harness vs NanoClaw
 
@@ -342,7 +410,7 @@ Strategy:
 - **Early mover in OS-level case isolation**: We have not found another open-source or commercial project offering container-per-case isolation with CRM scoping
 - **Vertical expansion**: Every industry with customer service + data sensitivity is a potential venture (insurance, legal, healthcare, financial services)
 - **Compounding returns**: Each vertical hardens the harness, surfaces missing tools, and validates the model — making the next vertical faster to launch
-- **Closed-source moat**: Keeping the source closed may buy time to build operational depth, but the moat is operational, not merely legal
+- **Window to build operational depth**: Keeping the source closed may buy time, but the moat is operational, not merely legal
 
 ### Threats
 
@@ -351,3 +419,7 @@ Strategy:
 - **Commercial platforms moving downmarket**: Sierra, Agentforce becoming accessible to small businesses
 - **Upstream divergence cost**: Maintaining NanoClaw compatibility while building proprietary layers creates ongoing merge overhead
 - **Venture execution risk**: Each vertical is a new business — product-market fit, domain operator reliability, and customer acquisition are independent risks per venture
+
+---
+
+The defensibility is not that we run containers. It is that we can repeatedly deploy a constrained, scoped, operator-assisted automation system into messy verticals faster than others can localize, integrate, and operationalize it.
