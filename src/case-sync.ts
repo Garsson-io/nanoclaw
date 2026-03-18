@@ -10,6 +10,19 @@
 import type { Case } from './cases.js';
 import { logger } from './logger.js';
 
+// Module-level singleton for access from IPC handlers
+let activeSyncService: CaseSyncService | null = null;
+
+/** Get the active sync service instance (null if sync is disabled). */
+export function getCaseSyncService(): CaseSyncService | null {
+  return activeSyncService;
+}
+
+/** Set the active sync service instance (called during startup). */
+export function setActiveSyncService(service: CaseSyncService | null): void {
+  activeSyncService = service;
+}
+
 export type CaseSyncEventType =
   | 'created'
   | 'updated'

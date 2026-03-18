@@ -651,11 +651,31 @@ Case types:
       .describe(
         'Type of case: "work" for non-code tasks, "dev" for anything that changes code (bug fixes, features, config, workflows)',
       ),
+    customer_name: z
+      .string()
+      .optional()
+      .describe(
+        'Customer name (for work cases). Extract from conversation context if available.',
+      ),
+    customer_phone: z
+      .string()
+      .optional()
+      .describe('Customer phone number, if mentioned in the conversation.'),
+    customer_email: z
+      .string()
+      .optional()
+      .describe('Customer email address, if mentioned in the conversation.'),
+    customer_org: z
+      .string()
+      .optional()
+      .describe(
+        'Customer organization or business name, if mentioned in the conversation.',
+      ),
   },
   async (args) => {
     const requestId = `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-    const data = {
+    const data: Record<string, unknown> = {
       type: 'case_create',
       shortName: args.short_name,
       description: args.description,
@@ -667,6 +687,10 @@ Case types:
       requestId,
       timestamp: new Date().toISOString(),
     };
+    if (args.customer_name) data.customer_name = args.customer_name;
+    if (args.customer_phone) data.customer_phone = args.customer_phone;
+    if (args.customer_email) data.customer_email = args.customer_email;
+    if (args.customer_org) data.customer_org = args.customer_org;
 
     writeIpcFile(TASKS_DIR, data);
 
@@ -806,6 +830,48 @@ This pauses time tracking and signals the user that input is needed.`,
         {
           type: 'text' as const,
           text: `Case ${args.case_id} marked as blocked on: ${args.blocked_on}`,
+        },
+      ],
+    };
+  },
+);
+
+server.tool(
+  'add_case_comment',
+  `Add a comment/note to a case thread. Use this to record important updates, decisions, customer interactions, or progress notes. Comments are synced to the cloud backend (GitHub Issue comments) for visibility.
+
+Use this when:
+• A customer provides important information during the conversation
+• You want to record a decision or milestone
+• You need to add context that should be visible to admins reviewing the case`,
+  {
+    case_id: z.string().describe('The case ID to add a comment to'),
+    text: z
+      .string()
+      .describe('The comment text. Can include markdown formatting.'),
+    author: z
+      .string()
+      .optional()
+      .describe(
+        'Who is making this comment (e.g., customer name, "agent", admin name). Defaults to "agent".',
+      ),
+  },
+  async (args) => {
+    const data = {
+      type: 'case_add_comment',
+      caseId: args.case_id,
+      text: args.text,
+      author: args.author || 'agent',
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(TASKS_DIR, data);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `Comment added to case ${args.case_id}.`,
         },
       ],
     };

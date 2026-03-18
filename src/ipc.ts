@@ -4,6 +4,7 @@ import path from 'path';
 import { CronExpressionParser } from 'cron-parser';
 
 import { authorizeCaseCreation } from './case-auth.js';
+import { getCaseSyncService } from './case-sync.js';
 import { DATA_DIR, IPC_POLL_INTERVAL, TIMEZONE } from './config.js';
 import {
   createCaseWorkspace,
@@ -924,6 +925,41 @@ export async function processTaskIpc(
               'Case prune refused — status guard or lock prevented deletion',
             );
           }
+        }
+      }
+      break;
+
+    case 'case_add_comment':
+      if (data.caseId) {
+        const caseItem = getCaseById(data.caseId);
+        if (caseItem && (isMain || caseItem.group_folder === sourceGroup)) {
+          const text = ((data as Record<string, unknown>).text as string) || '';
+          const author =
+            ((data as Record<string, unknown>).author as string) || 'agent';
+
+          // Update last activity in SQLite
+          updateCase(data.caseId, {
+            last_activity_at: new Date().toISOString(),
+            last_message: text.slice(0, 200),
+          });
+
+          // Dispatch comment to cloud sync service (mutation hooks
+          // don't handle comments since they're not field changes)
+          const syncService = getCaseSyncService();
+          if (syncService) {
+            syncService
+              .onCaseMutated({
+                type: 'comment',
+                case: caseItem,
+                comment: { text, author },
+              })
+              .catch(() => {});
+          }
+
+          logger.info(
+            { caseId: data.caseId, author, sourceGroup },
+            'Case comment added via IPC',
+          );
         }
       }
       break;

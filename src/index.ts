@@ -89,7 +89,7 @@ import { Channel, NewMessage, RegisteredGroup, UsageData } from './types.js';
 import { logger } from './logger.js';
 import { detectAuthMode } from './credential-proxy.js';
 import { CASE_SYNC_ENABLED, CASE_SYNC_REPO } from './config.js';
-import { CaseSyncService } from './case-sync.js';
+import { CaseSyncService, setActiveSyncService } from './case-sync.js';
 import { GitHubCaseSyncAdapter } from './case-sync-github.js';
 import { registerCaseMutationHook } from './cases.js';
 
@@ -1014,6 +1014,7 @@ async function main(): Promise<void> {
           .catch(() => {});
       }
     });
+    setActiveSyncService(syncService);
     syncService.start();
     // Ensure sync timer is cleared on shutdown
     process.once('SIGTERM', () => syncService.stop());
