@@ -88,6 +88,10 @@ import { startSchedulerLoop } from './task-scheduler.js';
 import { Channel, NewMessage, RegisteredGroup, UsageData } from './types.js';
 import { logger } from './logger.js';
 import { detectAuthMode } from './credential-proxy.js';
+import { CASE_SYNC_ENABLED, CASE_SYNC_REPO } from './config.js';
+import { CaseSyncService, setActiveSyncService } from './case-backend.js';
+import { GitHubCaseSyncAdapter } from './case-backend-github.js';
+import { registerCaseMutationHook } from './cases.js';
 
 // Re-export for backwards compatibility during refactor
 export { escapeXml, formatMessages } from './router.js';
@@ -976,6 +980,48 @@ async function main(): Promise<void> {
   ensureContainerSystemRunning();
   initDatabase();
   logger.info('Database initialized');
+
+  // Initialize case sync to cloud backend (GitHub Issues V1)
+  if (CASE_SYNC_ENABLED) {
+    const [owner, repo] = CASE_SYNC_REPO.split('/');
+    const adapter = new GitHubCaseSyncAdapter(owner, repo);
+    const syncService = new CaseSyncService(adapter);
+    registerCaseMutationHook((event, c, changes) => {
+      if (event === 'inserted') {
+        syncService.onCaseMutated({ type: 'created', case: c }).catch(() => {});
+      } else if (changes?.status === 'done') {
+        syncService.onCaseMutated({ type: 'done', case: c }).catch(() => {});
+      } else if (changes?.status) {
+        syncService
+          .onCaseMutated({ type: 'status_changed', case: c, changes })
+          .catch(() => {});
+      } else if (
+        changes &&
+        Object.keys(changes).some(
+          (k) =>
+            ![
+              'last_message',
+              'last_activity_at',
+              'total_cost_usd',
+              'time_spent_ms',
+              'github_issue',
+              'github_issue_url',
+            ].includes(k),
+        )
+      ) {
+        syncService
+          .onCaseMutated({ type: 'updated', case: c, changes })
+          .catch(() => {});
+      }
+    });
+    setActiveSyncService(syncService);
+    syncService.start();
+    // Ensure sync timer is cleared on shutdown
+    process.once('SIGTERM', () => syncService.stop());
+    process.once('SIGINT', () => syncService.stop());
+    logger.info({ repo: CASE_SYNC_REPO }, 'Case sync enabled');
+  }
+
   loadState();
   restoreRemoteControl();
 

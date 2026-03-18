@@ -66,15 +66,65 @@ The pattern: **harness provides mechanism, vertical provides policy**. The harne
 - Harness differentiators: move to private skills when needed
 - Base NanoClaw: stays open-source (the framework)
 
+## Architecture Layers & File Naming
+
+NanoClaw has a layered architecture. File names encode which layer they belong to. **Do not mix layers** — each file should belong to exactly one layer.
+
+```
+Container (agent-facing MCP tools)          Host (harness)
+┌──────────────────────────┐    IPC     ┌──────────────────────────────┐
+│ mcp-*  or ipc-mcp-*.ts   │ ───────▶  │ ipc.ts (dispatcher)          │
+│ (tool definitions)       │  JSON files│ ipc-{domain}.ts (handlers)   │
+└──────────────────────────┘            │          ↓                   │
+                                        │ {domain}.ts (model + logic)  │
+                                        │ {domain}-auth.ts (policy)    │
+                                        │          ↓                   │
+                                        │ {domain}-backend.ts (iface)  │
+                                        │ {domain}-backend-{prov}.ts   │
+                                        │          ↓                   │
+                                        │ {provider}-api.ts (REST)     │
+                                        └──────────────────────────────┘
+```
+
+| Layer | Naming pattern | Example | Responsibility |
+|-------|---------------|---------|----------------|
+| **MCP tools** (container) | `mcp-*` or in `container/agent-runner/` | `ipc-mcp-stdio.ts` | Agent-facing tool definitions |
+| **IPC dispatcher** | `ipc.ts` | `src/ipc.ts` | File watcher, routing to domain handlers |
+| **IPC domain handlers** | `ipc-{domain}.ts` | `src/ipc-cases.ts` | Domain-specific IPC business logic |
+| **Domain model** | `{domain}.ts` | `src/cases.ts` | Data types, DB ops, lifecycle logic |
+| **Domain policy** | `{domain}-auth.ts` | `src/case-auth.ts` | Authorization gates, policy decisions |
+| **Backend interface** | `{domain}-backend.ts` | `src/case-backend.ts` | Backend-agnostic adapter interface |
+| **Backend implementation** | `{domain}-backend-{provider}.ts` | `src/case-backend-github.ts` | Provider-specific backend (CRM sync) |
+| **Provider API client** | `{provider}-api.ts` | `src/github-api.ts` | Low-level REST API client |
+
+**Rules:**
+- Backend files (`*-backend*.ts`) handle cloud sync. They never touch IPC or MCP.
+- IPC handlers (`ipc-*.ts`) translate IPC requests into domain operations. They never call provider APIs directly — they go through the domain model or backend adapter.
+- Domain model files (`cases.ts`, `case-auth.ts`) are the single source of truth for business logic. Both IPC handlers and backends depend on them.
+- Provider API files (`github-api.ts`) are pure REST clients. They know nothing about cases, sync, or IPC.
+
+### Case handling vs Kaizen
+
+Cases and kaizen are **strongly integrated but conceptually distinct**:
+- **Cases** = work management (routing, tracking, workspaces, customer data)
+- **Kaizen** = continuous improvement (reflections on completion → suggested dev cases)
+- **Integration point:** `case_mark_done` → kaizen reflections → `case_suggest_dev`
+- **Separate backends:** customer cases → per-customer CRM repo, kaizen → `Garsson-io/kaizen`
+
 ## Key Files
 
 | File | Purpose |
 |------|---------|
 | `src/index.ts` | Orchestrator: state, message loop, agent invocation |
 | `src/cases.ts` | Case model, DB ops, workspace management, lifecycle |
+| `src/case-auth.ts` | Case creation authorization gate |
+| `src/case-backend.ts` | Backend-agnostic sync adapter interface |
+| `src/case-backend-github.ts` | GitHub Issues CRM backend implementation |
 | `src/case-router.ts` | Haiku-based message routing to cases |
 | `src/channels/registry.ts` | Channel registry (self-registration at startup) |
-| `src/ipc.ts` | IPC watcher, task/case processing |
+| `src/ipc.ts` | IPC watcher + dispatcher |
+| `src/ipc-cases.ts` | Case lifecycle IPC handlers |
+| `src/github-api.ts` | GitHub REST API client (shared by CRM + kaizen) |
 | `src/router.ts` | Message formatting and outbound routing |
 | `src/config.ts` | Trigger pattern, paths, intervals |
 | `src/container-runner.ts` | Spawns agent containers with mounts |

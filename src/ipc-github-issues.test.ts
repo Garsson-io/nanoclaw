@@ -5,8 +5,8 @@ import { _initTestDatabase, setRegisteredGroup } from './db.js';
 import { processTaskIpc, IpcDeps } from './ipc.js';
 import { RegisteredGroup } from './types.js';
 
-// Mock github-issues module at the top level
-vi.mock('./github-issues.js', () => ({
+// Mock github-api module at the top level
+vi.mock('./github-api.js', () => ({
   createGitHubIssue: vi.fn(),
   DEV_CASE_ISSUE_REPO: { owner: 'Garsson-io', repo: 'kaizen' },
 }));
@@ -28,7 +28,7 @@ vi.mock('./cases.js', async (importOriginal) => {
   };
 });
 
-import { createGitHubIssue } from './github-issues.js';
+import { createGitHubIssue } from './github-api.js';
 import { insertCase, generateCaseName } from './cases.js';
 
 const mockedCreateGitHubIssue = vi.mocked(createGitHubIssue);
