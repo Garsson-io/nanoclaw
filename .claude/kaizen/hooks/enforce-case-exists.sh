@@ -56,27 +56,37 @@ if [ -z "$BRANCH" ]; then
   exit 0
 fi
 
-# Resolve DB path from main checkout
+# Query via the domain model (cases.ts getActiveCaseByBranch) — not raw SQL.
+# Prefer worktree's compiled dist/ (has latest code), fall back to main's.
 MAIN_ROOT=$(dirname "$GIT_COMMON")
 DB_PATH="$MAIN_ROOT/store/messages.db"
 
-if [ ! -f "$DB_PATH" ]; then
-  # No DB — can't enforce, allow (defensive)
-  exit 0
+if [ -d "$WORKTREE_ROOT/dist" ]; then
+  DIST_DIR="$WORKTREE_ROOT/dist"
+elif [ -d "$MAIN_ROOT/dist" ]; then
+  DIST_DIR="$MAIN_ROOT/dist"
+else
+  exit 0  # No compiled dist — can't enforce
 fi
 
-# Query for a case matching this branch (any non-terminal status)
-# Pass values via env vars to avoid shell injection in node -e
-CASE_COUNT=$(ENFORCE_DB_PATH="$DB_PATH" ENFORCE_BRANCH="$BRANCH" node -e "
-  const db = require('better-sqlite3')(process.env.ENFORCE_DB_PATH);
-  const row = db.prepare(
-    \"SELECT COUNT(*) as cnt FROM cases WHERE branch_name = ? AND status IN ('suggested','backlog','active','blocked')\"
-  ).get(process.env.ENFORCE_BRANCH);
-  console.log(row.cnt);
+if [ ! -f "$DB_PATH" ]; then
+  exit 0  # No DB — can't enforce
+fi
+
+# Initialize DB (readonly) and call getActiveCaseByBranch() through the domain model.
+# This uses the same code path as MCP tools / IPC handlers.
+HAS_CASE=$(ENFORCE_BRANCH="$BRANCH" ENFORCE_DB="$DB_PATH" node -e "
+  const Database = require('better-sqlite3');
+  const cases = require('$DIST_DIR/cases.js');
+  const database = new Database(process.env.ENFORCE_DB, { readonly: true });
+  cases.createCasesSchema(database);
+  const c = cases.getActiveCaseByBranch(process.env.ENFORCE_BRANCH);
+  console.log(c ? '1' : '0');
+  database.close();
 " 2>/dev/null)
 
 # If query failed or case exists, allow
-if [ -z "$CASE_COUNT" ] || [ "$CASE_COUNT" -gt 0 ] 2>/dev/null; then
+if [ -z "$HAS_CASE" ] || [ "$HAS_CASE" = "1" ]; then
   exit 0
 fi
 

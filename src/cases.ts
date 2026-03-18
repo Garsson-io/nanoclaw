@@ -297,6 +297,17 @@ export function getAllCases(): Case[] {
     .all() as Case[];
 }
 
+/** Get active/non-terminal case for a git branch name. Used by enforce-case-exists hook. */
+export function getActiveCaseByBranch(branchName: string): Case | undefined {
+  return db
+    .prepare(
+      `SELECT * FROM cases
+       WHERE branch_name = ? AND status IN ('suggested', 'backlog', 'active', 'blocked')
+       LIMIT 1`,
+    )
+    .get(branchName) as Case | undefined;
+}
+
 /** Get active/backlog cases linked to a GitHub issue number. */
 export function getActiveCasesByGithubIssue(issueNumber: number): Case[] {
   return db
