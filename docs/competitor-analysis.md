@@ -48,7 +48,29 @@ Per-case is stricter than per-customer because a single customer may have multip
 
 ---
 
-## 2. Survey
+## 2. Why This Market May Be Open Now
+
+Many service-heavy verticals spend relatively little on software compared with payroll, coordination, and exception-handling. The value pool is not mainly SaaS budget — it is operator time.
+
+Historically, much of this work remained unautomated because the workflows were too messy and too specific. Traditional automation required too much bespoke setup, integration work, and maintenance to make economic sense for small and mid-sized businesses. A printing workshop, an insurance brokerage, a small logistics company — each has complex operational workflows, but none could justify custom software development.
+
+Agent systems may change that cost curve. If the cost of tailoring automation falls enough, many previously unreachable workflows become viable targets: document handling, quoting, intake, follow-ups, routing, status checks, exceptions, and back-office coordination. The open-source agent ecosystem has demonstrated that once you get past the technical barriers of setup, teaching an agent to be useful is accessible and effective.
+
+The remaining barriers are not "can agents do useful work" — they can. The barriers are setup complexity, security, isolation, and the cost of tailoring agents to specific business workflows. That is what the harness is designed to solve.
+
+Most small businesses will not automate themselves. They lack the technical capacity. They are at risk of being outcompeted by larger players who can invest in automation. The opportunity is to provide the automation harness, partner with a domain operator who knows the industry, and help small businesses in the vertical survive, reduce costs, and stay competitive — while keeping their best operators as humans-in-the-loop experts where judgment and trust matter.
+
+### Under-served local markets as go-to-market wedge
+
+Markets like Israel are structurally under-served by global software vendors. No outside player designs for the language, regulatory environment, financial systems, or business culture. The competition is local only.
+
+This is not just an observation — it is a go-to-market wedge. A vertical tuned for the Israeli printing industry has no global competitor, because no global company has invested in localizing for that specific intersection of language, regulation, and business norms. Similar dynamics likely exist in many small-to-medium markets worldwide.
+
+Each such market may look too small in isolation to attract a platform. But the sum of many niche deployments — each using the same harness with a local domain operator — may be larger and more defensible than trying to build one giant company in one large market. The harness is the common factor; the domain operator and local market specifics are the variables.
+
+---
+
+## 3. Survey
 
 We looked at three categories: open-source agent frameworks, commercial customer-facing platforms, and infrastructure/sandbox projects. For each, we focused on isolation model, customer-facing capability, and business model.
 
@@ -144,7 +166,7 @@ These are not competitors but potential building blocks or architectural referen
 
 ---
 
-## 3. What Must Be Built
+## 4. What Must Be Built
 
 The runtime isolation primitive exists. The hard part is everything above it:
 
@@ -161,7 +183,7 @@ Containerization is the easy part. Safe scoped data access and identity resoluti
 
 ---
 
-## 4. What Appears Differentiated
+## 5. What Appears Differentiated
 
 We avoid claiming novelty. The individual techniques are well-known (containers, CRM scoping, role-based access). What appears uncommon is the specific combination and the depth of enforcement at each layer.
 
@@ -192,7 +214,7 @@ We avoid claiming novelty. The individual techniques are well-known (containers,
 
 ---
 
-## 5. Tradeoffs and Costs
+## 6. Tradeoffs and Costs
 
 Our approach likely trades simplicity, resource efficiency, and operational maturity for stronger execution isolation and clearer trust boundaries. Container-per-case is not free:
 
@@ -209,7 +231,7 @@ This architecture is probably wrong for lightweight support chat, FAQ answering,
 
 ---
 
-## 6. What We Should Learn From
+## 7. What We Should Learn From
 
 | Source | What to study | Applies to |
 |--------|---------------|-----------|
@@ -222,23 +244,7 @@ This architecture is probably wrong for lightweight support chat, FAQ answering,
 
 ---
 
-## 7. Business Model
-
-### The market opportunity
-
-For every dollar spent on SaaS software, roughly ten dollars goes to salaries of people operating around that software. AI agents are going after the ten dollars.
-
-There are many industries — printing, insurance brokerage, small logistics, local services — where the work is operationally complex but not software-defined. These businesses use some SaaS, but their core value is in domain expertise and customer relationships. They need automation but have never been able to afford it. Custom software is too expensive. Enterprise platforms (Salesforce, ServiceNow) are too heavy and too costly. The result: manual processes, human bottlenecks, and vulnerability to larger players who can invest in automation.
-
-What the open-source agent ecosystem (OpenClaw, NanoClaw) has demonstrated is that once you get past the technical barriers of setup, teaching an agent to be useful is accessible and effective. The barriers are not "can agents do useful work" — they can. The barriers are setup complexity, security, isolation, and the cost of tailoring agents to specific business workflows.
-
-Most small businesses will not automate themselves. They lack the technical capacity. They are at risk of being outcompeted by larger players who can. Garsson's thesis is: provide the automation harness, partner with a domain operator who knows the industry, and help every small business in the vertical survive, reduce costs, and stay competitive — while keeping their best operators as humans-in-the-loop experts.
-
-### Geographic niches as natural moats
-
-Markets like Israel are largely disconnected from global automation trends. No outside player designs for the language, regulatory environment, financial systems, or business culture. The competition is local only. This creates a natural moat: a vertical tuned for the Israeli printing industry has no global competitor, because no global company has bothered to build it.
-
-Similar small-to-medium markets likely exist in many countries. Each is too small to attract a global platform. But the sum total of many niche deployments — each using the same harness with a local domain operator — may be larger and more defensible than trying to build one giant company in one large market.
+## 8. Business Model
 
 ### The venture portfolio model
 
@@ -269,17 +275,17 @@ Stage 3: Domain operator onboards other companies in the same vertical
 | Model | Example | Key difference |
 |-------|---------|---------------|
 | **SaaS platform** | Sierra, Agentforce | They sell subscriptions. We own ventures with domain operator partners. |
-| **Open-source framework** | OpenClaw, NanoClaw | They sell adoption → reputation → SaaS/acquisition. Our isolation and orchestration layers are proprietary. |
+| **Open-source framework** | OpenClaw, NanoClaw | Frameworks for developers and operators; monetization typically comes later via hosting, enterprise features, or adjacent businesses. Our isolation and orchestration layers are proprietary. |
 | **AI consultancy** | Accenture, Deloitte AI | They build bespoke solutions. We build a reusable harness — each vertical is a repeatable business. |
 | **Vertical SaaS** | Toast, Veeva | One company, one vertical. We're a venture studio with a shared harness across verticals. |
 
-### Why case isolation is the business model
+### Why the business model depends on case isolation
 
-Case isolation is not just a security feature. It is what makes Stage 3 possible. Without it, Company A's data can leak to Company B — and in a vertical, companies are direct competitors. The isolation spec (container per case, CRM scoping, MCP restriction) is the mechanism that enables multi-tenant vertical deployment. Without it, you can run one company per harness instance. With it, you can run many.
+Case isolation is not just a security feature. It is the enabling primitive for Stage 3. Without it, Company A's data can leak to Company B — and in a vertical, companies are direct competitors. The isolation spec (container per case, CRM scoping, MCP restriction) is the mechanism that enables multi-tenant vertical deployment. Without it, you can run one company per harness instance. With it, you can run many.
 
 ---
 
-## 8. Strategic Assessment
+## 9. Strategic Assessment
 
 ### What must be true for this model to work
 
@@ -303,6 +309,7 @@ Case isolation is not just a security feature. It is what makes Stage 3 possible
 - **Vertical configuration library**: Each vertical's config (escalation policies, workflows, tool definitions) becomes a reusable template for similar industries.
 - **Isolation enforcement depth**: As the CRM, identity model, and MCP tooling mature, the gap between our isolation and application-layer alternatives widens.
 - **Domain operator network**: Successful ventures attract more domain operators.
+- **Local market accumulation**: Each under-served market that gets a vertical deployment is a wedge that global vendors are unlikely to contest. The portfolio of niches compounds while each individual market remains too small to attract competition.
 
 ### What gets commoditized if upstream catches up
 
