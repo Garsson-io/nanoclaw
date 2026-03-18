@@ -10,6 +10,8 @@ Single Node.js process with skill-based channel system. Channels (WhatsApp, Tele
 
 Every piece of work is a **case**. Cases provide isolated containers, sessions, and (for dev) git worktrees. See `.claude/skills/cases/SKILL.md` for full docs.
 
+**Architecture:** Cases are backed by a cloud CRM (GitHub Issues for the demo company, replaceable with any CRM). SQLite is a **local cache** — fast and offline-capable, but not the source of truth. All case access goes through the domain model (`cases.ts`) or MCP abstraction — never raw SQL.
+
 - **work** cases use tooling to do useful work. **dev** cases improve tooling/workflows.
 - Lifecycle: `SUGGESTED → BACKLOG → ACTIVE → DONE → REVIEWED → PRUNED`
 - Kaizen: on completion, agents reflect on impediments and suggest dev improvements.
