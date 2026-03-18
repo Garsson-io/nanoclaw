@@ -20,16 +20,32 @@ fi
 
 echo "🔍 Verifying modified TypeScript files..." >&2
 
-# Type-check
+# Type-check harness
 if ! npx tsc --noEmit 2>&1; then
-  echo "❌ TypeScript type-check failed. Fix errors before finishing." >&2
+  echo "❌ Harness TypeScript type-check failed. Fix errors before finishing." >&2
   exit 2
 fi
 
-# Run tests if they exist
+# Type-check agent-runner (separate tsconfig)
+if [ -f "container/agent-runner/tsconfig.json" ]; then
+  if ! (cd container/agent-runner && npx tsc --noEmit) 2>&1; then
+    echo "❌ Agent-runner TypeScript type-check failed. Fix errors before finishing." >&2
+    exit 2
+  fi
+fi
+
+# Run harness tests if they exist
 if [ -f "vitest.config.ts" ] || [ -f "vitest.config.js" ]; then
   if ! npx vitest run --reporter=verbose 2>&1; then
-    echo "❌ Tests failed. Fix failing tests before finishing." >&2
+    echo "❌ Harness tests failed. Fix failing tests before finishing." >&2
+    exit 2
+  fi
+fi
+
+# Run agent-runner tests if they exist
+if [ -f "container/agent-runner/vitest.config.ts" ]; then
+  if ! (cd container/agent-runner && npx vitest run --reporter=verbose) 2>&1; then
+    echo "❌ Agent-runner tests failed. Fix failing tests before finishing." >&2
     exit 2
   fi
 fi

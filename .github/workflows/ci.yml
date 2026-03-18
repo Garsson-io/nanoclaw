@@ -22,14 +22,20 @@ jobs:
       - name: Format check
         run: npm run format:check
 
-      - name: Typecheck
+      - name: Typecheck (harness)
         run: npx tsc --noEmit
+
+      - name: Typecheck (agent-runner)
+        run: cd container/agent-runner && npx tsc --noEmit
 
       - name: Contract check
         run: npm run contract:check
 
-      - name: Tests
+      - name: Tests (harness)
         run: npx vitest run
+
+      - name: Tests (agent-runner)
+        run: cd container/agent-runner && npx vitest run
 
   pr-policy:
     if: github.event_name == 'pull_request_target'
