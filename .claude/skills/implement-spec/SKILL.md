@@ -148,3 +148,20 @@ The flow is usually: `write-prd → accept-case → implement-spec → kaizen`. 
 - **Gold-plating.** Adding capabilities the spec mentions as "future work" because you're already in the code. Future work is future work. Ship the current step.
 - **Ignoring new information.** Something you discovered during implementation contradicts the spec. Instead of updating the spec and adjusting, you forge ahead with the original plan. The spec should evolve.
 - **Big-bang implementation.** "I'll implement the whole spec in one PR." No. Find the smallest valuable step. Ship it. Loop.
+
+## Recursive Kaizen — Improving the Improvement Process
+
+This skill is part of the improvement system: `write-prd → accept-case → implement-spec → kaizen`. That system itself should improve over time. Today, the loop that improves these skills runs through Aviad — he notices when a skill led agents astray, when a step was skipped, when the five-step algorithm wasn't applied, and he manually updates the skills.
+
+**The lofty goal:** the system kaizens itself. After applying these skills, something triggers reflection not just on the *work* but on the *process*. Did the spec help or hinder? Did the five-step algorithm surface the right things to delete? Did accept-case catch the right issues? These reflections accumulate. Patterns emerge. The skills evolve.
+
+**Where we are:** fully manual. Aviad is the recursive kaizen loop.
+
+**Glimmers of what's next:**
+- The kaizen reflection that fires on `case_mark_done` already captures impediments. If those reflections included "the spec was over-specified for this problem" or "I skipped step 2 (delete) and implemented unnecessary code," that's process feedback, not just work feedback.
+- A hook or reflection prompt after implementation could ask: "Looking back, which of the five steps would have saved the most time if applied more rigorously? Was any spec section dead weight? Did accept-case miss something the implementation revealed?"
+- These reflections, accumulated over many cases, would be the raw material for improving the skills themselves — the same way incident data is raw material for improving the codebase.
+
+**What we don't know yet:** how to structure this, where to store it, how to surface it, when to act on it. That's fine. The first step is noticing. The kaizen reflection already exists. Making it ask one more question — "how was the process?" — costs nothing and starts accumulating the data that will eventually tell us what to build.
+
+**Apply these skills to these skills.** When you use `/write-prd`, ask: is this skill helping or getting in the way? When you use `/implement-spec`, ask: did the five-step algorithm miss something? When you notice something, mention it in the kaizen reflection. That's IC-1 for recursive kaizen — instructions, manual, human-driven. It's where every kaizen journey starts.

@@ -309,3 +309,7 @@ After the spec is merged and reviewed:
 - Use **`/accept-case`** to evaluate whether to proceed, gather incidents, and find low-hanging fruit.
 - Use **`/implement-spec`** to bridge spec to code — re-examine against current reality, apply the five-step algorithm, and execute incrementally.
 - Use **`/plan-work`** when implementation is too big for one PR — break into independent, sequenced PRs with dependency graph and sub-issues.
+
+### Recursive Kaizen
+
+These skills are the improvement system. The improvement system should improve itself. After using `/write-prd`, reflect: did the spec help implementation or constrain it? Was the progressive detail at the right granularity? Did the problem taxonomy age well? Capture these observations in kaizen reflections — they're the raw material for improving how we write specs. See `/implement-spec` for the fuller picture.
