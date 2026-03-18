@@ -37,6 +37,56 @@ jobs:
       - name: Tests (agent-runner)
         run: cd container/agent-runner && npx vitest run
 
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0  # Needed for git diff in path filter
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Check if E2E-relevant files changed
+        id: filter
+        if: github.event_name == 'pull_request_target'
+        run: |
+          BASE=${{ github.event.pull_request.base.sha }}
+          HEAD=${{ github.event.pull_request.head.sha }}
+          CHANGED=$(git diff --name-only "$BASE"..."$HEAD")
+
+          # Check if any E2E-relevant files changed
+          if echo "$CHANGED" | grep -qE '^(container/|src/|package\.json|package-lock\.json|tests/e2e/|vitest\.config\.e2e\.ts)'; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+            echo "E2E-relevant files changed — will run E2E tests."
+          else
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+            echo "No E2E-relevant files changed — skipping E2E tests."
+          fi
+
+      - name: Set up Docker Buildx
+        if: github.event_name == 'push' || steps.filter.outputs.relevant == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build container image
+        if: github.event_name == 'push' || steps.filter.outputs.relevant == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./container
+          load: true
+          tags: nanoclaw-agent:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run E2E tests
+        if: github.event_name == 'push' || steps.filter.outputs.relevant == 'true'
+        run: npx vitest run --config vitest.config.e2e.ts
+
   pr-policy:
     if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
