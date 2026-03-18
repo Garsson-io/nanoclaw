@@ -69,8 +69,8 @@ export const CONTAINER_MAX_OUTPUT_SIZE = parseInt(
   process.env.CONTAINER_MAX_OUTPUT_SIZE || '10485760',
   10,
 ); // 10MB default
-// Instance-namespaced port: prod=3001, staging=3002, etc.
-const defaultProxyPort = INSTANCE_ID === 'staging' ? '3002' : '3001';
+// Instance-namespaced port: prod=3001, any instance gets 3002 to avoid collision
+const defaultProxyPort = INSTANCE_ID ? '3002' : '3001';
 export const CREDENTIAL_PROXY_PORT = parseInt(
   process.env.CREDENTIAL_PROXY_PORT || defaultProxyPort,
   10,

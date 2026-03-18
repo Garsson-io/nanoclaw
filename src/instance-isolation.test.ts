@@ -91,6 +91,13 @@ describe('instance isolation — config.ts', () => {
     expect(config.CREDENTIAL_PROXY_PORT).toBe(3002);
   });
 
+  it('CREDENTIAL_PROXY_PORT defaults to 3002 for any instance ID', async () => {
+    process.env.NANOCLAW_INSTANCE = 'test';
+    delete process.env.CREDENTIAL_PROXY_PORT;
+    const config = await import('./config.js');
+    expect(config.CREDENTIAL_PROXY_PORT).toBe(3002);
+  });
+
   it('explicit CREDENTIAL_PROXY_PORT overrides instance default', async () => {
     process.env.NANOCLAW_INSTANCE = 'staging';
     process.env.CREDENTIAL_PROXY_PORT = '4000';

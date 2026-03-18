@@ -169,15 +169,33 @@ function setupLinux(
 /**
  * Kill any orphaned nanoclaw node processes left from previous runs or debugging.
  * Prevents connection conflicts when two instances connect to the same channel simultaneously.
+ * Instance-aware: only kills processes matching the current instance to avoid
+ * disrupting other running instances (e.g. staging setup won't kill production).
  */
 function killOrphanedProcesses(projectRoot: string): void {
   try {
-    execSync(`pkill -f '${projectRoot}/dist/index\\.js' || true`, {
-      stdio: 'ignore',
-    });
-    logger.info('Stopped any orphaned nanoclaw processes');
+    // Build a pattern that matches the specific instance.
+    // For production (no INSTANCE_ID): match index.js but exclude any with NANOCLAW_INSTANCE set.
+    // For named instances: match processes that have NANOCLAW_INSTANCE={id} in their env.
+    if (INSTANCE_ID) {
+      // Kill only processes with this specific instance ID in their environment
+      execSync(
+        `pgrep -f '${projectRoot}/dist/index\\.js' | xargs -r -I{} sh -c 'grep -qz "NANOCLAW_INSTANCE=${INSTANCE_ID}" /proc/{}/environ 2>/dev/null && kill {}' || true`,
+        { stdio: 'ignore' },
+      );
+    } else {
+      // Kill processes that do NOT have NANOCLAW_INSTANCE set (production only)
+      execSync(
+        `pgrep -f '${projectRoot}/dist/index\\.js' | xargs -r -I{} sh -c '! grep -qz "NANOCLAW_INSTANCE=" /proc/{}/environ 2>/dev/null && kill {}' || true`,
+        { stdio: 'ignore' },
+      );
+    }
+    logger.info(
+      { instance: INSTANCE_ID || 'production' },
+      'Stopped any orphaned nanoclaw processes',
+    );
   } catch {
-    // pkill not available or no orphans
+    // pgrep/xargs not available or no orphans
   }
 }
 
