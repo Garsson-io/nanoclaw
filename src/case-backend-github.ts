@@ -4,12 +4,12 @@
  */
 
 import type { Case } from './cases.js';
-import type { CaseSyncAdapter, SyncResult } from './case-sync.js';
+import type { CaseSyncAdapter, SyncResult } from './case-backend.js';
 import {
   createGitHubIssue,
   updateGitHubIssue,
   addGitHubIssueComment,
-} from './github-issues.js';
+} from './github-api.js';
 import { updateCase } from './cases.js';
 import { logger } from './logger.js';
 

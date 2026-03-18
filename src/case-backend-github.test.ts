@@ -4,7 +4,7 @@ import {
   serializeMetadata,
   parseMetadata,
   type CaseMetadata,
-} from './case-sync-github.js';
+} from './case-backend-github.js';
 
 // INVARIANT: Metadata serialization round-trips correctly
 // SUT: serializeMetadata, parseMetadata

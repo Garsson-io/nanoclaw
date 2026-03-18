@@ -4,7 +4,7 @@ import path from 'path';
 import { CronExpressionParser } from 'cron-parser';
 
 import { authorizeCaseCreation } from './case-auth.js';
-import { getCaseSyncService } from './case-sync.js';
+import { getCaseSyncService } from './case-backend.js';
 import { DATA_DIR, IPC_POLL_INTERVAL, TIMEZONE } from './config.js';
 import {
   createCaseWorkspace,
@@ -24,7 +24,7 @@ import {
 import type { Case } from './cases.js';
 import { AvailableGroup } from './container-runner.js';
 import { createTask, deleteTask, getTaskById, updateTask } from './db.js';
-import { createGitHubIssue, DEV_CASE_ISSUE_REPO } from './github-issues.js';
+import { createGitHubIssue, DEV_CASE_ISSUE_REPO } from './github-api.js';
 import { isValidGroupFolder, resolveGroupFolderPath } from './group-folder.js';
 import { logger } from './logger.js';
 import { validateAdditionalMounts } from './mount-security.js';

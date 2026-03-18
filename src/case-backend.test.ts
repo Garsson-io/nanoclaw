@@ -4,8 +4,8 @@ import {
   CaseSyncService,
   getCaseSyncService,
   setActiveSyncService,
-} from './case-sync.js';
-import type { CaseSyncAdapter } from './case-sync.js';
+} from './case-backend.js';
+import type { CaseSyncAdapter } from './case-backend.js';
 import { makeCase } from './test-helpers.js';
 
 function makeAdapter(

@@ -4,7 +4,7 @@ import {
   createGitHubIssue,
   isRepoAllowed,
   filterAllowedLabels,
-} from './github-issues.js';
+} from './github-api.js';
 
 // INVARIANT: Only allowlisted repos can have issues created
 // SUT: isRepoAllowed
