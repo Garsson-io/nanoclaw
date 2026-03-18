@@ -237,6 +237,9 @@ Now report to the user:
    - container/Dockerfile → needs \`./container/build.sh\` + restart
    - package.json deps → needs \`npm install\` + build + restart
 3. **Sync main** — remind to run: \`git -C /home/aviadr1/projects/nanoclaw fetch origin main && git -C /home/aviadr1/projects/nanoclaw merge origin/main --no-edit\`
+4. **Kaizen reflection (REQUIRED)** — Run \`/kaizen\` NOW. Reflect on impediments, what you'd do differently, and what the system should learn. This is not optional — skipping kaizen reflection after merge is a recurring failure pattern.
+5. **Update linked issue** — Close the kaizen/tracking issue with a summary of what was implemented and lessons learned.
+6. **Spec update** — If a spec/PRD exists, move completed work to "Already Solved" and refine the next phase.
 
 EOF
   exit 0
