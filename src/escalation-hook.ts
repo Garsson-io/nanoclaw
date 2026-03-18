@@ -15,10 +15,6 @@
 import type { Case } from './cases.js';
 import { logger } from './logger.js';
 
-export interface EscalationHookDeps {
-  sendMessage: (jid: string, text: string) => Promise<void>;
-}
-
 /**
  * Called after a case is inserted or updated.
  * Logs escalation-relevant mutations for observability.

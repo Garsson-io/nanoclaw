@@ -4,9 +4,6 @@
  * Sends notifications to admins when cases are created with escalation
  * gap types. Supports Telegram (IPC message files) and email (future).
  */
-import fs from 'fs';
-import path from 'path';
-
 import type {
   AdminEntry,
   NotificationTarget,
@@ -145,32 +142,4 @@ async function sendTelegramNotification(
     'Telegram escalation notification sent',
   );
   return true;
-}
-
-/**
- * Write a Telegram notification as an IPC message file.
- * Use this when you need to send from a specific group's IPC directory
- * (e.g., so pool bots can pick it up).
- */
-export function writeIpcNotification(
-  ipcBaseDir: string,
-  groupFolder: string,
-  chatJid: string,
-  text: string,
-): void {
-  const messagesDir = path.join(ipcBaseDir, groupFolder, 'messages');
-  fs.mkdirSync(messagesDir, { recursive: true });
-
-  const filename = `escalation-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.json`;
-  const data = {
-    type: 'message',
-    chatJid,
-    text,
-  };
-
-  fs.writeFileSync(path.join(messagesDir, filename), JSON.stringify(data));
-  logger.info(
-    { groupFolder, chatJid, filename },
-    'IPC escalation notification written',
-  );
 }

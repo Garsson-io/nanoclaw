@@ -16,10 +16,7 @@ import type {
   PriorityLevel,
   SignalContext,
 } from './escalation.js';
-import {
-  dispatchEscalationNotifications,
-  formatNotificationMessage,
-} from './notification-dispatch.js';
+import { dispatchEscalationNotifications } from './notification-dispatch.js';
 import type { EscalationNotification } from './notification-dispatch.js';
 import {
   createCaseWorkspace,
@@ -1231,6 +1228,7 @@ export async function processTaskIpc(
 
       // Escalation: compute priority if gap_type is provided
       let computedPriority: PriorityLevel | null = null;
+      let computedScore = 0;
       let escalationMeanwhile: string | undefined;
       let escalationConfig: EscalationConfig | null = null;
       if (d.gapType) {
@@ -1252,6 +1250,7 @@ export async function processTaskIpc(
               signals,
             );
             computedPriority = priorityResult.level;
+            computedScore = priorityResult.score;
             const gapConfig = escalationConfig.gap_types[d.gapType];
             escalationMeanwhile =
               escalationConfig.meanwhile?.[gapConfig.status];
@@ -1365,7 +1364,7 @@ export async function processTaskIpc(
             gapType: d.gapType,
             gapDescription: escalationConfig.gap_types[d.gapType]?.description,
             priority: computedPriority,
-            score: 0, // Already logged above
+            score: computedScore,
             sourceGroup,
             context: d.context,
           };
