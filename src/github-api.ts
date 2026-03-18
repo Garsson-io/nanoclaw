@@ -10,6 +10,44 @@
 import { CASE_SYNC_REPO } from './config.js';
 import { logger } from './logger.js';
 
+export interface GitHubIssue {
+  number: number;
+  title: string;
+  body: string;
+  state: 'open' | 'closed';
+  labels: Array<{ name: string }>;
+  html_url: string;
+  created_at: string;
+  updated_at: string;
+  closed_at: string | null;
+}
+
+export interface ListIssuesRequest {
+  owner: string;
+  repo: string;
+  state?: 'open' | 'closed' | 'all';
+  labels?: string[];
+  limit?: number;
+}
+
+export interface ListIssuesResult {
+  success: boolean;
+  issues?: GitHubIssue[];
+  error?: string;
+}
+
+export interface GetIssueRequest {
+  owner: string;
+  repo: string;
+  issueNumber: number;
+}
+
+export interface GetIssueResult {
+  success: boolean;
+  issue?: GitHubIssue;
+  error?: string;
+}
+
 export interface CreateIssueRequest {
   owner: string;
   repo: string;
@@ -286,6 +324,107 @@ export async function addGitHubIssueComment(
     };
   } catch (err) {
     logger.error({ err }, 'Failed to add GitHub issue comment');
+    return {
+      success: false,
+      error: `Network error: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+export async function listGitHubIssues(
+  req: ListIssuesRequest,
+): Promise<ListIssuesResult> {
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) {
+    return { success: false, error: 'GITHUB_TOKEN not configured on host' };
+  }
+
+  if (!isRepoAllowed(req.owner, req.repo)) {
+    return {
+      success: false,
+      error: `Repository ${req.owner}/${req.repo} is not in the allowed list`,
+    };
+  }
+
+  const params = new URLSearchParams();
+  params.set('state', req.state ?? 'open');
+  params.set('per_page', String(Math.min(req.limit ?? 100, 100)));
+  if (req.labels?.length) {
+    params.set('labels', req.labels.join(','));
+  }
+
+  const url = `https://api.github.com/repos/${encodeURIComponent(req.owner)}/${encodeURIComponent(req.repo)}/issues?${params}`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: githubHeaders(),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      logger.error(
+        { status: response.status, body: errorBody },
+        'GitHub API error listing issues',
+      );
+      return {
+        success: false,
+        error: `GitHub API returned ${response.status}: ${errorBody.slice(0, 200)}`,
+      };
+    }
+
+    const data = (await response.json()) as GitHubIssue[];
+
+    return { success: true, issues: data };
+  } catch (err) {
+    logger.error({ err }, 'Failed to list GitHub issues');
+    return {
+      success: false,
+      error: `Network error: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+export async function getGitHubIssue(
+  req: GetIssueRequest,
+): Promise<GetIssueResult> {
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) {
+    return { success: false, error: 'GITHUB_TOKEN not configured on host' };
+  }
+
+  if (!isRepoAllowed(req.owner, req.repo)) {
+    return {
+      success: false,
+      error: `Repository ${req.owner}/${req.repo} is not in the allowed list`,
+    };
+  }
+
+  const url = `https://api.github.com/repos/${encodeURIComponent(req.owner)}/${encodeURIComponent(req.repo)}/issues/${req.issueNumber}`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: githubHeaders(),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      logger.error(
+        { status: response.status, body: errorBody },
+        'GitHub API error getting issue',
+      );
+      return {
+        success: false,
+        error: `GitHub API returned ${response.status}: ${errorBody.slice(0, 200)}`,
+      };
+    }
+
+    const issue = (await response.json()) as GitHubIssue;
+
+    return { success: true, issue };
+  } catch (err) {
+    logger.error({ err }, 'Failed to get GitHub issue');
     return {
       success: false,
       error: `Network error: ${err instanceof Error ? err.message : String(err)}`,
