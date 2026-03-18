@@ -142,6 +142,29 @@ else
 fi
 
 echo ""
+echo "=== Merge output includes post-merge completion checklist (kaizen #86) ==="
+
+# INVARIANT: Merge handler output must include kaizen reflection, issue update,
+# and spec update reminders — not just deploy classification.
+# SUT: pr-review-loop.sh merge handler output
+# VERIFICATION: Output contains all 6 checklist items including the 3 new ones.
+
+teardown
+setup
+
+# Re-create state file for a fresh merge test
+echo "STATUS=needs_review" > "$STATE_DIR/Garsson-io_garsson-prints_2"
+echo "PR_URL=https://github.com/Garsson-io/garsson-prints/pull/2" >> "$STATE_DIR/Garsson-io_garsson-prints_2"
+echo "ROUND=1" >> "$STATE_DIR/Garsson-io_garsson-prints_2"
+
+MERGE_OUTPUT=$(echo "$MERGE_INPUT" | STATE_DIR="$STATE_DIR" bash "$HOOK" 2>/dev/null)
+assert_contains "merge output includes kaizen reflection item" "Kaizen reflection" "$MERGE_OUTPUT"
+assert_contains "merge output includes issue update item" "Update linked issue" "$MERGE_OUTPUT"
+assert_contains "merge output includes spec update item" "Spec update" "$MERGE_OUTPUT"
+assert_contains "merge output includes deploy classification" "Post-merge action needed" "$MERGE_OUTPUT"
+assert_contains "merge output includes sync main" "Sync main" "$MERGE_OUTPUT"
+
+echo ""
 echo "=== Push with no active state exits silently ==="
 
 teardown
