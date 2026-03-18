@@ -323,21 +323,72 @@ PR #112 describes WHAT the system should do. This spec describes WHERE the data 
 
 ## 7. Open Questions
 
-**Q1: How does the agent write to `Garsson-io/kaizen` during a session?**
-The agent works in a worktree of `nanoclaw`. Writing to a different repo requires either: (a) cloning/pulling kaizen repo into a temp dir, (b) using GitHub API to create files, or (c) an IPC mechanism where the host writes on behalf of the agent.
-Lean: GitHub API via `gh api` — simple, no local clone needed, works from any worktree.
+### Storage format and location
 
-**Q2: Should reflections be reviewed before saving?**
+**Q1: What format for reflections and investigations?**
+Options:
+- (a) JSON — machine-parseable, schema-enforceable, but verbose and hard to read/edit by hand
+- (b) YAML — more readable, still structured, common in config-oriented repos
+- (c) Markdown with frontmatter — human-readable body with structured metadata header
+- (d) GitHub Issues with labels — no files at all, everything is an issue with structured body
+
+Lean: Open. JSON is easiest to query programmatically. YAML is friendlier for human review. Markdown with frontmatter gives both. GitHub Issues avoid file management entirely but are harder to query structurally.
+
+**Q2: Where do reflections and investigations live?**
+Options:
+- (a) `Garsson-io/kaizen` repo (files) — already exists, cloud-visible, git-synced
+- (b) Dedicated repo (e.g. `Garsson-io/kaizen-data`) — separates operational issues from data
+- (c) GitHub Issues in `Garsson-io/kaizen` — no file management, searchable via API, but noisy
+- (d) GitHub Issues in a dedicated repo — clean separation, API-queryable
+- (e) Hybrid — structured data as issues (queryable via API), investigations as files (longer-form)
+
+Lean: Open. Files in a repo give git history and diffs. Issues give labels, search, and cross-referencing. A dedicated repo avoids polluting the operational kaizen backlog with raw data. Need to prototype and see what investigations actually need.
+
+**Q3: How does the agent write to the kaizen store during a session?**
+The agent works in a worktree of `nanoclaw`. Writing to a different repo requires either: (a) cloning/pulling kaizen repo into a temp dir, (b) using GitHub API to create files/issues, or (c) an IPC mechanism where the host writes on behalf of the agent.
+Lean: GitHub API via `gh api` — simple, no local clone needed, works from any worktree. Also works for issue creation.
+
+### Process and quality
+
+**Q4: Should reflections be reviewed before saving?**
 Options: (a) Auto-save all reflections (captures everything, including noise). (b) Agent self-reviews reflection quality before saving. (c) Significant reflections only (filter by severity/recurrence).
 Lean: (a) initially — capture everything. Investigations filter the noise. If the store gets too noisy, add filtering based on what investigations actually use.
 
-**Q3: How to bootstrap the `bug_class` taxonomy?**
+**Q5: How to bootstrap the `bug_class` taxonomy?**
 Options: (a) Start with a seed list from known incidents. (b) Let agents classify freely, consolidate later. (c) Both.
 Lean: (c) — seed from known classes (`test_side_effect`, `contract_violation`, `migration_incomplete`, `missing_enforcement`, `dx_friction`), let agents add new ones, periodically consolidate.
 
-**Q4: Telemetry size and retention**
+**Q6: Telemetry size and retention**
 Session telemetry could grow fast. Options: (a) Keep everything forever. (b) Keep raw data for 90 days, summaries forever. (c) Keep only sessions referenced by reflections/investigations.
 Lean: (b) — raw data has diminishing value after a few months; summaries and the reflections they produced are the durable artifacts.
+
+### Multi-agent review and human feedback loops
+
+**Q7: Should AI-generated plans be reviewed by multiple AI agents?**
+This spec was written by one agent in one session. For big systemic plans like this, having multiple independent agents review the plan could catch blind spots, groupthink, and assumptions that a single agent wouldn't question. Options:
+- (a) Single agent writes, human reviews (current)
+- (b) Single agent writes, second agent reviews, human approves
+- (c) Multiple agents independently propose, human synthesizes
+- (d) Agent writes, human gives feedback, agent revises (current, but feedback is lost)
+
+Lean: (b) for significant specs. The reviewing agent brings fresh context and different biases. But need to define "significant" — not every reflection needs multi-agent review.
+
+**Q8: Where does human feedback on plans go?**
+When a human reviews a spec and says "Fix B is too weak" or "you're missing X" — that feedback is itself a kaizen signal. Today it lives only in conversation context (lost when session ends). It should:
+- Be captured as a reflection (source: `human_feedback`, trigger: `plan_review`)
+- Reference the spec/PR it's about
+- Feed into future investigations ("what kinds of feedback do humans give on agent-generated plans?")
+- Influence how future plans are structured ("humans consistently push back on L1 solutions — default to L2+")
+
+This is the "continued learning" loop: human feedback on the kaizen system IS kaizen data. It's turtles all the way down, but practically: every human correction on a plan should be a saved reflection that future planning agents can query.
+
+**Q9: Should investigation findings be peer-reviewed before becoming issues?**
+An investigation might produce wrong conclusions (bad pattern matching, false recurrence, over-engineering). Options:
+- (a) Investigation → issue directly (fast, but may produce noise)
+- (b) Investigation → human review → issue (safe, but bottleneck)
+- (c) Investigation → second agent review → issue, human notified (balanced)
+
+Lean: (c) for actionable findings that would create work. (a) for observations that just update the knowledge base.
 
 ## 8. Implementation Sequencing
 
