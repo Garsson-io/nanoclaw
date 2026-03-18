@@ -73,13 +73,17 @@ class TestDenySchema:
         assert result.has_valid_deny_json()
         assert result.exit_code == 0, "Deny must use JSON, not exit code"
 
-    def test_case_worktree_denies_commit_on_main(self, harness, mocks):
-        mocks.add_git_mock(branch="main")
+    def test_case_worktree_warns_commit_on_main(self, harness, mocks):
+        """enforce-case-worktree.sh is advisory (exit 0, stderr warning).
+        Real enforcement is in git hooks (.husky/pre-commit).
+        See hook-migration-plan.md item 2.
+        The mock must handle --git-dir to simulate main checkout (not a worktree)."""
+        mocks.add_git_mock(branch="main", simulate_main_checkout=True)
         harness.set_env("PATH", mocks.path_with_mocks)
 
         result = harness.run_hook("enforce-case-worktree.sh", PreToolUseInput.bash("git commit -m test"))
-        assert result.denies()
-        assert "worktree" in result.deny_reason().lower()
+        assert result.allows(), "Advisory hook should not deny"
+        assert "worktree" in result.stderr.lower(), f"Expected worktree warning on stderr, got: {result.stderr[:200]}"
 
     def test_pr_review_gate_denies_during_review(self, review_harness, state):
         state.create_state("https://github.com/Garsson-io/nanoclaw/pull/42", round_num=1, status="needs_review", branch="wt/test-branch")
@@ -90,12 +94,13 @@ class TestDenySchema:
         assert "pull/42" in result.deny_reason()
 
     def test_deny_json_has_required_fields(self, harness, state, mocks):
-        """Every deny output must have hookSpecificOutput.permissionDecision and permissionDecisionReason."""
-        mocks.add_git_mock(branch="main")
+        """Every deny output must have hookSpecificOutput.permissionDecision and permissionDecisionReason.
+        Uses check-dirty-files.sh which still produces deny JSON (not migrated to advisory)."""
+        mocks.add_git_mock(status_output=" M src/dirty.ts")
         harness.set_env("PATH", mocks.path_with_mocks)
         harness.set_env("STATE_DIR", str(state.state_dir))
 
-        result = harness.run_hook("enforce-case-worktree.sh", PreToolUseInput.bash("git commit -m test"))
+        result = harness.run_hook("check-dirty-files.sh", PreToolUseInput.bash("gh pr create --title test --body test"))
         data = json.loads(result.stdout)
         hso = data["hookSpecificOutput"]
         assert hso["permissionDecision"] == "deny"

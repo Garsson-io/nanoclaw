@@ -203,6 +203,18 @@ create_state() {
     "$pr_url" "$round" "$status" "$branch" > "$STATE_DIR/$filename"
 }
 
+# Create post-merge workflow state file
+# Usage: create_post_merge_state "https://github.com/owner/repo/pull/1" [status] [branch]
+create_post_merge_state() {
+  local pr_url="$1"
+  local status="${2:-needs_post_merge}"
+  local branch="${3:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)}"
+  local filename
+  filename="post-merge-$(echo "$pr_url" | sed 's|https://github\.com/||;s|/pull/|_|;s|/|_|g')"
+  printf 'PR_URL=%s\nSTATUS=%s\nBRANCH=%s\n' \
+    "$pr_url" "$status" "$branch" > "$STATE_DIR/$filename"
+}
+
 # Decision extractors
 is_denied() {
   echo "$1" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1

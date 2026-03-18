@@ -7,7 +7,7 @@
 #   must NOT cause false positive denials.
 # INVARIANT: For gh pr create, the hook uses git diff (local branch vs base).
 # INVARIANT: When no source files are changed, the hook allows the command (exit 0).
-# INVARIANT: When source files are changed without tests, merge is denied with JSON.
+# INVARIANT: When source files are changed without tests, stderr warns about missing coverage.
 # SUT: check-test-coverage.sh
 
 set -u
@@ -60,14 +60,14 @@ assert_eq "merge with clean PR but dirty worktree → allow" "" "$OUTPUT"
 assert_not_contains "merge should not see worktree src files" "deny" "$OUTPUT"
 
 echo ""
-echo "=== Merge: PR with untested source → deny ==="
+echo "=== Merge: PR with untested source → warning ==="
 
 setup_gh_git_mocks "src/index.ts
 src/config.ts" ""
 
-OUTPUT=$(run_hook "$HOOK" "gh pr merge 42")
-assert_contains "untested source in PR → deny" "deny" "$OUTPUT"
-assert_contains "deny message lists files" "Test coverage policy" "$OUTPUT"
+OUTPUT=$(run_hook_stderr "$HOOK" "gh pr merge 42")
+assert_contains "untested source in PR → warning on stderr" "Test coverage policy" "$OUTPUT"
+assert_contains "warning lists uncovered files" "src/index.ts" "$OUTPUT"
 
 echo ""
 echo "=== Create: uses git diff (local) ==="
@@ -112,7 +112,7 @@ echo "=== Prefixed test does NOT match unrelated source ==="
 setup_gh_git_mocks "src/config.ts
 src/ipc-github-issues.test.ts" ""
 
-OUTPUT=$(run_hook "$HOOK" "gh pr merge 42")
-assert_contains "unrelated prefixed test → deny" "deny" "$OUTPUT"
+OUTPUT=$(run_hook_stderr "$HOOK" "gh pr merge 42")
+assert_contains "unrelated prefixed test → warning" "Test coverage policy" "$OUTPUT"
 
 print_results
