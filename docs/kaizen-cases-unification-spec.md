@@ -199,19 +199,29 @@ A new PreToolUse(Bash) hook that blocks `gh issue create --repo Garsson-io/kaize
 ## 9. Implementation Sequencing
 
 ```
-Phase 1: Domain model + backend adapter (kaizen CRUD)
+Phase 1: github-api read ops + CLI wrapper               ✅ DONE (PR #149)
     ↓
-Phase 2: IPC/MCP tools (kaizen_suggest, kaizen_list_backlog)
-    ↓
-Phase 3: L2 hook (block raw gh issue create for kaizen)
-    ↓
-Phase 4: Skill migration (/kaizen, /write-prd, /pick-work, /accept-case)
+Phase 2: IPC/MCP tools                                   ✅ ALREADY EXISTS
+    ↓                                                     (case MCP tools cover this)
+Phase 3+4: L2 hook + skill migration (together)          ⬜ TODO
 ```
 
-Each phase is independently valuable:
-- Phase 1 alone gives a clean API for future use
-- Phase 2 makes it available to container agents
-- Phase 3 prevents bypassing
-- Phase 4 completes the migration
+### Phase 1 — DONE
 
-Phases 1-2 can be one PR. Phase 3 is a separate PR. Phase 4 may be one PR per skill or bundled.
+Added `listGitHubIssues()` and `getGitHubIssue()` to `github-api.ts`, plus `cli-kaizen.ts` CLI wrapper so host-side skills can query the backlog without raw `gh`.
+
+### Phase 2 — ALREADY EXISTS
+
+Container agents already manage kaizen issues through the **case MCP tools**:
+- `case_create` (type: dev, githubIssue: N) — creates dev case linked to kaizen issue
+- `case_suggest_dev` — suggests a new kaizen improvement
+- `case_mark_done` — marks case done, auto-syncs status to GitHub
+- `create_github_issue` — creates a GitHub issue directly
+
+Dev cases ARE kaizen cases. No new IPC/MCP tools needed.
+
+### Phase 3+4 — TODO (do together)
+
+Migrate host-side skills to use `cli-kaizen.js` (Phase 4), then add the L2 hook blocking raw `gh issue create/edit --repo Garsson-io/kaizen` (Phase 3). These must ship together — the hook without migrated skills would break them.
+
+See [`docs/kaizen-ipc-architecture.md`](kaizen-ipc-architecture.md) for the full architecture diagram.
