@@ -4,7 +4,7 @@ import {
   createGitHubIssue,
   isRepoAllowed,
   filterAllowedLabels,
-} from './github-issues.js';
+} from './github-api.js';
 
 // INVARIANT: Only allowlisted repos can have issues created
 // SUT: isRepoAllowed
@@ -13,7 +13,7 @@ describe('isRepoAllowed', () => {
     expect(isRepoAllowed('Garsson-io', 'kaizen')).toBe(true);
   });
 
-  test('rejects non-allowlisted repo', () => {
+  test('rejects non-allowlisted repo when no CASE_SYNC_REPO set', () => {
     expect(isRepoAllowed('Garsson-io', 'nanoclaw')).toBe(false);
   });
 
@@ -40,6 +40,18 @@ describe('filterAllowedLabels', () => {
 
   test('returns empty array if no labels allowed', () => {
     expect(filterAllowedLabels(['admin', 'secret'])).toEqual([]);
+  });
+
+  test('allows status: and type: prefixed labels for case sync', () => {
+    expect(
+      filterAllowedLabels([
+        'status:active',
+        'status:done',
+        'type:work',
+        'type:dev',
+        'admin',
+      ]),
+    ).toEqual(['status:active', 'status:done', 'type:work', 'type:dev']);
   });
 });
 

@@ -84,6 +84,12 @@ export const TRIGGER_PATTERN = new RegExp(
 export const TIMEZONE =
   process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone;
 
+// Case sync: sync cases to a cloud backend (GitHub Issues V1)
+// Format: "owner/repo" e.g. "Garsson-io/prints-demo-crm"
+export const CASE_SYNC_REPO = process.env.CASE_SYNC_REPO || '';
+export const CASE_SYNC_ENABLED =
+  CASE_SYNC_REPO.length > 0 && !!process.env.GITHUB_TOKEN;
+
 // Telegram bot pool for agent swarm (send-only bots that get renamed per-role)
 export const TELEGRAM_BOT_POOL = (
   process.env.TELEGRAM_BOT_POOL ||

@@ -52,6 +52,11 @@ export interface Case {
   token_source: string | null;
   time_spent_ms: number;
   github_issue: number | null;
+  github_issue_url: string | null;
+  customer_name: string | null;
+  customer_phone: string | null;
+  customer_email: string | null;
+  customer_org: string | null;
   priority: CasePriority;
   gap_type: string | null;
 }
@@ -109,10 +114,15 @@ export function createCasesSchema(database: Database.Database): void {
     }
   }
 
-  // Migration: add priority and gap_type columns for escalation
+  // Migration: add priority, gap_type, and customer/sync columns
   for (const col of [
     'ALTER TABLE cases ADD COLUMN priority TEXT',
     'ALTER TABLE cases ADD COLUMN gap_type TEXT',
+    'ALTER TABLE cases ADD COLUMN github_issue_url TEXT',
+    'ALTER TABLE cases ADD COLUMN customer_name TEXT',
+    'ALTER TABLE cases ADD COLUMN customer_phone TEXT',
+    'ALTER TABLE cases ADD COLUMN customer_email TEXT',
+    'ALTER TABLE cases ADD COLUMN customer_org TEXT',
   ]) {
     try {
       database.exec(col);
@@ -130,6 +140,32 @@ export function setCasesDb(database: Database.Database): void {
   db = database;
 }
 
+// Mutation hooks — called after insert/update for sync, notifications, etc.
+type CaseMutationHook = (
+  event: 'inserted' | 'updated',
+  c: Case,
+  changes?: Partial<Case>,
+) => void;
+const mutationHooks: CaseMutationHook[] = [];
+
+export function registerCaseMutationHook(hook: CaseMutationHook): void {
+  mutationHooks.push(hook);
+}
+
+function fireMutationHooks(
+  event: 'inserted' | 'updated',
+  c: Case,
+  changes?: Partial<Case>,
+): void {
+  for (const hook of mutationHooks) {
+    try {
+      hook(event, c, changes);
+    } catch (err) {
+      logger.error({ err, event, caseId: c.id }, 'Case mutation hook failed');
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // CRUD
 // ---------------------------------------------------------------------------
@@ -141,8 +177,9 @@ export function insertCase(c: Case): void {
       initiator, initiator_channel, last_message, last_activity_at,
       conclusion, created_at, done_at, reviewed_at, pruned_at,
       total_cost_usd, token_source, time_spent_ms, github_issue,
-      priority, gap_type)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      github_issue_url, customer_name, customer_phone, customer_email,
+      customer_org, priority, gap_type)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     c.id,
     c.group_folder,
@@ -168,9 +205,15 @@ export function insertCase(c: Case): void {
     c.token_source,
     c.time_spent_ms,
     c.github_issue,
+    c.github_issue_url,
+    c.customer_name,
+    c.customer_phone,
+    c.customer_email,
+    c.customer_org,
     c.priority,
     c.gap_type,
   );
+  fireMutationHooks('inserted', c);
 }
 
 export function getCaseById(id: string): Case | undefined {
@@ -316,6 +359,11 @@ export function updateCase(
       | 'time_spent_ms'
       | 'description'
       | 'github_issue'
+      | 'github_issue_url'
+      | 'customer_name'
+      | 'customer_phone'
+      | 'customer_email'
+      | 'customer_org'
       | 'priority'
       | 'gap_type'
     >
@@ -336,6 +384,12 @@ export function updateCase(
   db.prepare(`UPDATE cases SET ${fields.join(', ')} WHERE id = ?`).run(
     ...values,
   );
+
+  // Fire mutation hooks with the updated case (if it exists)
+  const updated = getCaseById(id);
+  if (updated) {
+    fireMutationHooks('updated', updated, updates);
+  }
 }
 
 export function addCaseCost(id: string, costUsd: number): void {
@@ -724,6 +778,11 @@ export function suggestDevCase(opts: {
     token_source: null,
     time_spent_ms: 0,
     github_issue: opts.githubIssue ?? null,
+    github_issue_url: null,
+    customer_name: null,
+    customer_phone: null,
+    customer_email: null,
+    customer_org: null,
     priority: null,
     gap_type: null,
   };
