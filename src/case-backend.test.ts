@@ -6,7 +6,7 @@ import {
   setActiveSyncService,
 } from './case-backend.js';
 import type { CaseSyncAdapter } from './case-backend.js';
-import { makeCase } from './test-helpers.js';
+import { makeCase } from './test-helpers.test-util.js';
 
 function makeAdapter(
   overrides: Partial<CaseSyncAdapter> = {},
