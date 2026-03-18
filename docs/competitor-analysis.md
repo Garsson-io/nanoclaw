@@ -225,28 +225,41 @@ The individual techniques aren't new (containers, CRM scoping, named bots). The 
 
 ## 6. Competitive Position
 
+### Beyond NanoClaw
+
+This analysis makes clear that what we're building is no longer a NanoClaw customization — it's a new product. NanoClaw is a personal assistant framework: one user, stateless containers, no customer concept, no case isolation. What we're building — customer-facing agents with case-level OS isolation, CRM-scoped data access, role-based trust boundaries, and named agent swarms — doesn't exist in the Claw ecosystem or anywhere else in open source.
+
+The codebase we're developing (internally: **Garsson Harness**) uses NanoClaw as its upstream foundation (channels, container runtime, message loop) but the value is in the layers above: case isolation, CRM integration, agent roles, bot identity routing, vertical architecture. These are proprietary differentiators, not upstream contributions.
+
+This has implications for project strategy:
+- **NanoClaw remains upstream** for infrastructure (channels, container runtime, basic agent lifecycle)
+- **Garsson Harness is the product** — case isolation, CRM, agent swarm, vertical deployment
+- **Future direction**: As the gap widens, maintaining upstream compatibility becomes a cost rather than a benefit. A clean break (rename, closed-source) is likely.
+
 ### Strengths
 
 - **Deepest isolation**: Only platform combining OS-level (container) + data-level (CRM MCP) + capability-level (MCP tools) + branch-level (worktree) isolation
-- **Self-hosted, open-source**: No vendor lock-in, full code control, API-cost-only pricing
+- **Self-hosted**: Full code control, API-cost-only pricing, no vendor lock-in
 - **Small codebase**: Auditable, modifiable, understandable (~4K lines vs OpenClaw's ~500K)
 - **Novel routing**: Bot identity as routing eliminates LLM classifier costs and hallucination risks
+- **Vertical architecture**: Harness/vertical separation enables industry-specific deployment without forking infrastructure
 
 ### Weaknesses
 
 - **CRM doesn't exist yet**: The CRM MCP server is the critical path component and hasn't been built
 - **Single-host**: No clustering or horizontal scaling story yet
-- **Small ecosystem**: No marketplace, limited community, no enterprise support
+- **Small team**: Limited bandwidth for both product development and upstream maintenance
 - **Unproven at scale**: No production deployment with real customers yet
 
 ### Opportunities
 
-- **First mover in OS-level case isolation**: No open-source competitor offers this
-- **Vertical-specific deployment**: Harness/vertical architecture enables industry-specific agents (insurance, printing, etc.) without forking the infrastructure
-- **Upstream contribution**: If case isolation proves valuable, contribute the pattern back to NanoClaw upstream
+- **First mover in OS-level case isolation**: No open-source or commercial competitor offers container-per-case isolation with CRM scoping
+- **Vertical-specific deployment**: Industry-specific agents (insurance, printing, etc.) as separate verticals on a shared harness
+- **Closed-source product**: The proprietary layers (case isolation, CRM, agent swarm) are the core value — they don't need to be open-source
 
 ### Threats
 
-- **OpenClaw Agents Plane**: If OpenClaw ships native multi-tenant support, their ecosystem advantage (7K+ stars, 70+ integrations) could make our approach niche
-- **Lobu expansion**: If Lobu adds case-level isolation, they'd be a direct competitor with a larger community
-- **Commercial platforms dropping prices**: Sierra, Agentforce becoming accessible to small businesses would reduce the self-hosted value proposition
+- **OpenClaw Agents Plane**: If OpenClaw ships native multi-tenant support, their ecosystem advantage (7K+ stars, 70+ integrations) could commoditize the infrastructure layer
+- **Lobu expansion**: If Lobu adds case-level isolation, they'd compete directly with a larger community
+- **Commercial platforms moving downmarket**: Sierra, Agentforce becoming accessible to small businesses would pressure the self-hosted value proposition
+- **Upstream divergence cost**: Maintaining NanoClaw compatibility while building proprietary layers creates ongoing merge overhead
