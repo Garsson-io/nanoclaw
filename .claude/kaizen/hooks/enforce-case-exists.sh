@@ -66,11 +66,12 @@ if [ ! -f "$DB_PATH" ]; then
 fi
 
 # Query for a case matching this branch (any non-terminal status)
-CASE_COUNT=$(node -e "
-  const db = require('better-sqlite3')('$DB_PATH');
+# Pass values via env vars to avoid shell injection in node -e
+CASE_COUNT=$(ENFORCE_DB_PATH="$DB_PATH" ENFORCE_BRANCH="$BRANCH" node -e "
+  const db = require('better-sqlite3')(process.env.ENFORCE_DB_PATH);
   const row = db.prepare(
     \"SELECT COUNT(*) as cnt FROM cases WHERE branch_name = ? AND status IN ('suggested','backlog','active','blocked')\"
-  ).get('$BRANCH');
+  ).get(process.env.ENFORCE_BRANCH);
   console.log(row.cnt);
 " 2>/dev/null)
 
