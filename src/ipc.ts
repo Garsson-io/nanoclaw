@@ -1120,6 +1120,7 @@ export async function processTaskIpc(
         const issueBody = d.context
           ? `## TL;DR\n\n${d.description}\n\n---\n\n## Details\n\n${d.context}\n\n---\n\n*Auto-created by dev case \`${name}\`*`
           : `${d.description}\n\n---\n*Auto-created by dev case \`${name}\`*`;
+        // Note: cross-repo links are included in the description by case_suggest_dev handler
         const issueResult = await createGitHubIssue({
           owner: DEV_CASE_ISSUE_REPO.owner,
           repo: DEV_CASE_ISSUE_REPO.repo,
@@ -1248,10 +1249,16 @@ export async function processTaskIpc(
           chatJid?: string;
           githubIssue?: number;
         };
+        // Include source case's CRM issue URL for cross-repo linking
+        const sourceCase = getCaseById(d.sourceCaseId);
+        let linkedDescription = d.description;
+        if (sourceCase?.github_issue_url) {
+          linkedDescription += ` (source: ${sourceCase.github_issue_url})`;
+        }
         suggestDevCase({
           groupFolder: sourceGroup,
           chatJid: d.chatJid || '',
-          description: d.description,
+          description: linkedDescription,
           sourceWorkCaseId: d.sourceCaseId,
           initiator: 'agent',
           initiatorChannel: undefined,
