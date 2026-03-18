@@ -169,6 +169,32 @@ What can be built in parallel? What's the MVP vs the full vision?
 - **Name residual risks.** No design is perfect. Calling out what's NOT solved builds trust and prevents false confidence.
 - **Link decisions to their rationale.** When you chose option A over B, say why. When you deferred something, say why it's safe to defer.
 
+### Progressive detail — the most important writing principle
+
+**Detail the problem space fully. Detail solutions only at the current level.**
+
+A spec should define the problem taxonomy with high resolution — what the levels are, what capabilities each level requires, where we are today. Think Kardashev scale (energy), SAE levels (autonomous driving), or CMMI (process maturity). The taxonomy itself is the most valuable artifact. It gives shared vocabulary and direction.
+
+But solution detail should be *progressive*: dense for the level we're at or about to reach, sketched for the next level, and deliberately left open beyond that.
+
+**Example of what this looks like:**
+
+If a system is at Level 3 of a 10-level taxonomy:
+- **Level 3 (current):** Full problem analysis. Concrete solution design. Implementation-ready detail.
+- **Level 4 (next):** Problem defined. Rough solution outline. Key open questions identified.
+- **Level 5-7 (horizon):** Problem described. Solution left as "we will need X capability." No design.
+- **Level 8-10 (vision):** One sentence each. The impossible ideal we climb toward.
+
+**Why this matters:**
+- Premature specification is the root of all evil. Designing a Level 10 solution while at Level 3 produces speculative architecture that constrains future thinking without providing current value.
+- The problem taxonomy ages well. The Kardashev scale was defined in 1964 and is still useful. The specific engineering designs from 1964 are not.
+- Progressive detail naturally creates open questions — "what does Level 6 look like in practice?" — which is exactly what a spec should leave for future work.
+- When you reach Level 4, you refine its section with full detail and sketch Level 5. The spec evolves as understanding deepens.
+
+**Anti-pattern: "Coverage Dashboard."** If you're at L1 (instructions in a doc), don't design the CI-integrated dashboard that auto-generates coverage matrices. Instead: define the *need* ("we need a way to see where we are"), note the *current state* ("today it's a manual Markdown table"), and leave the solution as an open question for when you're actually at the level where a dashboard makes sense.
+
+**The test:** For every solution paragraph, ask: "Are we at the level where this solution is the next step?" If no, replace the solution with a problem statement and an open question.
+
 ## Phase 4: Create the GitHub Issue
 
 The issue is the epic anchor. Keep it short — the spec document has the details.
@@ -255,6 +281,7 @@ Things this skill is NOT for:
 - **Bug fixes.** The bug IS the spec. Fix it, write tests, move on.
 - **Implementation planning for an approved spec.** That's task breakdown, not discovery. Use `/plan-work` to break a spec into PRs and issues.
 - **Ongoing documentation.** This produces a point-in-time spec. It will evolve during implementation via subsequent PRs.
+- **Designing solutions for distant levels.** If you define a 10-level taxonomy and you're at level 3, don't design the level 8 solution. Define what level 8 *requires* (the problem), not how to build it (the solution). Leave it as an open question.
 
 ## Tips for the Implementor (Meta)
 
