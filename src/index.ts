@@ -1004,6 +1004,8 @@ async function main(): Promise<void> {
               'last_activity_at',
               'total_cost_usd',
               'time_spent_ms',
+              'github_issue',
+              'github_issue_url',
             ].includes(k),
         )
       ) {
@@ -1013,6 +1015,9 @@ async function main(): Promise<void> {
       }
     });
     syncService.start();
+    // Ensure sync timer is cleared on shutdown
+    process.once('SIGTERM', () => syncService.stop());
+    process.once('SIGINT', () => syncService.stop());
     logger.info({ repo: CASE_SYNC_REPO }, 'Case sync enabled');
   }
 

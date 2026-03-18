@@ -102,6 +102,24 @@ More markdown here`;
     expect(parsed!.cost_usd).toBe(1.5);
   });
 
+  test('handles values containing colons', () => {
+    const body = `<!-- nanoclaw:v1
+case_id: test
+case_name: test
+type: work
+status: active
+customer_org: Nir's: Print Shop
+initiator: test
+created_at: 2026-01-01T00:00:00Z
+cost_usd: 1
+time_spent_ms: 0
+-->`;
+
+    const parsed = parseMetadata(body);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.customer_org).toBe("Nir's: Print Shop");
+  });
+
   test('handles numeric fields gracefully', () => {
     const body = `<!-- nanoclaw:v1
 case_id: test
