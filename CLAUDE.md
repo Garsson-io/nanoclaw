@@ -405,6 +405,11 @@ This is a fork of `qwibitai/nanoclaw`. Remotes:
 
 Branch protection has `strict: true` status checks. Auto-merge is enabled. The agent handles the full merge loop autonomously — do NOT ask the user unless something is genuinely broken after retries.
 
+Required status checks (all must pass before merge):
+- **ci** — typecheck, format, contract check, unit tests (harness + agent-runner)
+- **pr-policy** — test coverage for changed source files, verification section in PR body
+- **e2e** — container build + Tier 1 (MCP tool registration) + Tier 2 (IPC round-trip with stub API). Uses BuildKit with GHA cache; skips expensive steps on docs-only PRs via path filter.
+
 ```bash
 # Step 1: Queue auto-merge (non-blocking — GitHub merges when CI passes + branch is current)
 gh pr merge <url> --repo Garsson-io/nanoclaw --squash --delete-branch --auto
