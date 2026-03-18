@@ -292,6 +292,20 @@ When you're the future agent picking up a spec created by this skill:
 3. **The spec is a starting point, not a contract.** Implementation will reveal things the spec didn't anticipate. Update the spec as you go (new PRs, not edits to the original).
 4. **Respect the "Why" sections.** If you're tempted to take a shortcut that contradicts the stated reasoning, stop and think. The reasoning exists because someone thought hard about it. If you still disagree, raise it — don't silently diverge.
 
+## Write for Deletion
+
+A spec will be subjected to the five-step algorithm when implementation begins (`/implement-spec`): question requirements, delete, simplify, accelerate, automate. Write your spec expecting this. Specifically:
+
+- **Make sections independently evaluable.** Each section should be deletable without breaking the rest. If someone applies step 2 (delete) and removes the "Coverage Dashboard" section, the remaining spec should still make sense.
+- **Separate the problem taxonomy from proposed solutions.** The taxonomy (what the levels are, what capabilities each level requires) ages well and is hard to delete. The proposed solutions age poorly and should be easy to delete. Keep them in distinct sections.
+- **Mark confidence levels.** "This is the problem" vs "this is one way to solve it" vs "this is a guess." The implementor needs to know which parts to trust and which to re-examine.
+- **Don't bury decisions in prose.** Make them findable, so step 1 (question requirements) can be done efficiently. Tables and explicit "Decision: X because Y" callouts are better than decisions embedded in paragraphs.
+
+The best spec is one where an implementor can read it, delete 40% of it, and still have a clear direction. If deleting any section makes the spec incoherent, the spec is too tightly coupled.
+
 ## What Comes Next
 
-After the spec is merged and reviewed, use **`/plan-work`** to break the initiative into independent, sequenced PRs — one PR, one issue. That skill takes the spec you wrote here and produces a dependency graph, risk assessment, and GitHub sub-issues ready for dev cases.
+After the spec is merged and reviewed:
+- Use **`/accept-case`** to evaluate whether to proceed, gather incidents, and find low-hanging fruit.
+- Use **`/implement-spec`** to bridge spec to code — re-examine against current reality, apply the five-step algorithm, and execute incrementally.
+- Use **`/plan-work`** when implementation is too big for one PR — break into independent, sequenced PRs with dependency graph and sub-issues.
