@@ -316,7 +316,7 @@ This architecture is not free, and it is not right for every use case.
 
 ---
 
-## 8. Three Reinforcing Wedges
+## 8. Four Reinforcing Wedges
 
 - **Technical wedge**: Case-level isolation plus scoped access make customer-facing agent deployment safer and more trustworthy in sensitive, multi-company workflows.
 - **Commercial wedge**: Domain operators bring trust, workflow knowledge, and escalation judgment that small businesses will not buy from a generic software sales motion.
