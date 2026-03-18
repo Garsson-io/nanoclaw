@@ -20,6 +20,42 @@ Too many kaizen issues go from "abstract problem" to "big spec" to "never implem
 
 This is a conversation, not a checklist. The phases overlap. Use judgment about what's needed — a tiny issue might skip straight to low-hanging fruit; a complex one might need deep incident archaeology.
 
+### Phase 0: Collision detection
+
+**Before evaluating, check if someone else is already working on this issue.** This prevents wasted effort from parallel work.
+
+**Check all three sources — labels alone are not authoritative:**
+
+1. **GitHub labels:** Does the kaizen issue have `status:active`, `status:backlog`, or `status:blocked` labels?
+   ```bash
+   gh issue view {N} --repo Garsson-io/kaizen --json labels,state
+   ```
+
+2. **Active cases in database:** Is there a case linked to this issue?
+   ```bash
+   node -e "const db=require('better-sqlite3')('store/messages.db'); console.log(JSON.stringify(db.prepare(\"SELECT name, status, type FROM cases WHERE github_issue = {N} AND status IN ('active','backlog','blocked')\").all(), null, 2))"
+   ```
+
+3. **Open PRs:** Are there PRs referencing this issue?
+   ```bash
+   gh pr list --repo Garsson-io/nanoclaw --state open --search "kaizen #{N}" --json number,title,headRefName
+   ```
+
+**If collision detected**, present the conflict to the admin:
+- "Kaizen #{N} is being worked on by case `{name}` (status: {status})"
+- "There's an open PR #{M} that addresses this: {title}"
+- Ask: **Take over** (claim the issue, coordinate with the other agent), **Assist** (contribute to the existing case/PR), or **Pick different work** (go back to `/pick-work`)?
+
+**If no collision**, proceed to Phase 1.
+
+**On approval (end of Phase 5):** When the admin approves this case for implementation, label the kaizen issue as claimed:
+```bash
+gh issue edit {N} --repo Garsson-io/kaizen --add-label "status:backlog"
+gh issue comment {N} --repo Garsson-io/kaizen --body "Claimed for evaluation by accept-case at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+```
+
+This labeling is defense-in-depth on top of the L3 enforcement in `ipc-cases.ts` (which blocks duplicate case creation for the same kaizen issue). The label makes the claim visible to other agents checking `gh issue list` before they even reach the code-level check.
+
 ### Phase 1: Gather the incidents
 
 Don't work in the abstract. Find what actually happened.

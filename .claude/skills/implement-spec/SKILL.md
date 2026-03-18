@@ -80,6 +80,36 @@ Only now think about automation, tooling, and infrastructure:
 
 **The most common mistake is jumping to step 5.** "We need a CI check that validates X" — no, first question whether X is needed, whether a simpler X works, and whether a manual check is good enough for now.
 
+## Kaizen Issue Lifecycle Tracking
+
+When implementing work linked to a kaizen issue, maintain the issue's status throughout the lifecycle. This prevents other agents from picking the same work and provides visibility into progress.
+
+### On case creation
+
+When creating a dev case for a kaizen issue, **always pass the kaizen issue number as `githubIssue`** in the case creation request. Do NOT let the system auto-create a new issue — the kaizen issue already exists and should be reused.
+
+The L3 enforcement in `ipc-cases.ts` will:
+- Auto-sync `status:active` label to the kaizen issue via `case-backend-github.ts`
+- Block creation if another active case already references this issue (collision detection)
+
+### On PR creation
+
+After creating a PR, link it to the kaizen issue:
+```bash
+# Add has-pr label
+gh issue edit {N} --repo Garsson-io/kaizen --add-label "status:has-pr"
+# Add PR link as comment
+gh issue comment {N} --repo Garsson-io/kaizen --body "PR: {pr_url}"
+```
+
+### On case completion
+
+The L3 enforcement in `case-backend-github.ts` handles this automatically:
+- Syncs `status:done` label to the kaizen issue
+- Closes the issue if the case is marked done
+
+You don't need to manually update labels on completion — the code does it.
+
 ## The Implementation Loop
 
 After applying the five steps, you have a refined understanding. Now execute:
