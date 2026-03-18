@@ -20,7 +20,9 @@ This document surveys existing solutions — in the Claw ecosystem, open-source,
 
 The dominant open-source AI agent platform (~7,000 GitHub stars). Multi-channel (Slack, Discord, Telegram, WhatsApp, webchat). Single-operator model — the official docs explicitly state it is "not designed as a hostile multi-tenant security boundary for multiple adversarial users sharing one agent/gateway."
 
-| Aspect | OpenClaw | NanoClaw (ours) |
+**Business model:** Talent acquisition / reputation play. The team was acquired by NVIDIA, resulting in Nemoclaw — NVIDIA's AI agent infrastructure play. The open-source project builds adoption and community; NVIDIA's business model is selling GPU/cloud compute (same playbook as CUDA: give away the software, sell the hardware).
+
+| Aspect | OpenClaw | Garsson Harness |
 |--------|----------|-----------------|
 | Isolation model | Application-level (permission checks, allowlists) | OS-level (containers per case) |
 | Multi-tenant | Not designed for it | Customer-facing with per-case isolation |
@@ -35,7 +37,7 @@ The dominant open-source AI agent platform (~7,000 GitHub stars). Multi-channel 
 
 Multi-tenant wrapper for OpenClaw. The closest competitor in the Claw ecosystem.
 
-| Aspect | Lobu | NanoClaw (ours) |
+| Aspect | Lobu | Garsson Harness |
 |--------|------|-----------------|
 | Isolation level | Per-channel/DM | Per-case (work item) |
 | Programmatic agent creation | REST API | MCP tools + IPC |
@@ -50,7 +52,7 @@ Multi-tenant wrapper for OpenClaw. The closest competitor in the Claw ecosystem.
 
 Multi-agent system by The Swarm Corporation. Compiles to Rust, built on the Swarms framework. Unified messaging across Telegram, Discord, WhatsApp.
 
-| Aspect | ClawSwarm | NanoClaw (ours) |
+| Aspect | ClawSwarm | Garsson Harness |
 |--------|-----------|-----------------|
 | Multi-agent model | Hierarchical (director → specialists) | Swarm with named identities (router → case workers) |
 | Focus | Agent collaboration on shared tasks | Customer isolation across separate tasks |
@@ -63,7 +65,7 @@ Multi-agent system by The Swarm Corporation. Compiles to Rust, built on the Swar
 
 Claude Code orchestrator with Telegram I/O, Docker isolation, swarm patterns, Mission Control UI. Secrets encrypted at rest (AES-256-GCM).
 
-| Aspect | Praktor | NanoClaw (ours) |
+| Aspect | Praktor | Garsson Harness |
 |--------|---------|-----------------|
 | Target use | Dev orchestration | Customer-facing + dev |
 | Container isolation | Yes | Yes |
@@ -73,20 +75,48 @@ Claude Code orchestrator with Telegram I/O, Docker isolation, swarm patterns, Mi
 
 **Worth studying:** Mission Control UI and secrets management approach.
 
-### 1.5 Ecosystem Summary
+### 1.5 NanoClaw (our upstream)
+
+Lightweight, security-focused alternative to OpenClaw. One Node.js process, container-isolated agent execution, ~4K lines. Created by a single developer as a personal assistant — the "small enough to understand" philosophy.
+
+**Business model — L1/L2 trajectory:**
+
+Successful open-source AI projects follow a predictable path. The creator distinguishes themselves, builds reputation, and either gets acquired for talent (OpenClaw → NVIDIA) or builds a company around the project. The most common commercial model is L1/L2:
+
+- **L1 (open-source)**: NanoClaw as it is today — fork, customize, self-host. Free. Builds adoption, community, and the creator's reputation.
+- **L2 (cloud SaaS)**: Hosted NanoClaw with premium features — managed containers, monitoring dashboard, one-click channel setup, team management, backup/restore. The value is convenience + features that are painful to self-host. This is the GitLab / Supabase / PostHog playbook.
+
+NanoClaw hasn't launched L2 yet, but the trajectory is clear. If they add multi-tenant features (the Agents Plane proposal from the OpenClaw ecosystem) and launch a cloud offering, they'd compete at the infrastructure layer.
+
+| Aspect | NanoClaw | Garsson Harness |
+|--------|----------|-----------------|
+| Business model | Open-source L1, likely cloud SaaS L2 | Closed-source harness + venture portfolio |
+| Target user | Individual developer / power user | Product expert running a vertical business |
+| Isolation | Per-group (containers) | Per-case (containers + CRM + MCP) |
+| Customer-facing | No (personal assistant) | Yes (router + work agents + bot swarm) |
+| Multi-tenant | No | Yes (case isolation enables competitor companies on same vertical) |
+| Monetization | Reputation → talent acquisition or SaaS | Direct revenue from vertical ventures |
+
+**Threat assessment:** If NanoClaw launches a hosted L2 with multi-tenant support, they'd be a credible infrastructure competitor with an open-source community advantage. Our differentiation would then be:
+- Purpose-built for customer-facing verticals (they're general-purpose)
+- Deeper isolation (case-level vs group-level)
+- Venture portfolio model (we're the operator, not just the platform vendor)
+- Product experts as partners (they'd sell to developers, we partner with domain experts)
+
+### 1.6 Ecosystem Summary
 
 ```
                         Customer-Facing Capability
                         Low ◄─────────────────► High
 
-    Per-Case     │                              ★ NanoClaw (planned)
+    Per-Case     │                              ★ Garsson Harness
     Isolation    │
                  │
     Per-Channel  │              Lobu
     Isolation    │
                  │
     Per-Operator │  OpenClaw    ClawSwarm
-    Isolation    │  Praktor
+    Isolation    │  Praktor    NanoClaw
                  │
     None         │  ClawBot
                  │
@@ -102,7 +132,7 @@ No existing Claw ecosystem project combines customer-facing deployment with case
 
 The most relevant commercial competitor. Purpose-built for customer-facing AI agents.
 
-| Aspect | Sierra AI | NanoClaw (ours) |
+| Aspect | Sierra AI | Garsson Harness |
 |--------|-----------|-----------------|
 | Agent Data Platform | Unified customer data across sessions, channels, systems | CRM MCP with per-customer scoping |
 | Customer identity | Cross-channel identity resolution | 2FA-based identity merging |
@@ -118,7 +148,7 @@ The most relevant commercial competitor. Purpose-built for customer-facing AI ag
 
 AI agents built on Salesforce's CRM data layer. Atlas Reasoning Engine for autonomous reasoning.
 
-| Aspect | Agentforce | NanoClaw (ours) |
+| Aspect | Agentforce | Garsson Harness |
 |--------|------------|-----------------|
 | Data model | Salesforce CRM (structured + unstructured) | Custom CRM via MCP |
 | Tenant isolation | Inherited from Salesforce platform | Container + CRM MCP scoping |
@@ -132,7 +162,7 @@ AI agents built on Salesforce's CRM data layer. Atlas Reasoning Engine for auton
 
 Multiple specialized agents working together (orchestrator pattern). AI Control Tower for oversight. 450+ integrations.
 
-| Aspect | ServiceNow | NanoClaw (ours) |
+| Aspect | ServiceNow | Garsson Harness |
 |--------|------------|-----------------|
 | Agent pattern | Orchestrator + specialists | Router + case workers |
 | Data isolation | Inherited from ServiceNow platform | Container + CRM MCP |
@@ -143,7 +173,7 @@ Multiple specialized agents working together (orchestrator pattern). AI Control 
 
 Conversational AI for customer support. Ticket/conversation-scoped.
 
-| Aspect | These platforms | NanoClaw (ours) |
+| Aspect | These platforms | Garsson Harness |
 |--------|----------------|-----------------|
 | Isolation model | Application-level (DB row filtering) | OS-level (containers) |
 | Per-case isolation | No — shared model context across conversations | Yes — separate container, session, filesystem |
