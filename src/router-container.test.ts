@@ -259,6 +259,32 @@ describe('readRouterResult', () => {
 
     expect(mockFs.unlinkSync).toHaveBeenCalled();
   });
+
+  /**
+   * INVARIANT: readRouterResult sanitizes the requestId before using it in file paths,
+   * preventing path traversal attacks from crafted requestId values.
+   * SUT: readRouterResult with path traversal requestId
+   * VERIFICATION: The file path uses the sanitized ID, not the raw traversal string
+   */
+  it('sanitizes requestId to prevent path traversal', () => {
+    mockFs.existsSync.mockReturnValue(true);
+    mockFs.readFileSync.mockReturnValue(
+      JSON.stringify({
+        decision: 'suggest_new',
+        confidence: 0.5,
+        reason: 'test',
+      }),
+    );
+
+    readRouterResult('../../etc/evil');
+
+    // The existsSync call should use the sanitized path (etcevil.json), not the traversal path
+    const existsCalls = mockFs.existsSync.mock.calls.map((c: unknown[]) =>
+      String(c[0]),
+    );
+    const hasTraversal = existsCalls.some((p: string) => p.includes('..'));
+    expect(hasTraversal).toBe(false);
+  });
 });
 
 describe('routeMessage', () => {
