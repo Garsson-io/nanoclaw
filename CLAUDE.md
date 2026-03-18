@@ -414,8 +414,13 @@ Required status checks (all must pass before merge):
 # Step 1: Queue auto-merge (non-blocking — GitHub merges when CI passes + branch is current)
 gh pr merge <url> --repo Garsson-io/nanoclaw --squash --delete-branch --auto
 
-# Step 2: Wait for CI
-gh run watch <run-id> --repo Garsson-io/nanoclaw --exit-status
+# Step 2: Actively monitor CI (do NOT use `gh run watch` — it blocks with no visibility)
+# Poll job-level status every 15-30s:
+gh run view <run-id> --repo Garsson-io/nanoclaw --json jobs --jq '.jobs[] | "\(.name): \(.status) \(.conclusion)"'
+# When a job completes, note its duration. When the last job is running, check step-level progress:
+gh run view <run-id> --repo Garsson-io/nanoclaw --json jobs --jq '.jobs[] | select(.status=="in_progress") | .steps[] | "\(.name): \(.status) \(.conclusion)"'
+# If Docker build > 2min, check logs for cache misses. If all layers CACHED but still slow, it's I/O (image export).
+# Report progress proactively: "CI: 2/3 jobs passed, e2e running — Docker build 57s all cached, now running IPC tests"
 
 # Step 3: Verify merge completed
 gh pr view <url> --repo Garsson-io/nanoclaw --json state --jq .state
