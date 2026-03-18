@@ -45,6 +45,7 @@ NanoClaw (harness, public)              Verticals (private repos)
 
 **Rules:**
 - **NEVER install system packages on the host** (no `sudo apt install`) — system deps go in Dockerfiles. npm deps go in the relevant `package.json` and are installed via `npm install`
+- **Dockerfile cache policy:** Layers are ordered least-frequently-changed → most-frequently-changed. When adding a new dependency, **ADD a new `RUN` layer** at the latest valid position — do NOT modify existing heavy layers (that invalidates all downstream cache and costs minutes in CI). See the cache strategy comments in `container/Dockerfile` for the layer map.
 - **Domain-specific code goes in the vertical repo**, not here
 - **Verticals are mounted into containers** at `/workspace/extra/{name}/`
 - **Work agents** get read-only tools, read-write data. **Dev agents** modify code in worktrees.

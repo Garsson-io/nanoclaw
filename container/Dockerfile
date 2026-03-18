@@ -1,10 +1,24 @@
 # NanoClaw Agent Container
 # Runs Claude Agent SDK in isolated Linux VM with browser automation
+#
+# Cache strategy: layers are ordered least-frequently-changed to most-frequently-changed.
+# When adding dependencies, ADD a new RUN layer at the latest valid position — do NOT
+# modify existing heavy layers (that invalidates all downstream cache). The CI job uses
+# BuildKit with GitHub Actions cache; preserving upper layers saves minutes per PR.
+#
+# Layer change frequency (top = rarely, bottom = often):
+#   1. Base image (node:22-slim)
+#   2. System packages (chromium, fonts, gh CLI)       ~500MB, changes ~never
+#   3. Global npm packages (agent-browser, claude-code) ~150MB, changes rarely
+#   4. Python packages (Pillow, pymupdf, pikepdf)       ~100MB, changes occasionally
+#   5. agent-runner package.json + npm install           ~50MB,  changes when deps change
+#   6. agent-runner source + build                       small,  changes every src/ PR
 
 FROM node:22-slim
 
-# Install system dependencies (Chromium, git, then gh CLI)
-# Two-phase: first install base deps including curl, then add gh apt repo and install gh.
+# System dependencies (Chromium, git, gh CLI)
+# This is the heaviest layer — do NOT modify it. Add new system deps as a separate
+# RUN layer below (see "Vertical-specific system deps" comment).
 RUN apt-get update && apt-get install -y \
     chromium \
     fonts-liberation \
@@ -36,15 +50,17 @@ RUN apt-get update && apt-get install -y \
     && apt-get update && apt-get install -y gh \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python packages for preflight tools (Pillow for images, pymupdf for PDFs)
-RUN pip3 install --no-cache-dir --break-system-packages Pillow>=10.0 pymupdf>=1.24.0 pikepdf>=9.0
+# Vertical-specific system deps: add new RUN layers here (don't modify the layer above).
 
 # Set Chromium path for agent-browser
 ENV AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 
-# Install agent-browser and claude-code globally
+# Global npm packages — core infrastructure, changes rarely
 RUN npm install -g agent-browser @anthropic-ai/claude-code
+
+# Python packages for preflight tools — vertical-specific, changes more often than globals
+RUN pip3 install --no-cache-dir --break-system-packages Pillow>=10.0 pymupdf>=1.24.0 pikepdf>=9.0
 
 # Create app directory
 WORKDIR /app
