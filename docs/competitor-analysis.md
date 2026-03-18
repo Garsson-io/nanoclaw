@@ -54,15 +54,17 @@ Many service-heavy verticals spend relatively little on software compared with p
 
 Historically, much of this work remained unautomated because the workflows were too messy and too specific. Traditional automation required too much bespoke setup, integration work, and maintenance to make economic sense for small and mid-sized businesses. A printing workshop, an insurance brokerage, a small logistics company — each has complex operational workflows, but none could justify custom software development.
 
-Agent systems may change that cost curve. If the cost of tailoring automation falls enough, many previously unreachable workflows become viable targets: document handling, quoting, intake, follow-ups, routing, status checks, exceptions, and back-office coordination. The open-source agent ecosystem has demonstrated that once you get past the technical barriers of setup, teaching an agent to be useful is accessible and effective.
+Agent systems may change that cost curve. If the cost of tailoring automation falls enough, many previously unreachable workflows become viable targets: document handling, quoting, intake, follow-ups, routing, status checks, exceptions, and back-office coordination. The open-source agent ecosystem suggests that once the setup burden is reduced, many useful workflow automations become feasible for non-technical operators.
 
-The remaining barriers are not "can agents do useful work" — they can. The barriers are setup complexity, security, isolation, and the cost of tailoring agents to specific business workflows. That is what the harness is designed to solve.
+The key question is no longer whether agents can do useful work at all — they clearly can in many bounded workflows. The remaining barriers are setup complexity, security, isolation, and the cost of tailoring agents to specific business processes. That is what the harness is designed to solve.
 
-Most small businesses will not automate themselves. They lack the technical capacity. They are at risk of being outcompeted by larger players who can invest in automation. The opportunity is to provide the automation harness, partner with a domain operator who knows the industry, and help small businesses in the vertical survive, reduce costs, and stay competitive — while keeping their best operators as humans-in-the-loop experts where judgment and trust matter.
+This is not a thesis about winning generic support chat. It is a thesis about exception-heavy, document-heavy, multi-step workflows where shared application-layer architectures are weaker and tailored automation has historically been too expensive.
+
+Most small businesses will not build this automation themselves. They lack the technical capacity. They are vulnerable to larger players that can spread automation costs across many customers or locations. The opportunity is to provide the automation harness, partner with a domain operator who knows the industry, and help small businesses in the vertical survive, reduce costs, and stay competitive — while keeping their best operators as humans-in-the-loop experts where judgment and trust matter.
 
 ### Under-served local markets as go-to-market wedge
 
-Markets like Israel are structurally under-served by global software vendors. No outside player designs for the language, regulatory environment, financial systems, or business culture. The competition is local only.
+Large global vendors often underinvest in markets like Israel. Localization across language, regulatory environment, financial systems, and business culture is often shallow or economically unattractive. Competition is often primarily local.
 
 This is not just an observation — it is a go-to-market wedge. A vertical tuned for the Israeli printing industry has no global competitor, because no global company has invested in localizing for that specific intersection of language, regulation, and business norms. Similar dynamics likely exist in many small-to-medium markets worldwide.
 
@@ -74,7 +76,7 @@ Each such market may look too small in isolation to attract a platform. But the 
 
 We looked at three categories: open-source agent frameworks, commercial customer-facing platforms, and infrastructure/sandbox projects. For each, we focused on isolation model, customer-facing capability, and business model.
 
-### 2.1 Open-Source Agent Frameworks
+### 3.1 Open-Source Agent Frameworks
 
 These are operator-facing tools. They help developers run agents, not serve end-customers.
 
@@ -118,7 +120,7 @@ ClawSwarm focuses on multi-agent collaboration (director → specialists), not c
 
 As far as this survey found, no open-source agent framework combines customer-facing deployment with per-case execution isolation. Most optimize for operator experience. The ones that address multi-tenancy (Lobu) do so at the channel level, not the work-item level.
 
-### 2.2 Commercial Customer-Facing Platforms
+### 3.2 Commercial Customer-Facing Platforms
 
 These are genuine product competitors in the customer-facing space. They have stronger data platforms but different isolation models.
 
@@ -156,7 +158,7 @@ These platforms primarily rely on application-layer scoping rather than physical
 
 Commercial platforms gain their isolation strength from the data platforms they're built on (Salesforce's CRM, ServiceNow's ITSM). This is effective but creates ecosystem lock-in. We did not find a commercial platform that offers OS-level per-case isolation. This may be because their application-layer approach is sufficient for their use cases — the question is whether it is sufficient for ours.
 
-### 2.3 Infrastructure & Sandbox Projects
+### 3.3 Infrastructure & Sandbox Projects
 
 These are not competitors but potential building blocks or architectural references.
 
@@ -205,7 +207,7 @@ We avoid claiming novelty. The individual techniques are well-known (containers,
 | Capability | Nearest comparable | How our approach differs |
 |-----------|-------------------|------------------------|
 | **Harness/vertical separation** | We did not find an equivalent in the survey | Domain code (vertical repo) separated from infrastructure (harness). Allows multiple competing companies on the same vertical with the same harness. |
-| **Kaizen feedback loop** | We did not find an equivalent | Case completion triggers structured reflection → suggested improvements. A mechanism for the harness to improve from operational experience. |
+| **Recursive kaizen** | We did not find an equivalent | Case completion triggers structured reflection → suggested improvements. Day-to-day operations feed improvements upward: company-level → vertical-level → harness-level. The system also applies kaizen to itself (recursive kaizen: getting better at getting better). This is an operational learning mechanism, not just a feature. |
 
 ### What is not a differentiator
 
@@ -250,7 +252,22 @@ This architecture is probably wrong for lightweight support chat, FAQ answering,
 
 Garsson Harness is not a SaaS platform, not an open-source framework, and not a consulting practice. It is a closed-source harness that powers a portfolio of vertical ventures.
 
-Each venture is a partnership between Garsson (harness infrastructure) and a **domain operator** who knows the industry. The domain operator brings expertise and customer relationships; the harness brings agent orchestration, case isolation, CRM, and multi-tenant security.
+Each venture is a partnership between Garsson (harness infrastructure) and a **domain operator** — someone who knows the industry and contributes:
+
+- **Customer acquisition**: existing relationships and trust in the vertical
+- **Workflow knowledge**: how the business actually runs, including exceptions and edge cases
+- **Escalation judgment**: when human intervention is needed and what "good enough" looks like
+- **Local and regulatory fluency**: language, compliance, payment systems, business norms
+
+The harness brings agent orchestration, case isolation, CRM, and multi-tenant security. The domain operator brings everything the harness cannot know.
+
+### Three wedges
+
+The strategy rests on three reinforcing wedges:
+
+- **Technical wedge**: Case-level isolation plus scoped access — the architecture that makes multi-company deployment safe.
+- **Commercial wedge**: Domain-operator-led deployment — small businesses adopt automation through a trusted industry peer, not through a software sales process.
+- **Market wedge**: Under-served local and niche verticals — too small individually for global platforms, collectively large enough to build a portfolio.
 
 ### Ramp per vertical
 
@@ -324,4 +341,4 @@ What remains defensible:
 - Vertical-specific configurations and operational knowledge (built through Stages 1-3)
 - The kaizen feedback loop and its accumulated improvements (operational discipline, not just architecture)
 
-The defensibility is in operational learning, control-plane design, vertical partnerships, and deployment discipline — not in source availability. Keeping the source closed buys time to build those up, but is not itself the moat.
+The defensibility is not that we run containers. It is that we can repeatedly deploy a constrained, scoped, operator-assisted automation system into messy verticals faster than others can localize, integrate, and operationalize it. Keeping the source closed buys time to build that capability, but is not itself the moat.
