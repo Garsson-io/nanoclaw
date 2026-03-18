@@ -224,6 +224,22 @@ This architecture is probably wrong for lightweight support chat, FAQ answering,
 
 ## 7. Business Model
 
+### The market opportunity
+
+For every dollar spent on SaaS software, roughly ten dollars goes to salaries of people operating around that software. AI agents are going after the ten dollars.
+
+There are many industries — printing, insurance brokerage, small logistics, local services — where the work is operationally complex but not software-defined. These businesses use some SaaS, but their core value is in domain expertise and customer relationships. They need automation but have never been able to afford it. Custom software is too expensive. Enterprise platforms (Salesforce, ServiceNow) are too heavy and too costly. The result: manual processes, human bottlenecks, and vulnerability to larger players who can invest in automation.
+
+What the open-source agent ecosystem (OpenClaw, NanoClaw) has demonstrated is that once you get past the technical barriers of setup, teaching an agent to be useful is accessible and effective. The barriers are not "can agents do useful work" — they can. The barriers are setup complexity, security, isolation, and the cost of tailoring agents to specific business workflows.
+
+Most small businesses will not automate themselves. They lack the technical capacity. They are at risk of being outcompeted by larger players who can. Garsson's thesis is: provide the automation harness, partner with a domain operator who knows the industry, and help every small business in the vertical survive, reduce costs, and stay competitive — while keeping their best operators as humans-in-the-loop experts.
+
+### Geographic niches as natural moats
+
+Markets like Israel are largely disconnected from global automation trends. No outside player designs for the language, regulatory environment, financial systems, or business culture. The competition is local only. This creates a natural moat: a vertical tuned for the Israeli printing industry has no global competitor, because no global company has bothered to build it.
+
+Similar small-to-medium markets likely exist in many countries. Each is too small to attract a global platform. But the sum total of many niche deployments — each using the same harness with a local domain operator — may be larger and more defensible than trying to build one giant company in one large market.
+
 ### The venture portfolio model
 
 Garsson Harness is not a SaaS platform, not an open-source framework, and not a consulting practice. It is a closed-source harness that powers a portfolio of vertical ventures.
@@ -271,6 +287,8 @@ Case isolation is not just a security feature. It is what makes Stage 3 possible
 2. **Domain operators must exist and be willing to partner.** Each vertical depends on finding someone with industry knowledge who wants to build a business on this harness.
 3. **The harness must compound.** Each vertical must make the harness better for all verticals. If every vertical requires heavy custom harness work, it's consultancy, not a platform.
 4. **Application-layer isolation must be insufficient for our target workflows.** If prompt engineering + DB filtering works well enough for sensitive customer-facing work — including document processing, artifact generation, and multi-company deployment — our per-case isolation is overengineered. This is the core empirical question. The bet is that it isn't enough, especially for multi-company verticals where companies are direct competitors.
+5. **Small businesses must be reachable through domain operators, not direct sales.** These businesses won't buy agent infrastructure. They'll adopt it if a trusted industry peer (the domain operator) makes it easy and relevant.
+6. **Geographic and regulatory niches must be durable moats.** If a global platform decides to localize for Israel or similar markets, the niche advantage disappears. The bet is that these markets are too small to attract that investment — individually. The portfolio of many such niches is the defense.
 
 ### What breaks first as scale increases
 
