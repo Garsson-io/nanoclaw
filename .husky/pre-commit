@@ -33,7 +33,7 @@ SURFACE_FILES="ipc-mcp-stdio.ts|ipc\.ts|ipc-cases\.ts|container-runner\.ts|case-
 STAGED_SURFACE=$(git diff --cached --name-only --diff-filter=d | grep -E "$SURFACE_FILES" || true)
 
 if [ -n "$STAGED_SURFACE" ]; then
-  npx tsx scripts/generate-contract.ts 2>/dev/null
+  npx tsx scripts/generate-contract.ts 1>/dev/null
   if git diff --quiet contract.json 2>/dev/null; then
     : # No change — surfaces didn't actually change
   else
