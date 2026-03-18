@@ -22,6 +22,7 @@ import {
   DATA_DIR,
   TIMEZONE,
 } from './config.js';
+import { sanitizeRequestId } from './ipc-sanitize.js';
 import {
   CONTAINER_HOST_GATEWAY,
   CONTAINER_RUNTIME_BIN,
@@ -108,8 +109,9 @@ export async function routeMessage(
  * The route_decision MCP tool writes the result as a JSON file.
  */
 export function readRouterResult(requestId: string): RouterResponse {
+  const safeId = sanitizeRequestId(requestId);
   const resultsDir = path.join(DATA_DIR, 'ipc', ROUTER_GROUP_FOLDER, 'results');
-  const resultFile = path.join(resultsDir, `${requestId}.json`);
+  const resultFile = path.join(resultsDir, `${safeId}.json`);
 
   if (!fs.existsSync(resultFile)) {
     // Brief retry for filesystem sync latency (WSL2 mounts can be slow)
