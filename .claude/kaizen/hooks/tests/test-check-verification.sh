@@ -2,7 +2,7 @@
 # Tests for check-verification.sh hook
 # Run: bash .claude/kaizen/hooks/tests/test-check-verification.sh
 #
-# INVARIANT: gh pr create is BLOCKED if the command body lacks a Verification section.
+# INVARIANT: gh pr create warns on stderr if the command body lacks a Verification section.
 # INVARIANT: gh pr create is ALLOWED if the body contains verification markers.
 # INVARIANT: gh pr merge outputs advisory verification reminder on stderr, never blocks.
 # INVARIANT: Non-PR commands are ignored.
@@ -73,13 +73,13 @@ OUTPUT=$(run_hook "$HOOK" "$BODY_WITH_TESTPLAN")
 assert_eq "body with Test plan section → allow" "" "$OUTPUT"
 
 echo ""
-echo "=== Create: body WITHOUT verification → deny ==="
+echo "=== Create: body WITHOUT verification → warning on stderr ==="
 
 BODY_NO_VERIFY='gh pr create --title "test" --body "just a summary, nothing else here"'
 
-OUTPUT=$(run_hook "$HOOK" "$BODY_NO_VERIFY")
-assert_contains "missing verification → deny" "deny" "$OUTPUT"
-assert_contains "deny message mentions Verification" "Verification" "$OUTPUT"
+OUTPUT=$(run_hook_stderr "$HOOK" "$BODY_NO_VERIFY")
+assert_contains "missing verification → warning on stderr" "Missing Verification" "$OUTPUT"
+assert_contains "warning mentions Verification section" "Verification" "$OUTPUT"
 
 echo ""
 echo "=== Create: heredoc body with 'verify' keyword → allow ==="

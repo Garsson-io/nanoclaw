@@ -322,6 +322,106 @@ fi
 
 rm -rf "$FIXA_MOCK_DIR"
 
+echo ""
+echo "=== find_state_with_status: finds matching status ==="
+
+setup
+printf 'PR_URL=https://github.com/Garsson-io/nanoclaw/pull/90\nSTATUS=needs_post_merge\nBRANCH=%s\n' "$CURRENT_BRANCH" > "$STATE_DIR/post-merge-test"
+
+# INVARIANT: find_state_with_status returns the first file with the given status
+# SUT: find_state_with_status general-purpose lookup
+STATE_INFO=$(find_state_with_status "needs_post_merge")
+if [ $? -eq 0 ]; then
+  echo "  PASS: find_state_with_status found needs_post_merge"
+  ((PASS++))
+else
+  echo "  FAIL: find_state_with_status did not find needs_post_merge"
+  ((FAIL++))
+fi
+assert_contains "returns correct PR URL" "nanoclaw/pull/90" "$STATE_INFO"
+
+echo ""
+echo "=== find_state_with_status: ignores non-matching status ==="
+
+setup
+printf 'PR_URL=https://github.com/Garsson-io/nanoclaw/pull/91\nSTATUS=awaiting_merge\nBRANCH=%s\n' "$CURRENT_BRANCH" > "$STATE_DIR/post-merge-test2"
+
+# INVARIANT: find_state_with_status returns failure when no matching status exists
+STATE_INFO=$(find_state_with_status "needs_post_merge")
+if [ $? -ne 0 ]; then
+  echo "  PASS: find_state_with_status correctly ignores non-matching status"
+  ((PASS++))
+else
+  echo "  FAIL: find_state_with_status returned success for wrong status"
+  ((FAIL++))
+fi
+
+echo ""
+echo "=== find_state_with_status: respects cross-worktree isolation ==="
+
+setup
+printf 'PR_URL=https://github.com/Garsson-io/nanoclaw/pull/92\nSTATUS=needs_post_merge\nBRANCH=wt/other-branch\n' > "$STATE_DIR/post-merge-other"
+
+# INVARIANT: find_state_with_status ignores state from other branches
+STATE_INFO=$(find_state_with_status "needs_post_merge")
+if [ $? -ne 0 ]; then
+  echo "  PASS: find_state_with_status ignores other branch's state"
+  ((PASS++))
+else
+  echo "  FAIL: find_state_with_status matched other branch's state"
+  ((FAIL++))
+fi
+
+echo ""
+echo "=== clear_state_with_status: removes matching state file ==="
+
+setup
+printf 'PR_URL=https://github.com/Garsson-io/nanoclaw/pull/93\nSTATUS=needs_post_merge\nBRANCH=%s\n' "$CURRENT_BRANCH" > "$STATE_DIR/post-merge-clear-test"
+
+# INVARIANT: clear_state_with_status removes the first matching file
+clear_state_with_status "needs_post_merge"
+if [ $? -eq 0 ] && [ ! -f "$STATE_DIR/post-merge-clear-test" ]; then
+  echo "  PASS: clear_state_with_status removed matching state file"
+  ((PASS++))
+else
+  echo "  FAIL: clear_state_with_status did not remove the file"
+  ((FAIL++))
+fi
+
+echo ""
+echo "=== clear_state_with_status: returns failure when no match ==="
+
+setup
+
+# INVARIANT: clear_state_with_status returns 1 when no matching state exists
+clear_state_with_status "needs_post_merge"
+if [ $? -ne 0 ]; then
+  echo "  PASS: clear_state_with_status returns failure when no match"
+  ((PASS++))
+else
+  echo "  FAIL: clear_state_with_status returned success with no matching files"
+  ((FAIL++))
+fi
+
+echo ""
+echo "=== clear_state_with_status: only clears own branch ==="
+
+setup
+printf 'PR_URL=https://github.com/Garsson-io/nanoclaw/pull/94\nSTATUS=needs_post_merge\nBRANCH=wt/other-branch\n' > "$STATE_DIR/post-merge-other2"
+printf 'PR_URL=https://github.com/Garsson-io/nanoclaw/pull/95\nSTATUS=needs_post_merge\nBRANCH=%s\n' "$CURRENT_BRANCH" > "$STATE_DIR/post-merge-own"
+
+# INVARIANT: clear_state_with_status only removes state for the current branch
+clear_state_with_status "needs_post_merge"
+if [ -f "$STATE_DIR/post-merge-other2" ] && [ ! -f "$STATE_DIR/post-merge-own" ]; then
+  echo "  PASS: clear_state_with_status only cleared own branch's state"
+  ((PASS++))
+else
+  echo "  FAIL: clear_state_with_status did not respect branch isolation"
+  if [ ! -f "$STATE_DIR/post-merge-other2" ]; then echo "    other branch's file was deleted"; fi
+  if [ -f "$STATE_DIR/post-merge-own" ]; then echo "    own branch's file was NOT deleted"; fi
+  ((FAIL++))
+fi
+
 teardown
 rm -rf "$DEFAULT_MOCK_DIR"
 

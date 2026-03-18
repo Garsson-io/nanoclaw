@@ -47,6 +47,8 @@ These are registered in `.claude/settings.json` and fire on Claude Code tool-use
 | `check-cleanup-on-stop.sh` | Stop | Advisory | No | Warn about orphaned worktree state |
 | `pr-review-loop.sh` | PostToolUse(Bash) | State machine | No | Multi-round PR self-review with state tracking |
 | `kaizen-reflect.sh` | PostToolUse(Bash) | Advisory | No | Trigger kaizen reflection at workflow boundaries |
+| `enforce-post-merge-stop.sh` | Stop | Gate | Yes | Block agent from finishing with pending post-merge workflow |
+| `post-merge-clear.sh` | PostToolUse(Bash,Skill) | State machine | No | Clear post-merge gate on /kaizen; promote awaiting_merge on merge confirmation |
 
 ### Shared Libraries (`hooks/lib/`)
 
@@ -157,6 +159,17 @@ Read-only mounts, mandatory worktree launcher, protected wrappers. Use when huma
 - **Keyed by:** PR URL (not branch — PRs can target different repos)
 - **Staleness:** Files older than 2 hours are ignored
 - **Isolation:** `state-utils.sh` filters by BRANCH field matching current git branch
+
+### Post-merge workflow state
+
+- **Location:** `/tmp/.pr-review-state/` (same directory, `post-merge-` prefix)
+- **Format:** Plain key=value files
+- **Fields:** `PR_URL`, `STATUS` (awaiting_merge|needs_post_merge), `BRANCH`
+- **Lifecycle:**
+  1. `gh pr merge` → `pr-review-loop.sh` writes `needs_post_merge` (direct merge) or `awaiting_merge` (`--auto`)
+  2. `gh pr view` confirms MERGED → `post-merge-clear.sh` promotes `awaiting_merge` to `needs_post_merge`
+  3. Agent runs `/kaizen` → `post-merge-clear.sh` clears state
+  4. `enforce-post-merge-stop.sh` blocks Stop while `needs_post_merge` exists
 
 ### Cross-worktree isolation rule
 

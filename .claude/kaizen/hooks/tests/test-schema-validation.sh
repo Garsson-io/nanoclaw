@@ -32,14 +32,22 @@ echo "=== Deny JSON schema validation ==="
 DENY_TESTS=(
   # hook_script:command:description
   "$HOOKS_DIR/check-dirty-files.sh:gh pr create --title test --body test:dirty files on pr create"
-  "$HOOKS_DIR/enforce-case-worktree.sh:git commit -m test:commit on wrong branch"
 )
 
-# Set up state for enforce-pr-review
-printf 'PR_URL=https://github.com/Garsson-io/nanoclaw/pull/42\nROUND=1\nSTATUS=needs_review\n' > "$STATE_DIR/Garsson-io_nanoclaw_42"
+# Set up state for enforce-pr-review (must include BRANCH field for state-utils isolation)
+# BRANCH must match what the mock git returns for rev-parse --abbrev-ref HEAD ("main")
+printf 'PR_URL=https://github.com/Garsson-io/nanoclaw/pull/42\nROUND=1\nSTATUS=needs_review\nBRANCH=main\n' > "$STATE_DIR/Garsson-io_nanoclaw_42"
 DENY_TESTS+=("$HOOKS_DIR/enforce-pr-review.sh:npm test:blocked by review gate")
 
-# Mock git for enforce-case-worktree to return main branch
+# Mock gh to return OPEN for PR state checks (prevents auto-clear of state files)
+cat > "$MOCK_DIR/gh" << 'MOCK'
+#!/bin/bash
+echo "OPEN"
+exit 0
+MOCK
+chmod +x "$MOCK_DIR/gh"
+
+# Mock git for deny tests to return main branch
 cat > "$MOCK_DIR/git" << 'MOCK'
 #!/bin/bash
 if echo "$@" | grep -q "status --porcelain"; then

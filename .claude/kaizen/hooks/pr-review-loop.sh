@@ -178,7 +178,7 @@ CHECKLIST
 
 MAX_ROUNDS=4
 
-# TRIGGER 4: gh pr merge — clean up state file and prompt summary
+# TRIGGER 4: gh pr merge — set up post-merge workflow gate
 if $IS_PR_MERGE; then
   # Try to find state by PR URL from output, or fall back to most recent active
   MERGE_PR_URL=$(echo "$STDOUT" | grep -oE 'https://github\.com/[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+/pull/[0-9]+' | head -1)
@@ -191,25 +191,63 @@ if $IS_PR_MERGE; then
   else
     STATE_FILE=$(find_active_state)
   fi
+  # Clean up the review state (review is done — PR is merging/merged)
   cleanup_state
 
-  cat <<EOF
+  # Detect --auto flag: merge is queued, not yet complete
+  IS_AUTO=false
+  if echo "$CMD_LINE" | grep -qE '\-\-auto'; then
+    IS_AUTO=true
+  fi
 
-🎉 PR merged successfully.
+  # Write post-merge workflow state to a dedicated state file
+  MERGE_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+  POST_MERGE_KEY=$(echo "$MERGE_PR_URL" | sed 's|https://github\.com/||;s|/pull/|_|;s|/|_|g')
+  POST_MERGE_STATE="$STATE_DIR/post-merge-${POST_MERGE_KEY}"
 
-Now report to the user:
-1. **What was achieved** — summarize the changes and their impact in 2-3 sentences
+  if $IS_AUTO; then
+    # Auto-merge: PR isn't merged yet. Write awaiting_merge state.
+    # post-merge-clear.sh will promote to needs_post_merge when agent
+    # confirms merge via `gh pr view` (kaizen #93 fix).
+    printf 'PR_URL=%s\nSTATUS=%s\nBRANCH=%s\n' "$MERGE_PR_URL" "awaiting_merge" "$MERGE_BRANCH" > "$POST_MERGE_STATE"
+    chmod 600 "$POST_MERGE_STATE" 2>/dev/null
+
+    cat <<EOF
+
+⏳ Auto-merge queued for: $MERGE_PR_URL
+
+The PR will merge when CI passes. After confirming the merge (via \`gh pr view\`),
+the post-merge workflow will activate. You will need to:
+1. Run \`/kaizen\` for reflection
+2. Mark the case as done
+3. Sync main
+4. Update linked issue
+
+EOF
+  else
+    # Direct merge: PR is merged now. Write needs_post_merge state.
+    printf 'PR_URL=%s\nSTATUS=%s\nBRANCH=%s\n' "$MERGE_PR_URL" "needs_post_merge" "$MERGE_BRANCH" > "$POST_MERGE_STATE"
+    chmod 600 "$POST_MERGE_STATE" 2>/dev/null
+
+    cat <<EOF
+
+🎉 PR merged: $MERGE_PR_URL
+
+Now complete the post-merge workflow:
+1. **Kaizen reflection (REQUIRED)** — Run \`/kaizen\` NOW. Reflect on impediments, what you'd do differently, and what the system should learn. This is not optional — skipping kaizen reflection after merge is a recurring failure pattern.
 2. **Post-merge action needed** — classify per CLAUDE.md "Post-Merge: Deploy & Maintenance Policy":
    - CLAUDE.md/docs only → no action, active on next conversation
    - src/ changes → needs \`npm run build\` + service restart (~10s downtime)
    - container/Dockerfile → needs \`./container/build.sh\` + restart
    - package.json deps → needs \`npm install\` + build + restart
-3. **Sync main** — remind to run: \`git -C /home/aviadr1/projects/nanoclaw fetch origin main && git -C /home/aviadr1/projects/nanoclaw merge origin/main --no-edit\`
-4. **Kaizen reflection (REQUIRED)** — Run \`/kaizen\` NOW. Reflect on impediments, what you'd do differently, and what the system should learn. This is not optional — skipping kaizen reflection after merge is a recurring failure pattern.
-5. **Update linked issue** — Close the kaizen/tracking issue with a summary of what was implemented and lessons learned.
-6. **Spec update** — If a spec/PRD exists, move completed work to "Already Solved" and refine the next phase.
+3. **Sync main** — \`git -C /home/aviadr1/projects/nanoclaw fetch origin main && git -C /home/aviadr1/projects/nanoclaw merge origin/main --no-edit\`
+4. **Update linked issue** — Close the kaizen/tracking issue with lessons learned.
+5. **Spec update** — If a spec/PRD exists, move completed work to "Already Solved".
+
+⛔ You will NOT be able to finish until /kaizen is run.
 
 EOF
+  fi
   exit 0
 fi
 
