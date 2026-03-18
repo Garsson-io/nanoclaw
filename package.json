@@ -19,7 +19,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "contract:generate": "tsx scripts/generate-contract.ts",
-    "contract:check": "tsx scripts/generate-contract.ts check"
+    "contract:check": "tsx scripts/generate-contract.ts check",
+    "compat:check": "tsx scripts/check-vertical-compat.ts"
   },
   "dependencies": {
     "better-sqlite3": "^11.8.1",
