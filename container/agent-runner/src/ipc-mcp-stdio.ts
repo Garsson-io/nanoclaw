@@ -879,6 +879,55 @@ Use this when:
 );
 
 server.tool(
+  'attach_case_artifact',
+  `Attach a file, link, or reference to a case. Use this to associate deliverables, source files, external URLs, or any other artifact with a case for tracking.
+
+The artifact is recorded as a structured comment on the case and synced to the cloud backend.`,
+  {
+    case_id: z.string().describe('The case ID to attach the artifact to'),
+    artifact_type: z
+      .enum(['file', 'link', 'note'])
+      .describe('Type of artifact: file path, URL/link, or free-text note'),
+    value: z
+      .string()
+      .describe('The artifact value: a file path, URL, or note text'),
+    description: z
+      .string()
+      .optional()
+      .describe('Brief description of what this artifact is'),
+  },
+  async (args) => {
+    const label =
+      args.artifact_type === 'file'
+        ? '📎'
+        : args.artifact_type === 'link'
+          ? '🔗'
+          : '📝';
+    const desc = args.description ? ` — ${args.description}` : '';
+    const text = `${label} **Artifact (${args.artifact_type}):** ${args.value}${desc}`;
+
+    const data = {
+      type: 'case_add_comment',
+      caseId: args.case_id,
+      text,
+      author: 'agent',
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(TASKS_DIR, data);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `Artifact attached to case ${args.case_id}: ${args.artifact_type} — ${args.value}`,
+        },
+      ],
+    };
+  },
+);
+
+server.tool(
   'case_mark_active',
   'Resume a blocked case, marking it as active again.',
   {
