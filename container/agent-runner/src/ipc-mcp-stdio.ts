@@ -678,7 +678,7 @@ Case types:
         'Escalation gap type from the vertical escalation config (e.g., "missing_info", "approval_needed"). Triggers priority computation.',
       ),
     signals: z
-      .record(z.boolean())
+      .record(z.string(), z.boolean())
       .optional()
       .describe(
         'Explicit escalation signal overrides (e.g., { "customer_waiting": true }). Auto-detected signals are merged in.',
