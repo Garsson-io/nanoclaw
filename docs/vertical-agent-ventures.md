@@ -253,8 +253,9 @@ The individual techniques aren't new (containers, CRM scoping, named bots). The 
 - **Technical wedge**: Case-level isolation plus scoped access make customer-facing agent deployment safer and more trustworthy in sensitive, multi-company workflows.
 - **Commercial wedge**: Domain operators bring trust, workflow knowledge, and escalation judgment that small businesses will not buy from a generic software sales motion.
 - **Market wedge**: Under-served local and niche verticals are too small individually for large platforms to prioritize, but large enough in aggregate to support a portfolio.
+- **Operational wedge**: Recursive kaizen — every case completion triggers reflection, surfacing improvements that flow back into tooling. Each deployment makes the next one faster and more reliable.
 
-The model works only if these wedges reinforce each other: stronger isolation enables multi-company deployment, domain operators make adoption possible, and niche markets provide a wedge global platforms often ignore.
+The model works only if these wedges reinforce each other: stronger isolation enables multi-company deployment, domain operators make adoption possible, niche markets provide a wedge global platforms often ignore, and recursive improvement compounds the advantage over time.
 
 ---
 
