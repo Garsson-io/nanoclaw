@@ -365,8 +365,23 @@ class MockBinDir:
         return f"{self.dir}:{self._original_path}"
 
     def add_git_mock(self, branch: str = "wt/test", status_output: str = "",
-                     diff_output: str = "", remote_url: str = "https://github.com/Garsson-io/nanoclaw.git"):
-        """Create a mock git binary."""
+                     diff_output: str = "", remote_url: str = "https://github.com/Garsson-io/nanoclaw.git",
+                     simulate_main_checkout: bool = False):
+        """Create a mock git binary.
+
+        Args:
+            simulate_main_checkout: If True, --git-dir and --git-common-dir both
+                return ".git" (same path = not a worktree). If False (default),
+                --git-common-dir returns ".git" but --git-dir falls through to
+                real git (which returns the worktree-specific path if in a worktree).
+        """
+        git_dir_handler = ""
+        if simulate_main_checkout:
+            git_dir_handler = """
+if echo "$@" | grep -q "rev-parse --git-dir"; then
+  echo ".git"
+  exit 0
+fi"""
         script = f"""#!/bin/bash
 if echo "$@" | grep -q "status --porcelain"; then
   printf '%s' '{status_output}'
@@ -387,7 +402,7 @@ fi
 if echo "$@" | grep -q "rev-parse --git-common-dir"; then
   echo ".git"
   exit 0
-fi
+fi{git_dir_handler}
 /usr/bin/git "$@" 2>/dev/null
 """
         mock_path = self.dir / "git"

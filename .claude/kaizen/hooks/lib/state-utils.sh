@@ -1,6 +1,6 @@
 #!/bin/bash
 # Part of kAIzen Agent Control Flow — see .claude/kaizen/README.md
-# state-utils.sh — Shared state file utilities for PR review hooks.
+# state-utils.sh — Shared state file utilities for workflow gate hooks.
 # Source from hooks: source "$(dirname "$0")/lib/state-utils.sh"
 #
 # CROSS-WORKTREE ISOLATION (Kaizen escalation from incident #73):
@@ -107,6 +107,48 @@ find_needs_review_state() {
         fi
       fi
       echo "$pr_url|$round"
+      return 0
+    fi
+  done < <(list_state_files_for_current_worktree)
+  return 1
+}
+
+# Find the first state file with a given STATUS for the current branch.
+# General-purpose version of find_needs_review_state — reusable for any workflow gate.
+# Outputs "PR_URL|STATUS" on success, returns 1 if none found.
+#
+# Usage:
+#   STATE_INFO=$(find_state_with_status "needs_post_merge")
+#   if [ $? -eq 0 ]; then
+#     PR_URL=$(echo "$STATE_INFO" | cut -d'|' -f1)
+#   fi
+find_state_with_status() {
+  local wanted_status="$1"
+  while IFS= read -r f; do
+    local status
+    status=$(grep -E '^STATUS=' "$f" 2>/dev/null | head -1 | cut -d= -f2-)
+    if [ "$status" = "$wanted_status" ]; then
+      local pr_url
+      pr_url=$(grep -E '^PR_URL=' "$f" 2>/dev/null | head -1 | cut -d= -f2-)
+      echo "$pr_url|$status"
+      return 0
+    fi
+  done < <(list_state_files_for_current_worktree)
+  return 1
+}
+
+# Clear the first state file matching a given STATUS for the current branch.
+# Returns 0 if a file was cleared, 1 if none found.
+#
+# Usage:
+#   clear_state_with_status "needs_post_merge"
+clear_state_with_status() {
+  local wanted_status="$1"
+  while IFS= read -r f; do
+    local status
+    status=$(grep -E '^STATUS=' "$f" 2>/dev/null | head -1 | cut -d= -f2-)
+    if [ "$status" = "$wanted_status" ]; then
+      rm -f "$f" 2>/dev/null
       return 0
     fi
   done < <(list_state_files_for_current_worktree)
