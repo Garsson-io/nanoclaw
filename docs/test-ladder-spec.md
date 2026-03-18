@@ -652,30 +652,92 @@ Phase 4: LLM Testing
 
 Each phase is independently valuable. Phase 0 can start immediately. Phase 1 is the highest-value investment. Phases 2-4 can proceed incrementally.
 
-## 10. Maintaining This Document
+## 10. Keeping the Ladder Current
 
-### When to Update
+The capability inventory and coverage matrix are only valuable if they stay accurate. A stale matrix is worse than no matrix — it creates false confidence. This section defines what needs to exist (not how to build it) to keep the ladder current as the system evolves.
 
-| Event | Action |
-|-------|--------|
-| New capability added | Add row to inventory (Section 5), Current = L0, set Target |
-| Test added for capability | Update Current column to new level |
-| New ladder rung infrastructure built | Update rung description in Section 3 |
-| Capability removed/deprecated | Remove row or mark Deprecated |
-| Security gap found | Add to security taxonomy (Section 4) |
-| Security gap closed | Update security table |
+### The Problem
+
+Today, the inventory is a static Markdown table maintained by hand. This breaks in predictable ways:
+
+1. **New capability, no row.** Someone adds `send_reaction` to the MCP tools. No one adds a row to the inventory. The matrix silently becomes incomplete.
+2. **Test added, matrix not updated.** Someone writes L6 tests for `case_create`. The matrix still says L1. The gap analysis overstates risk.
+3. **Capability removed, row lingers.** A tool is deprecated. The matrix still tracks it. Noise accumulates.
+4. **No enforcement on new work.** A dev case creates a new feature. Nothing prompts the agent to assess where it lands on the ladder or what test level it needs.
+
+### What Needs to Exist
+
+Four mechanisms, ordered by kaizen level. Each is described as a need — the design and implementation are separate work items.
+
+#### 10.1 Workflow Guardrails on New Work
+
+**Need:** When a dev agent takes on new work (creates a case, starts a PR, adds a capability), the workflow should prompt it to:
+- Identify which capabilities are being added or modified
+- State the current test level and target test level
+- Include test-level advancement in the PR's definition of done
+
+**Possible enforcement points:**
+- **Case creation** — the `case_create` MCP tool or case creation workflow could require a `test_impact` field: "which capabilities does this touch, and what test level are they at?"
+- **PR template / hook** — a pre-PR or post-PR hook could check whether new source files have corresponding capability IDs and test-level annotations
+- **Skill prompt** — the dev agent's system prompt or case CLAUDE.md could include a checklist: "Before marking done: which capabilities did you add/modify? Did you update the test ladder inventory?"
+- **PR review** — the self-review checklist could include: "Are all new/modified capabilities reflected in docs/test-ladder-spec.md?"
+
+**What this prevents:** Silent capability drift. New features shipping without anyone assessing their testability.
+
+#### 10.2 Test-to-Capability Linking
+
+**Need:** Tests should declare which capabilities they cover and at what ladder level. This creates a machine-readable link between the test suite and the capability inventory.
+
+**Possible approaches:**
+- **In-test annotations** — comments or metadata in test files (`// @capability: T1`, `// @ladder: L5`)
+- **Test naming convention** — test file or describe block names include capability IDs
+- **Separate manifest** — a `test-manifest.json` that maps test files to capabilities
+- **Convention + linting** — a CI check that every test file declares at least one capability
+
+**What this enables:** Auto-generation of the coverage matrix. Drift detection (capability exists in inventory but no test claims to cover it). Regression alerts (test removed, coverage level drops).
+
+#### 10.3 Inventory Drift Detection
+
+**Need:** A mechanism to detect when the capability inventory diverges from reality. This could be:
+
+- **Contract-based** — similar to `contract.json` for MCP tools, a machine-readable capability manifest that CI validates against the actual codebase
+- **PR-based** — a CI check that flags PRs which add new exported functions, MCP tools, IPC handlers, or channel methods without a corresponding inventory update
+- **Periodic audit** — a scheduled task (or kaizen investigation) that scans the codebase for capabilities not in the inventory
+
+**What this prevents:** The matrix becoming stale. Capabilities existing in code but invisible to the testing strategy.
+
+#### 10.4 Coverage Dashboard (Future)
+
+**Need:** A way to visualize the current state of the ladder — which capabilities are at which level, where the gaps are, and how coverage is trending over time.
+
+**Possible forms:**
+- **Generated Markdown** — a script that reads test annotations and produces an updated coverage table (like `contract.json` generation)
+- **CI artifact** — each CI run produces a coverage summary comparing current vs target levels
+- **Kaizen integration** — coverage gaps automatically surface as suggested dev cases
+
+**What this enables:** Strategic prioritization. "We have 15 capabilities stuck at L1 that should be L6. Here are the 3 that matter most."
+
+### What Exists Today (Manual Process)
+
+| Mechanism | Status | Kaizen level |
+|-----------|--------|-------------|
+| Manual inventory update | Section 5 of this document | L1 (instructions) |
+| PR review checklist | Includes test coverage check | L1 (instructions) |
+| CI test-exceptions block | Flags missing tests in PRs | L2 (hook) |
+| Contract.json validation | Catches MCP tool drift | L3 (mechanistic) |
+
+The gap: nothing enforces inventory updates for non-MCP capabilities (channels, host pipeline, IPC handlers, cases). The contract check covers tool *declarations* but not test *levels*. The PR review checklist is L1 — it depends on the agent remembering to check.
+
+### Kaizen Escalation Path
+
+Following the kaizen escalation framework:
+
+1. **L1 (now):** This document defines the inventory and says "update it." Agents are instructed to check it.
+2. **L2 (next):** A hook or skill prompt checks whether PRs that touch capability-relevant files include an inventory update. Warns if not.
+3. **L3 (goal):** A mechanistic check — like contract.json but for the full capability inventory — that fails CI if the inventory diverges from the codebase.
+
+The transition from L1 to L2 to L3 should happen as failures accumulate. If agents consistently forget to update the inventory (L1 fails), add a hook (L2). If hooks are insufficient or bypassed, build mechanistic enforcement (L3).
 
 ### Review Cadence
 
 After each significant test infrastructure PR. The ladder rungs should be stable; the capability inventory grows with the codebase.
-
-### Automation (Future)
-
-Tag tests with capability IDs:
-```typescript
-// @capability: T1 send_message
-// @ladder: L5
-test('send_message produces correct IPC file', () => { ... })
-```
-
-Parse tags to auto-generate coverage matrix. Compare against this document. Surface gaps in CI.
