@@ -248,7 +248,17 @@ The individual techniques aren't new (containers, CRM scoping, named bots). The 
 
 ---
 
-## 6. Business Model
+## 6. Three Reinforcing Wedges
+
+- **Technical wedge**: Case-level isolation plus scoped access make customer-facing agent deployment safer and more trustworthy in sensitive, multi-company workflows.
+- **Commercial wedge**: Domain operators bring trust, workflow knowledge, and escalation judgment that small businesses will not buy from a generic software sales motion.
+- **Market wedge**: Under-served local and niche verticals are too small individually for large platforms to prioritize, but large enough in aggregate to support a portfolio.
+
+The model works only if these wedges reinforce each other: stronger isolation enables multi-company deployment, domain operators make adoption possible, and niche markets provide a wedge global platforms often ignore.
+
+---
+
+## 7. Business Model
 
 ### What We're Building
 
@@ -297,7 +307,7 @@ The closest analogy is a **franchise model for AI agents**: Garsson provides the
 
 ---
 
-## 7. Competitive Position
+## 8. Competitive Position
 
 ### Garsson Harness vs NanoClaw
 
