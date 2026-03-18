@@ -427,6 +427,143 @@ assert_contains "merge from non-main branch triggers review round" "ROUND" "$PUS
 
 rm -rf "$MOCK_DIR"
 
+echo ""
+echo "=== gh pr diff outputs checklist and transitions state to passed ==="
+
+# INVARIANT: When an agent runs `gh pr diff` while state is needs_review,
+# the hook must output the review checklist AND transition status to passed.
+# SUT: pr-review-loop.sh TRIGGER 3 (gh pr diff handler)
+# VERIFICATION: Output contains checklist text; state file STATUS becomes passed.
+teardown
+setup
+
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+
+# Create state file simulating an active review (round 2, needs_review)
+DIFF_STATE_FILE="$STATE_DIR/Garsson-io_nanoclaw_55"
+printf 'PR_URL=https://github.com/Garsson-io/nanoclaw/pull/55\nROUND=2\nSTATUS=needs_review\nBRANCH=%s\n' "$CURRENT_BRANCH" > "$DIFF_STATE_FILE"
+
+DIFF_INPUT=$(jq -n '{
+  "tool_input": {"command": "gh pr diff https://github.com/Garsson-io/nanoclaw/pull/55"},
+  "tool_response": {
+    "stdout": "diff --git a/src/foo.ts b/src/foo.ts\n...",
+    "stderr": "",
+    "exit_code": "0"
+  }
+}')
+
+DIFF_OUTPUT=$(echo "$DIFF_INPUT" | STATE_DIR="$STATE_DIR" bash "$HOOK" 2>/dev/null)
+assert_contains "diff output includes review round" "REVIEW ROUND 2/4" "$DIFF_OUTPUT"
+assert_contains "diff output includes checklist" "/review-pr" "$DIFF_OUTPUT"
+assert_contains "diff output includes REVIEW PASSED" "REVIEW PASSED" "$DIFF_OUTPUT"
+
+# Verify state transitioned to passed
+DIFF_STATUS=$(grep '^STATUS=' "$DIFF_STATE_FILE" | cut -d= -f2-)
+DIFF_ROUND=$(grep '^ROUND=' "$DIFF_STATE_FILE" | cut -d= -f2-)
+assert_eq "state STATUS set to passed after diff" "passed" "$DIFF_STATUS"
+assert_eq "state ROUND unchanged after diff" "2" "$DIFF_ROUND"
+
+echo ""
+echo "=== gh pr diff with already-passed state exits silently ==="
+
+# INVARIANT: If state is already passed, gh pr diff should not output anything.
+# SUT: pr-review-loop.sh guard before TRIGGER 3
+# VERIFICATION: No output produced.
+teardown
+setup
+
+PASSED_STATE_FILE="$STATE_DIR/Garsson-io_nanoclaw_56"
+printf 'PR_URL=https://github.com/Garsson-io/nanoclaw/pull/56\nROUND=2\nSTATUS=passed\nBRANCH=%s\n' "$CURRENT_BRANCH" > "$PASSED_STATE_FILE"
+
+DIFF_PASSED_INPUT=$(jq -n '{
+  "tool_input": {"command": "gh pr diff https://github.com/Garsson-io/nanoclaw/pull/56"},
+  "tool_response": {
+    "stdout": "diff output...",
+    "stderr": "",
+    "exit_code": "0"
+  }
+}')
+
+DIFF_PASSED_OUTPUT=$(echo "$DIFF_PASSED_INPUT" | STATE_DIR="$STATE_DIR" bash "$HOOK" 2>/dev/null)
+if [ -z "$DIFF_PASSED_OUTPUT" ]; then
+  echo "  PASS: diff with passed state produces no output"
+  ((PASS++))
+else
+  echo "  FAIL: diff with passed state produced output"
+  ((FAIL++))
+fi
+
+echo ""
+echo "=== Escalation: push exceeding MAX_ROUNDS emits escalation message ==="
+
+# INVARIANT: When push count exceeds MAX_ROUNDS, the hook must emit an
+# escalation message instructing the agent to notify a human, and set
+# status to escalated.
+# SUT: pr-review-loop.sh git push handler escalation path (lines 315-328)
+# VERIFICATION: Output contains escalation text; state STATUS becomes escalated.
+teardown
+setup
+
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+
+# Create state at round 4 (MAX_ROUNDS), status=passed (agent just reviewed)
+ESC_STATE_FILE="$STATE_DIR/Garsson-io_nanoclaw_60"
+printf 'PR_URL=https://github.com/Garsson-io/nanoclaw/pull/60\nROUND=4\nSTATUS=passed\nBRANCH=%s\n' "$CURRENT_BRANCH" > "$ESC_STATE_FILE"
+
+ESC_PUSH_INPUT=$(jq -n '{
+  "tool_input": {"command": "git push"},
+  "tool_response": {
+    "stdout": "Everything up-to-date",
+    "stderr": "",
+    "exit_code": "0"
+  }
+}')
+
+# Mock git to return single-parent commit (not merge-from-main)
+ESC_MOCK_DIR=$(mktemp -d)
+cat > "$ESC_MOCK_DIR/git" << MOCK
+#!/bin/bash
+if [ "\$1" = "log" ] && echo "\$@" | grep -q -- "--format=%P"; then
+  echo "abc123"
+  exit 0
+fi
+if [ "\$1" = "rev-parse" ] && [ "\$2" = "--abbrev-ref" ]; then
+  echo "$CURRENT_BRANCH"
+  exit 0
+fi
+/usr/bin/git "\$@"
+MOCK
+chmod +x "$ESC_MOCK_DIR/git"
+
+ESC_OUTPUT=$(echo "$ESC_PUSH_INPUT" | PATH="$ESC_MOCK_DIR:$PATH" STATE_DIR="$STATE_DIR" bash "$HOOK" 2>/dev/null)
+assert_contains "escalation output mentions round limit" "REVIEW ROUND 4/4" "$ESC_OUTPUT"
+assert_contains "escalation output instructs to escalate" "escalate" "$ESC_OUTPUT"
+assert_contains "escalation output mentions PR comment" "gh pr comment" "$ESC_OUTPUT"
+
+# Verify state transitioned to escalated
+ESC_STATUS=$(grep '^STATUS=' "$ESC_STATE_FILE" | cut -d= -f2-)
+ESC_ROUND=$(grep '^ROUND=' "$ESC_STATE_FILE" | cut -d= -f2-)
+assert_eq "state STATUS set to escalated" "escalated" "$ESC_STATUS"
+assert_eq "state ROUND stays at MAX_ROUNDS" "4" "$ESC_ROUND"
+
+echo ""
+echo "=== Escalation: push after escalated state exits silently ==="
+
+# INVARIANT: Once escalated, further pushes should not produce output.
+# SUT: pr-review-loop.sh git push handler guard for escalated status
+# VERIFICATION: No output produced.
+
+ESC_SILENT_OUTPUT=$(echo "$ESC_PUSH_INPUT" | PATH="$ESC_MOCK_DIR:$PATH" STATE_DIR="$STATE_DIR" bash "$HOOK" 2>/dev/null)
+if [ -z "$ESC_SILENT_OUTPUT" ]; then
+  echo "  PASS: push after escalation produces no output"
+  ((PASS++))
+else
+  echo "  FAIL: push after escalation produced output"
+  ((FAIL++))
+fi
+
+rm -rf "$ESC_MOCK_DIR"
+
 teardown
 
 print_results

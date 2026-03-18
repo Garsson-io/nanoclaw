@@ -3,7 +3,7 @@
 # Run: bash .claude/kaizen/hooks/tests/test-enforce-case-worktree.sh
 #
 # INVARIANT: git commit/push inside a git worktree are ALLOWED.
-# INVARIANT: git commit/push outside a worktree (main checkout) are DENIED.
+# INVARIANT: git commit/push outside a worktree (main checkout) produce a warning on stderr.
 # INVARIANT: Non-git-commit/push commands are always ALLOWED regardless of location.
 # SUT: enforce-case-worktree.sh
 
@@ -95,29 +95,29 @@ OUTPUT=$(run_hook "$HOOK" "git push -u origin my-branch")
 assert_eq "push -u allowed in worktree" "" "$OUTPUT"
 
 echo ""
-echo "=== Outside a worktree (main checkout): commit and push are DENIED ==="
+echo "=== Outside a worktree (main checkout): commit and push produce warnings ==="
 
 setup_main_checkout_mock
 
-OUTPUT=$(run_hook "$HOOK" "git commit -m 'bad'")
-assert_contains "commit denied in main checkout" "deny" "$OUTPUT"
-assert_contains "commit deny mentions worktree" "worktree" "$OUTPUT"
+OUTPUT=$(run_hook_stderr "$HOOK" "git commit -m 'bad'")
+assert_contains "commit warned in main checkout" "worktree" "$OUTPUT"
+assert_contains "commit warning mentions main checkout" "main checkout" "$OUTPUT"
 
-OUTPUT=$(run_hook "$HOOK" "git push origin main")
-assert_contains "push denied in main checkout" "deny" "$OUTPUT"
+OUTPUT=$(run_hook_stderr "$HOOK" "git push origin main")
+assert_contains "push warned in main checkout" "worktree" "$OUTPUT"
 
-OUTPUT=$(run_hook "$HOOK" "git push -u origin some-branch")
-assert_contains "push -u denied in main checkout" "deny" "$OUTPUT"
+OUTPUT=$(run_hook_stderr "$HOOK" "git push -u origin some-branch")
+assert_contains "push -u warned in main checkout" "worktree" "$OUTPUT"
 
 echo ""
 echo "=== Branch name doesn't matter — only worktree context ==="
 
 # Even with a branch name that looks like a case/feature branch,
-# if we're not in a worktree, it should be denied
+# if we're not in a worktree, it should warn
 setup_main_checkout_mock
 
-OUTPUT=$(run_hook "$HOOK" "git commit -m 'sneaky'")
-assert_contains "main checkout denied regardless of branch name" "deny" "$OUTPUT"
+OUTPUT=$(run_hook_stderr "$HOOK" "git commit -m 'sneaky'")
+assert_contains "main checkout warned regardless of branch name" "worktree" "$OUTPUT"
 
 # Even with a random branch name, if we're in a worktree, it should be allowed
 setup_worktree_mock
