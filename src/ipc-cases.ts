@@ -22,6 +22,7 @@ import path from 'path';
 import { authorizeCaseCreation } from './case-auth.js';
 import { getCaseSyncService } from './case-backend.js';
 import { DATA_DIR } from './config.js';
+import { sanitizeRequestId } from './ipc-sanitize.js';
 import {
   computePriority,
   loadEscalationConfig,
@@ -375,8 +376,12 @@ async function handleCaseCreate(
           'case_results',
         );
         fs.mkdirSync(resultDir, { recursive: true });
-        const resultFile = (data as Record<string, unknown>).requestId
-          ? `${(data as Record<string, unknown>).requestId}.json`
+        const rawReqId = (data as Record<string, unknown>).requestId as
+          | string
+          | undefined;
+        const safeReqId = rawReqId ? sanitizeRequestId(rawReqId) : '';
+        const resultFile = safeReqId
+          ? `${safeReqId}.json`
           : `collision-${d.githubIssue}-${Date.now()}.json`;
         fs.writeFileSync(
           path.join(resultDir, resultFile),
@@ -445,9 +450,10 @@ async function handleCaseCreate(
 
     const resultDir = path.join(DATA_DIR, 'ipc', sourceGroup, 'case_results');
     fs.mkdirSync(resultDir, { recursive: true });
-    const resultFile = data.requestId
-      ? `${data.requestId}.json`
-      : `${suggested.id}.json`;
+    const safeReqId = data.requestId
+      ? sanitizeRequestId(String(data.requestId))
+      : '';
+    const resultFile = safeReqId ? `${safeReqId}.json` : `${suggested.id}.json`;
     fs.writeFileSync(
       path.join(resultDir, resultFile),
       JSON.stringify({
@@ -611,7 +617,10 @@ async function handleCaseCreate(
 
   const resultDir = path.join(DATA_DIR, 'ipc', sourceGroup, 'case_results');
   fs.mkdirSync(resultDir, { recursive: true });
-  const resultFile = data.requestId ? `${data.requestId}.json` : `${id}.json`;
+  const safeReqId = data.requestId
+    ? sanitizeRequestId(String(data.requestId))
+    : '';
+  const resultFile = safeReqId ? `${safeReqId}.json` : `${id}.json`;
   fs.writeFileSync(
     path.join(resultDir, resultFile),
     JSON.stringify({
