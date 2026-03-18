@@ -1,4 +1,4 @@
-# Competitor Analysis: Customer-Facing Agent Platforms with Case Isolation
+# Competitor Analysis: Customer-Facing Agent Platforms
 
 Status: **Draft** | Date: 2026-03-18
 
@@ -6,345 +6,283 @@ Related: [Case Isolation Spec](case-isolation-spec.md) | [kaizen#65](https://git
 
 ---
 
-## Context
+## 1. Thesis
 
-Garsson Harness is a closed-source, customer-facing agent platform built on NanoClaw's open-source infrastructure. Each work item (case) runs in an isolated container with per-customer data scoping. The harness powers a portfolio of vertical ventures — each venture is a separate private repo with domain-specific workflows, operated by a product expert who knows the industry.
+Most customer-facing agent systems rely on tenant-aware application layers for data isolation — database row filtering, retrieval scoping, prompt-level boundaries. Garsson Harness is betting that certain vertical workflows need a stronger primitive: **case-level execution isolation** combined with customer-scoped data access and narrow agent capabilities.
 
-This document surveys existing solutions — in the Claw ecosystem, open-source, and commercial — to understand what exists, what gaps remain, and what's genuinely novel about our approach.
+The point is not just safer agents. It is a reusable operating harness for multiple vertical ventures, each run by a domain operator who brings industry expertise while the harness provides infrastructure, isolation, and agent orchestration.
 
----
+This document surveys existing systems to test that thesis: who else solves the isolation problem, who solves it differently, where are they stronger, and where does our approach appear differentiated.
 
-## 1. The Claw Ecosystem
+### What "case isolation" means
 
-### 1.1 OpenClaw
+A case is a single work item for a single customer. Case isolation means:
 
-The dominant open-source AI agent platform (~7,000 GitHub stars). Multi-channel (Slack, Discord, Telegram, WhatsApp, webchat). Single-operator model — the official docs explicitly state it is "not designed as a hostile multi-tenant security boundary for multiple adversarial users sharing one agent/gateway."
+- **Isolated execution environment**: separate container per case (OS-level process/filesystem boundary)
+- **Isolated session and memory**: separate LLM context, no conversational bleed between cases
+- **Isolated customer-scoped data access**: agent can only query CRM data for its assigned customer, enforced by the data layer
+- **Isolated filesystem and artifacts**: separate scratch directory, no access to other cases' working files
+- **Isolated credentials and capabilities**: different agent roles receive different MCP tools and permissions
+- **Lifecycle tied to one work item**: container created when case starts, destroyed when case completes
 
-**Business model:** Talent acquisition / reputation play. The team was acquired by NVIDIA, resulting in Nemoclaw — NVIDIA's AI agent infrastructure play. The open-source project builds adoption and community; NVIDIA's business model is selling GPU/cloud compute (same playbook as CUDA: give away the software, sell the hardware).
+### The isolation ladder
 
-| Aspect | OpenClaw | Garsson Harness |
-|--------|----------|-----------------|
-| Isolation model | Application-level (permission checks, allowlists) | OS-level (containers per case) |
-| Multi-tenant | Not designed for it | Customer-facing with per-case isolation |
-| Case/work-item abstraction | None | Full lifecycle (SUGGESTED → PRUNED) |
-| Customer data scoping | None | CRM MCP with per-customer access control |
-| Agent roles | Single role (one agent does everything) | Three roles (router, work, dev) with distinct trust boundaries |
-| Codebase size | ~500K lines, 70+ dependencies | ~4K lines, minimal dependencies |
+Not all isolation is equal. Systems can be roughly placed on a ladder:
 
-**Relevant development:** OpenClaw issue #17299 proposes an "Agents Plane" for native multi-tenant agent provisioning and isolation. Not yet implemented — indicates the community recognizes the gap.
+| Level | What's separated | Who does this |
+|-------|-----------------|---------------|
+| **Shared platform** | Nothing — all agents share context | Basic chatbot deployments |
+| **Per-tenant isolation** | Each organization gets its own data partition | Salesforce, ServiceNow (inherited from platform) |
+| **Per-customer isolation** | Each end-customer's data is scoped | Sierra AI (application-level), some CRM-native agents |
+| **Per-case isolation** | Each work item gets its own execution environment, session, and data scope | Garsson Harness (planned) |
 
-### 1.2 Lobu
+Per-case is stricter than per-customer because a single customer may have multiple concurrent cases. Without case-level separation, an agent working on Customer A's billing dispute could see context from Customer A's unrelated insurance claim — leading to hallucinated cross-references, leaked details between cases, or simply confused reasoning.
 
-Multi-tenant wrapper for OpenClaw. The closest competitor in the Claw ecosystem.
+### Why case isolation matters: concrete scenarios
 
-| Aspect | Lobu | Garsson Harness |
-|--------|------|-----------------|
-| Isolation level | Per-channel/DM | Per-case (work item) |
-| Programmatic agent creation | REST API | MCP tools + IPC |
-| Customer identity | Implicit (channel user) | Explicit customer model with 2FA identity merging |
-| CRM integration | None | CRM MCP server with per-customer scoping |
-| Case lifecycle | None | Full lifecycle with kaizen feedback |
-| Agent roles | Single role per channel | Router / work / dev with different access |
-
-**Key gap:** Lobu isolates per channel, not per work item. If a customer has two concurrent issues, they share the same channel isolation boundary. Our model gives each case its own container and data scope.
-
-### 1.3 ClawSwarm
-
-Multi-agent system by The Swarm Corporation. Compiles to Rust, built on the Swarms framework. Unified messaging across Telegram, Discord, WhatsApp.
-
-| Aspect | ClawSwarm | Garsson Harness |
-|--------|-----------|-----------------|
-| Multi-agent model | Hierarchical (director → specialists) | Swarm with named identities (router → case workers) |
-| Focus | Agent collaboration on shared tasks | Customer isolation across separate tasks |
-| Data isolation | Not a design goal | Core design goal |
-| Customer-facing | No | Yes |
-
-**Relevance:** ClawSwarm's hierarchical delegation pattern is interesting but solves a different problem (agent collaboration vs customer isolation).
-
-### 1.4 Praktor
-
-Claude Code orchestrator with Telegram I/O, Docker isolation, swarm patterns, Mission Control UI. Secrets encrypted at rest (AES-256-GCM).
-
-| Aspect | Praktor | Garsson Harness |
-|--------|---------|-----------------|
-| Target use | Dev orchestration | Customer-facing + dev |
-| Container isolation | Yes | Yes |
-| Customer data scoping | None | CRM MCP with per-customer access control |
-| Case management | None | Full lifecycle |
-| Secrets management | AES-256-GCM encrypted | Credential proxy (no secrets in containers) |
-
-**Worth studying:** Mission Control UI and secrets management approach.
-
-### 1.5 NanoClaw (our upstream)
-
-Lightweight, security-focused alternative to OpenClaw. One Node.js process, container-isolated agent execution, ~4K lines. Created by a single developer as a personal assistant — the "small enough to understand" philosophy.
-
-**Business model — L1/L2 trajectory:**
-
-Successful open-source AI projects follow a predictable path. The creator distinguishes themselves, builds reputation, and either gets acquired for talent (OpenClaw → NVIDIA) or builds a company around the project. The most common commercial model is L1/L2:
-
-- **L1 (open-source)**: NanoClaw as it is today — fork, customize, self-host. Free. Builds adoption, community, and the creator's reputation.
-- **L2 (cloud SaaS)**: Hosted NanoClaw with premium features — managed containers, monitoring dashboard, one-click channel setup, team management, backup/restore. The value is convenience + features that are painful to self-host. This is the GitLab / Supabase / PostHog playbook.
-
-NanoClaw hasn't launched L2 yet, but the trajectory is clear. If they add multi-tenant features (the Agents Plane proposal from the OpenClaw ecosystem) and launch a cloud offering, they'd compete at the infrastructure layer.
-
-| Aspect | NanoClaw | Garsson Harness |
-|--------|----------|-----------------|
-| Business model | Open-source L1, likely cloud SaaS L2 | Closed-source harness + venture portfolio |
-| Target user | Individual developer / power user | Product expert running a vertical business |
-| Isolation | Per-group (containers) | Per-case (containers + CRM + MCP) |
-| Customer-facing | No (personal assistant) | Yes (router + work agents + bot swarm) |
-| Multi-tenant | No | Yes (case isolation enables competitor companies on same vertical) |
-| Monetization | Reputation → talent acquisition or SaaS | Direct revenue from vertical ventures |
-
-**Threat assessment:** If NanoClaw launches a hosted L2 with multi-tenant support, they'd be a credible infrastructure competitor with an open-source community advantage. Our differentiation would then be:
-- Purpose-built for customer-facing verticals (they're general-purpose)
-- Deeper isolation (case-level vs group-level)
-- Venture portfolio model (we're the operator, not just the platform vendor)
-- Product experts as partners (they'd sell to developers, we partner with domain experts)
-
-### 1.6 Ecosystem Summary
-
-```
-                        Customer-Facing Capability
-                        Low ◄─────────────────► High
-
-    Per-Case     │                              ★ Garsson Harness
-    Isolation    │
-                 │
-    Per-Channel  │              Lobu
-    Isolation    │
-                 │
-    Per-Operator │  OpenClaw    ClawSwarm
-    Isolation    │  Praktor    NanoClaw
-                 │
-    None         │  ClawBot
-                 │
-```
-
-No existing Claw ecosystem project combines customer-facing deployment with case-level isolation.
+- **Competing companies on the same vertical**: A printing workshop and its competitor both use the same Garsson vertical. An agent processing Workshop A's order must never access Workshop B's pricing, customer list, or pending orders. Per-case isolation makes the data physically unavailable, not just filtered.
+- **Concurrent cases for one customer**: Customer asks about a refund (Case 1) while also requesting a new quote (Case 2). Two different agents work these simultaneously. Without case isolation, the quoting agent might reference the refund dispute — confusing the customer or leaking negotiation context.
+- **Sensitive document processing**: One case involves processing a medical referral PDF. Another is a routine status check. The status-check agent should never have the medical document in its filesystem or context window, even if both cases belong to the same customer.
 
 ---
 
-## 2. Commercial Platforms
+## 2. Survey
 
-### 2.1 Sierra AI
+We looked at three categories: open-source agent frameworks, commercial customer-facing platforms, and infrastructure/sandbox projects. For each, we focused on isolation model, customer-facing capability, and business model.
 
-The most relevant commercial competitor. Purpose-built for customer-facing AI agents.
+### 2.1 Open-Source Agent Frameworks
 
-| Aspect | Sierra AI | Garsson Harness |
-|--------|-----------|-----------------|
-| Agent Data Platform | Unified customer data across sessions, channels, systems | CRM MCP with per-customer scoping |
-| Customer identity | Cross-channel identity resolution | 2FA-based identity merging |
-| Memory/personalization | Built-in per-customer memory | Per-case session persistence |
-| Deployment | Proprietary SaaS | Self-hosted, open-source |
-| Isolation model | Application-level (proprietary) | OS-level containers |
-| Customization | Configuration within their platform | Full code control (fork + modify) |
-| Pricing | Enterprise contracts | Self-hosted (API costs only) |
+These are operator-facing tools. They help developers run agents, not serve end-customers.
 
-**Key insight:** Sierra's Agent Data Platform is the gold standard for customer data unification. Their approach of giving agents memory and personalization across sessions is worth studying for our CRM design. But it's a closed platform — no self-hosting, no code access, no container-level isolation guarantees.
+#### OpenClaw
 
-### 2.2 Salesforce Agentforce
+Appears to be the largest open-source AI agent project (~7,000 GitHub stars as of this writing). Multi-channel (Slack, Discord, Telegram, WhatsApp, webchat). The official docs state it is "not designed as a hostile multi-tenant security boundary for multiple adversarial users sharing one agent/gateway."
 
-AI agents built on Salesforce's CRM data layer. Atlas Reasoning Engine for autonomous reasoning.
+The team was acquired by NVIDIA (Nemoclaw). The open-source project appears optimized for adoption and community-building; NVIDIA's interest is likely in the broader AI agent infrastructure play.
 
-| Aspect | Agentforce | Garsson Harness |
-|--------|------------|-----------------|
-| Data model | Salesforce CRM (structured + unstructured) | Custom CRM via MCP |
-| Tenant isolation | Inherited from Salesforce platform | Container + CRM MCP scoping |
-| Agent autonomy | Policy-constrained actions | Role-based tool restriction |
-| Ecosystem | 450+ integrations via Salesforce | MCP tools (extensible) |
-| Lock-in | Full Salesforce ecosystem | None (open-source, self-hosted) |
+**Relevant development:** OpenClaw issue #17299 proposes an "Agents Plane" for native multi-tenant agent provisioning. Not yet implemented — suggests the community recognizes the gap.
 
-**Key insight:** Agentforce shows that CRM-native AI agents work well — the data layer is already tenant-isolated. Our challenge is building equivalent tenant isolation without an existing enterprise CRM platform underneath.
+**Where OpenClaw is stronger:** Ecosystem (70+ integrations, large community), maturity, breadth of channel support, enterprise visibility via NVIDIA.
 
-### 2.3 ServiceNow AI Agents
+**Where it does not appear to solve our problem:** No per-case or per-customer isolation. No case lifecycle. No CRM scoping. Application-level permissions rather than OS-level boundaries.
 
-Multiple specialized agents working together (orchestrator pattern). AI Control Tower for oversight. 450+ integrations.
+#### Lobu
 
-| Aspect | ServiceNow | Garsson Harness |
-|--------|------------|-----------------|
-| Agent pattern | Orchestrator + specialists | Router + case workers |
-| Data isolation | Inherited from ServiceNow platform | Container + CRM MCP |
-| Oversight | AI Control Tower | Kaizen feedback loop + admin approval for dev cases |
-| Target market | Enterprise IT service management | Small business / vertical-specific |
+Multi-tenant wrapper for OpenClaw. Seems closest to customer-facing deployment in the Claw ecosystem. Provides per-channel/DM isolation with sandboxed execution, REST API for programmatic agent creation, MCP proxy with OAuth and network isolation.
 
-### 2.4 Intercom Fin / Zendesk AI / Ada / Forethought
+**Where Lobu is stronger:** REST API for agent provisioning is more mature than our MCP+IPC approach. Larger community through OpenClaw ecosystem.
+
+**Where it does not appear to solve our problem:** Isolates per channel, not per work item. If a customer has two concurrent issues, they share the same isolation boundary. No case lifecycle, no CRM integration, no customer identity model.
+
+#### NanoClaw (our upstream)
+
+Lightweight, security-focused alternative to OpenClaw. One Node.js process, container-isolated agent execution, ~4K lines. Created as a personal assistant — "small enough to understand."
+
+**Likely business trajectory:** Successful open-source AI projects tend to follow an L1/L2 path:
+- **L1 (open-source)**: Fork, customize, self-host. Builds adoption and the creator's reputation.
+- **L2 (cloud SaaS)**: Hosted version with premium features — managed containers, monitoring, team management. This is a common playbook (GitLab, Supabase, PostHog).
+
+NanoClaw has not launched L2, but if they add multi-tenant features and a hosted offering, they would compete at the infrastructure layer.
+
+**Where NanoClaw is stronger:** Simplicity, auditability, container isolation as a first-class design principle, active open-source community.
+
+**Where it does not appear to solve our problem:** Per-group isolation (not per-case). No customer concept. No CRM integration. No agent roles. Designed for a single operator, not customer-facing deployment.
+
+#### ClawSwarm / Praktor
+
+ClawSwarm focuses on multi-agent collaboration (director → specialists), not customer isolation. Praktor is a Claude Code orchestrator with Docker isolation and a Mission Control UI — closer to dev tooling than customer-facing work.
+
+**Worth studying:** Praktor's Mission Control UI for operator visibility. ClawSwarm's hierarchical delegation pattern.
+
+#### Open-source summary
+
+As far as this survey found, no open-source agent framework combines customer-facing deployment with per-case execution isolation. Most optimize for operator experience. The ones that address multi-tenancy (Lobu) do so at the channel level, not the work-item level.
+
+### 2.2 Commercial Customer-Facing Platforms
+
+These are genuine product competitors in the customer-facing space. They have stronger data platforms but different isolation models.
+
+#### Sierra AI
+
+Appears to be the clearest commercial example of a purpose-built customer-facing AI agent platform. Their Agent Data Platform unifies customer data across sessions, channels, and backend systems.
+
+**Where Sierra is stronger:** Mature customer data platform, cross-channel identity resolution, enterprise-grade memory and personalization, production deployments with real customers. They have solved many of the problems we have not yet built (CRM, identity, observability).
+
+**Where it does not appear to solve our problem:** Proprietary SaaS — no self-hosting, no code access. Isolation model appears to be application-level (we do not have evidence of container-per-case isolation). Not designed for a venture-portfolio deployment model.
+
+#### Salesforce Agentforce / ServiceNow AI Agents
+
+AI agents built on top of existing enterprise CRM/ITSM platforms. Tenant isolation is inherited from the platform — strong, but tied to the platform ecosystem.
+
+**Where they are stronger:** Mature multi-tenant data platforms with years of production hardening. Hundreds of integrations. Enterprise sales and support.
+
+**Where they do not appear to solve our problem:** Full ecosystem lock-in. Not designed for small businesses or independent vertical operators. Agent isolation is inherited from the platform's tenant model, not enforced per case.
+
+#### Intercom Fin / Zendesk AI / Ada / Forethought
 
 Conversational AI for customer support. Ticket/conversation-scoped.
 
-| Aspect | These platforms | Garsson Harness |
-|--------|----------------|-----------------|
-| Isolation model | Application-level (DB row filtering) | OS-level (containers) |
-| Per-case isolation | No — shared model context across conversations | Yes — separate container, session, filesystem |
-| Agent autonomy | Answer questions, escalate to humans | Full case execution (research, file processing, API calls) |
-| Customization | Configuration UI | Full code control |
-| Data access | Read from knowledge base + CRM | Read/write CRM, scratch files, internet |
+These platforms primarily rely on application-layer scoping rather than physically separate execution environments. They use authz layers, tenant-aware retrieval, policy engines, and prompt boundaries — which is a legitimate and often effective approach for their use case (answering questions, escalating to humans). We do not have evidence of container-per-case isolation in any of these.
 
-**Key gap in all of these:** Isolation is application-level, not OS-level. The AI model may see multiple customers' data within a single inference context. These platforms rely on prompt engineering and DB filtering to prevent leakage — not on making the data physically unavailable to the model.
+**Where they are stronger:** Production-proven, large customer bases, mature escalation workflows, pre-built integrations with support tools.
 
-### 2.5 Commercial Summary
+**Where they do not appear to solve our problem:** Agents primarily answer questions rather than executing multi-step work with file access. Isolation is at the application layer. Not designed for cases where an agent processes sensitive documents or produces artifacts that must not bleed across tasks.
 
-```
-                         Isolation Strength
-                         App-Level ◄───────► OS-Level
+#### Commercial summary
 
-    Full Customer    │  Sierra, Agentforce        ★ NanoClaw (planned)
-    Platform         │  ServiceNow
-                     │
-    Conversational   │  Intercom, Zendesk
-    Support          │  Ada, Forethought
-                     │
-    Dev/Internal     │                            Praktor
-    Only             │
-```
+Commercial platforms gain their isolation strength from the data platforms they're built on (Salesforce's CRM, ServiceNow's ITSM). This is effective but creates ecosystem lock-in. We did not find a commercial platform that offers OS-level per-case isolation. This may be because their application-layer approach is sufficient for their use cases — the question is whether it is sufficient for ours.
 
-Commercial platforms have strong customer data platforms but rely on application-level isolation. NanoClaw is the only project combining OS-level isolation with customer-facing case management.
+### 2.3 Infrastructure & Sandbox Projects
+
+These are not competitors but potential building blocks or architectural references.
+
+- **Kubernetes Agent Sandbox (kubernetes-sigs)**: Google-backed CRD for isolated agent workloads. Supports gVisor and Kata Containers. Relevant if we need to scale beyond single-host Docker.
+- **AWS Multi-Tenant Agent Architecture Guide**: The most thorough reference we found for multi-tenant agent design patterns. Their "agent-per-tenant with shared infrastructure" pattern is closest to our model.
+- **Kortix/Suna**: Open-source agent platform with Docker isolation per instance. Similar container approach but no customer-facing features or case management.
 
 ---
 
-## 3. Infrastructure & Sandbox Projects
+## 3. What Appears Differentiated
 
-### 3.1 Kubernetes Agent Sandbox (kubernetes-sigs)
+We avoid claiming novelty. The individual techniques are well-known (containers, CRM scoping, named bots, role-based access). What appears uncommon is the specific combination and the depth of enforcement at each layer.
 
-Google-backed CRD for Kubernetes. Manages isolated, stateful, singleton workloads for AI agent runtimes. Supports gVisor and Kata Containers for kernel-level isolation.
+| Capability | Nearest comparable | How our approach differs |
+|-----------|-------------------|------------------------|
+| **Container per case** (not per channel or per tenant) | Lobu (per-channel), Praktor (per-invocation) | Lifecycle-bound: container tied to a work item, not a conversation or a channel |
+| **Customer-scoped CRM at the MCP boundary** | Sierra (app-level scoping) | The MCP server enforces access control — agent cannot query other customers' data at the tool level, not just the prompt level |
+| **Role-based agent types with OS-level enforcement** | ServiceNow (multiple agent types, app-level) | Router / work / dev have different container mounts, different MCP tools, different credentials. The separation is in what's physically available, not just what's instructed. Benefit: tighter blast radius, cheaper models for intake, clearer escalation paths |
+| **Harness/vertical separation** | We did not find an equivalent in the survey | Domain code (vertical repo) separated from infrastructure (harness). Allows multiple competing companies on the same vertical with the same harness. |
+| **Kaizen feedback loop** | We did not find an equivalent | Case completion triggers structured reflection → suggested improvements. This is a mechanism for the harness to improve from operational experience. |
 
-**Relevance:** If NanoClaw ever needs to scale beyond single-host Docker, this is the Kubernetes-native standard for agent isolation. Not a competitor — a potential infrastructure layer.
+### What is not a differentiator
 
-### 3.2 AWS Multi-Tenant Agent Architecture Guide
-
-Amazon's prescriptive guidance on tenant isolation for agentic AI. Covers: agent-per-tenant vs shared-agent models, data isolation patterns, credential management, guardrails.
-
-**Relevance:** The most thorough architectural reference for multi-tenant agent design. Their "agent-per-tenant with shared infrastructure" pattern is closest to our model. Worth reading for the CRM MCP server design.
-
-### 3.3 Kortix/Suna
-
-Open-source agent platform with isolated Docker execution per agent instance. Browser automation, code interpreter, file system access.
-
-**Relevance:** Similar container isolation approach but no customer-facing features, no case management, no CRM integration.
+- **Small codebase**: Nice for auditability but not a moat. A small orchestrator with complex surrounding infrastructure is not necessarily simpler in practice.
+- **Bot identity as routing**: A useful implementation detail that reduces dependence on probabilistic routing, but not a strategic pillar. It is an optimization, not a moat.
 
 ---
 
-## 4. What's Genuinely Novel
+## 4. Tradeoffs and Costs of Our Approach
 
-Based on this survey, the following aspects of NanoClaw's planned architecture have no direct equivalent:
+Our approach likely trades simplicity, resource efficiency, and operational maturity for stronger execution isolation and clearer trust boundaries. Container-per-case is not free. It creates costs that application-layer systems avoid:
 
-| Capability | Who else does it? | Our approach |
-|-----------|-------------------|--------------|
-| **Case-level OS isolation** (container per work item, not per channel/tenant) | Nobody | Each case gets its own container with only that case's data mounted |
-| **Three agent roles with distinct trust boundaries** | ServiceNow has multiple agent types, but with app-level isolation | Router (intake only), work (per-case CRM), dev (code only). OS-level enforcement per role. |
-| **Bot identity as routing mechanism** | Nobody — all competitors use LLM classifiers or manual routing | Which Telegram bot you message = which case. Mechanistic, zero-cost, zero-hallucination routing. |
-| **Customer CRM binding at container boundary** | Sierra does this at app level | CRM MCP server rejects queries for wrong customer. OS-level + data-level + capability-level enforcement. |
-| **Kaizen feedback loop in case lifecycle** | Nobody | Case completion triggers reflection → suggested dev improvements → better tooling → better case outcomes |
-| **Harness/vertical architecture** | Nobody in the Claw ecosystem | Public harness + private vertical repos mounted into containers. Domain code separated from infrastructure. |
+| Cost | Description |
+|------|-------------|
+| **Container startup latency** | Each new case pays a cold-start cost. Active cases kept warm, but idle cases that resume pay again. |
+| **Resource density** | One container per active case means memory and CPU scale linearly with concurrent cases. Application-layer systems can serve many cases from one process. |
+| **Orchestration complexity** | Container lifecycle management, health checks, idle timeout, session persistence across recycles — all must be built and maintained. |
+| **Observability** | Debugging across multiple isolated containers is harder than debugging within a single application process. Logs, traces, and state are distributed. |
+| **CRM control plane** | Application-layer platforms inherit tenant isolation from their data platform. We must build equivalent isolation from scratch in the CRM MCP server. |
+| **Persistence model** | State must survive container recycling — session files, scratch directories, CRM data all need explicit persistence strategies. |
 
-The individual techniques aren't new (containers, CRM scoping, named bots). The combination and the depth of isolation enforcement is what's novel.
+The bet is that for sensitive, customer-facing, multi-company workflows, the tighter boundary is worth these costs. If the workflows are simple (Q&A, knowledge base lookups), application-layer isolation is probably sufficient and more efficient. If the workflows involve processing customer documents, producing artifacts, or operating across competing companies, the stronger boundary is likely necessary.
 
 ---
 
-## 5. What We Should Learn From
+## 5. What Must Be Built
+
+The container runtime exists. The isolation boundary exists. The hard part is everything above:
+
+| Component | Why it's hard | Current state |
+|-----------|---------------|--------------|
+| **CRM MCP server with per-customer access control** | This is where "safe scoped access" lives. It's the control plane, not the runtime, that makes case isolation useful. Without it, agents have isolated containers but no useful data access. | Does not exist. This is the critical path. |
+| **Customer identity resolution** | Linking channel identities (Telegram user, email address) to a canonical customer ID. Cross-channel identity merging with verification. | Schema designed, not implemented. |
+| **Session persistence across container recycling** | Claude's `--resume` handles conversation context, but scratch files, CRM state, and in-progress operations must all survive container teardown. | Partially solved (session files per group exist; extending to per-case is straightforward). |
+| **Agent lifecycle management** | Warm/cold container decisions, idle timeout, concurrent case limits, bot-to-case assignment, mechanistic responses for unavailable agents. | Conceptual design exists. Implementation pending. |
+| **Observability and debugging** | Distributed state across containers. How does an operator understand what's happening across 5+ concurrent cases? | Nothing built. Praktor's Mission Control UI is a reference. |
+| **Vertical configuration contract** | What lives in the harness vs the vertical repo. How verticals declare their workflows, tools, and escalation policies. | Partially exists (escalation.yaml, materials.json). Needs formalization. |
+
+Containerization is the easy part. Safe scoped data access and identity resolution are the hard part. The control plane is likely more strategic than the runtime.
+
+---
+
+## 6. What We Should Learn From
 
 | Source | What to study | Applies to |
 |--------|---------------|-----------|
-| **Sierra AI — Agent Data Platform** | How they unify customer data across sessions and channels. Their memory/personalization model. | CRM MCP server design |
-| **Lobu — REST API for agent provisioning** | Programmatic agent creation and per-channel isolation patterns | Bot-case assignment, agent lifecycle management |
-| **AWS multi-tenant agent guide** | Agent-per-tenant vs shared-agent tradeoffs, credential management, guardrails | Overall architecture validation |
-| **Kubernetes Agent Sandbox** | CRD patterns for stateful agent workloads, gVisor/Kata isolation | Future scaling beyond single-host Docker |
-| **Praktor — Mission Control UI** | Operator visibility into agent swarm state | Future monitoring/management UI |
-| **Salesforce Agentforce — Atlas Engine** | Policy-constrained agent autonomy, how they limit what agents can do | MCP tool restriction by role |
+| **Sierra AI — Agent Data Platform** | How they unify customer data across sessions and channels. Their memory and personalization model. | CRM MCP server design |
+| **Lobu — REST API for agent provisioning** | Programmatic agent creation, per-channel isolation patterns | Bot-case assignment, agent lifecycle |
+| **AWS multi-tenant agent guide** | Agent-per-tenant vs shared-agent tradeoffs, credential management, guardrails | Architecture validation |
+| **Kubernetes Agent Sandbox** | CRD patterns for stateful agent workloads, gVisor/Kata isolation | Future scaling path |
+| **Praktor — Mission Control UI** | Operator visibility into agent swarm state | Observability |
+| **Salesforce Agentforce** | Policy-constrained agent autonomy, how they limit agent actions | MCP tool restriction by role |
 
 ---
 
-## 6. Business Model
+## 7. Business Model
 
-### What We're Building
+### The venture portfolio model
 
-Garsson Harness is not a SaaS platform, not an open-source framework, and not a consulting practice. It's a **closed-source harness that powers a portfolio of vertical ventures**.
+Garsson Harness is not a SaaS platform, not an open-source framework, and not a consulting practice. It is a closed-source harness that powers a portfolio of vertical ventures.
 
-Each venture is a partnership between Garsson (harness + infrastructure) and a **product expert** who knows the industry. The product expert brings domain knowledge; the harness brings agent orchestration, case isolation, CRM, and multi-tenant security.
+Each venture is a partnership between Garsson (harness infrastructure) and a **domain operator** who knows the industry. The domain operator brings expertise and customer relationships; the harness brings agent orchestration, case isolation, CRM, and multi-tenant security.
 
-### Ramp Per Vertical
+### Ramp per vertical
 
-Each new vertical follows a three-stage ramp, where each stage validates the next:
+Each new vertical follows a three-stage ramp. Each stage validates the next before scaling:
 
 ```
-Stage 1: Product expert uses agents to run their own work faster
+Stage 1: Domain operator uses agents to accelerate their own work
   → Validates: harness works for this vertical, discovers needed tools/workflows
   → Example: Nir uses agents for his own printing workshop operations
 
-Stage 2: Product expert + agents manage one company (humans + agents)
+Stage 2: Domain operator + agents manage one company (humans + agents serving real customers)
   → Validates: case isolation works with real customers, agent swarm handles concurrent cases
-  → Example: Nir's workshop serves customers via Telegram bots + email, agents handle intake/quoting/tracking
+  → Example: Nir's workshop serves customers via Telegram bots + email
 
-Stage 3: Product expert onboards other companies in the same vertical
-  → Validates: multi-tenant isolation, vertical is a platform not a one-off
+Stage 3: Domain operator onboards other companies in the same vertical
+  → Validates: multi-tenant isolation (competing companies on same infrastructure)
   → Example: Other printing workshops use the same vertical, each with isolated customer data
 ```
 
-### Why This Model Works
+### How this differs from other models
 
-| Advantage | Explanation |
-|-----------|-------------|
-| **Domain expertise is outsourced** | Product experts know their industry. Garsson doesn't need to learn insurance, printing, logistics — the vertical repo encodes that knowledge. |
-| **Infrastructure is shared** | Every venture runs on the same harness. Case isolation, CRM, agent swarm, channels — built once, used by all. |
-| **Each venture validates the harness** | Stage 1 discovers missing tools. Stage 2 stress-tests isolation. Stage 3 proves multi-tenancy. Every vertical makes the harness better for all verticals. |
-| **Isolation enables multi-tenancy** | The case isolation spec (container per case, CRM scoping, MCP restriction) is what makes Stage 3 possible. Without it, Company A's data leaks to Company B — and in a vertical, companies are competitors. |
-| **Low marginal cost per venture** | Adding a new vertical = new private repo + new product expert. No new infrastructure, no new harness code (unless the vertical surfaces a gap, which becomes a kaizen dev case). |
+| Model | Example | Key difference |
+|-------|---------|---------------|
+| **SaaS platform** | Sierra, Agentforce | They sell subscriptions. We own ventures with domain operator partners. |
+| **Open-source framework** | OpenClaw, NanoClaw | They sell adoption → reputation → SaaS/acquisition. Our isolation and orchestration layers are proprietary. |
+| **AI consultancy** | Accenture, Deloitte AI | They build bespoke solutions. We build a reusable harness — each vertical is a repeatable business. |
+| **Vertical SaaS** | Toast, Veeva | One company, one vertical. We're a venture studio with a shared harness across verticals. |
 
-### How This Differs From Competitors
+### Why case isolation is the business model
 
-| Model | Who does it | How we differ |
-|-------|------------|---------------|
-| **SaaS platform** (Sierra, Agentforce) | Customer buys a subscription, configures within the platform's constraints | We own the ventures. Product experts are partners, not customers. Full code control, not configuration. |
-| **Open-source framework** (OpenClaw, NanoClaw) | User forks, customizes, self-hosts | Closed-source harness. The isolation and orchestration layers are proprietary IP. |
-| **AI consultancy** | Build custom solutions per client | We build a reusable harness, not bespoke projects. Each vertical is a repeatable business, not a one-time engagement. |
-| **Vertical SaaS** (traditional) | One company, one vertical, one product | We're a venture studio with a shared harness. Multiple verticals, each with its own product expert. |
-
-The closest analogy is a **franchise model for AI agents**: Garsson provides the infrastructure (harness), the product expert provides the domain knowledge (vertical), and together they serve an industry.
+Case isolation is not just a security feature. It is what makes Stage 3 possible. Without it, Company A's data can leak to Company B — and in a vertical, companies are direct competitors. The isolation spec (container per case, CRM scoping, MCP restriction) is the mechanism that enables multi-tenant vertical deployment. Without it, you can run one company per harness instance. With it, you can run many.
 
 ---
 
-## 7. Competitive Position
+## 8. Strategic Assessment
 
-### Garsson Harness vs NanoClaw
+### What must be true for this model to work
 
-This analysis makes clear that what we're building is no longer a NanoClaw customization — it's a new product. NanoClaw is a personal assistant framework: one user, stateless containers, no customer concept, no case isolation. Garsson Harness is a customer-facing agent platform with case-level OS isolation, CRM-scoped data access, role-based trust boundaries, and named agent swarms.
+1. **Case-level isolation must be achievable at reasonable cost.** If container-per-case is too expensive or too slow for real customer interactions, the architecture doesn't hold. The CRM MCP server must provide useful scoped access, not just empty sandboxes.
+2. **Domain operators must exist and be willing to partner.** Each vertical depends on finding someone with industry knowledge who wants to build a business on this harness.
+3. **The harness must compound.** Each vertical must make the harness better for all verticals. If every vertical requires heavy custom harness work, it's consultancy, not a platform.
+4. **Application-layer isolation must be insufficient for our target workflows.** If prompt engineering + DB filtering works well enough for sensitive customer-facing work, our per-case isolation is overengineered. The bet is that it isn't enough — especially for multi-company verticals.
 
-The harness uses NanoClaw as its upstream foundation (channels, container runtime, message loop) but the value is in the layers above: case isolation, CRM integration, agent roles, bot identity routing, vertical architecture. These are proprietary differentiators, not upstream contributions.
+### What breaks first as scale increases
 
-Strategy:
-- **NanoClaw remains upstream** for infrastructure (channels, container runtime, basic agent lifecycle)
-- **Garsson Harness is the product** — case isolation, CRM, agent swarm, vertical deployment
-- **Future direction**: As the gap widens, maintaining upstream compatibility becomes a cost rather than a benefit. A clean break (rename, closed-source) is likely.
+- **Container density**: At some point, one host can't run enough concurrent cases. Need a scaling story (Kubernetes, multi-host).
+- **CRM performance**: If every agent action queries the CRM MCP, the CRM becomes a bottleneck. Need caching, connection pooling, maybe local replicas.
+- **Operator visibility**: With 20+ concurrent cases across 3 verticals, how does anyone know what's happening? Need observability tooling.
+- **Domain operator coordination**: Multiple ventures means multiple partners with different needs, timelines, and expectations. Need governance.
 
-### Strengths
+### Where the moat compounds
 
-- **Deepest isolation**: Only platform combining OS-level (container) + data-level (CRM MCP) + capability-level (MCP tools) + branch-level (worktree) isolation
-- **Venture portfolio model**: Shared harness across verticals means each venture improves the platform for all
-- **Small codebase**: Auditable, modifiable, understandable (~4K lines vs OpenClaw's ~500K)
-- **Novel routing**: Bot identity as routing eliminates LLM classifier costs and hallucination risks
-- **Domain expertise outsourced**: Product experts bring industry knowledge; Garsson builds infrastructure
-- **Stage-gated validation**: Each venture ramps through proven stages before scaling
+- **Operational learning**: Every case that runs teaches the harness something (via kaizen). Improvements flow to all verticals.
+- **Vertical configuration library**: Each vertical's config (escalation policies, workflows, tool definitions) becomes a reusable template for similar industries.
+- **Isolation enforcement depth**: As the CRM, identity model, and MCP tooling mature, the gap between our isolation and application-layer alternatives widens.
+- **Domain operator network**: Successful ventures attract more domain operators.
 
-### Weaknesses
+### What gets commoditized if upstream catches up
 
-- **CRM doesn't exist yet**: The CRM MCP server is the critical path component and hasn't been built
-- **Single-host**: No clustering or horizontal scaling story yet
-- **Small team**: Limited bandwidth for both harness development and venture support
-- **Unproven at scale**: No production deployment with real paying customers yet (Stage 1 in progress with prints vertical)
-- **Product expert dependency**: Each vertical requires finding and partnering with the right domain expert
+If NanoClaw (or OpenClaw, or another framework) adds multi-tenant support with case-level isolation:
+- The container runtime becomes a commodity
+- The channel integrations become a commodity
+- The basic agent lifecycle becomes a commodity
 
-### Opportunities
+What remains defensible:
+- The CRM control plane with per-customer scoping (hard to build, specific to our model)
+- The venture portfolio and domain operator partnerships (business relationships, not code)
+- Vertical-specific configurations and operational knowledge (built through Stages 1-3)
+- The kaizen feedback loop and its accumulated improvements (operational discipline, not just architecture)
 
-- **First mover in OS-level case isolation**: No open-source or commercial competitor offers container-per-case isolation with CRM scoping
-- **Vertical expansion**: Every industry with customer service + data sensitivity is a potential venture (insurance, legal, healthcare, financial services)
-- **Compounding returns**: Each vertical hardens the harness, surfaces missing tools, and validates the model — making the next vertical faster to launch
-- **Closed-source moat**: The proprietary layers (case isolation, CRM, agent swarm) are the core value and defensible IP
-
-### Threats
-
-- **OpenClaw Agents Plane**: If OpenClaw ships native multi-tenant support, their ecosystem advantage could commoditize the infrastructure layer
-- **Lobu expansion**: If Lobu adds case-level isolation, they'd compete directly with a larger community
-- **Commercial platforms moving downmarket**: Sierra, Agentforce becoming accessible to small businesses
-- **Upstream divergence cost**: Maintaining NanoClaw compatibility while building proprietary layers creates ongoing merge overhead
-- **Venture execution risk**: Each vertical is a new business — product-market fit, product expert reliability, and customer acquisition are independent risks per venture
+The defensibility is not primarily in source-closedness. It is in operational learning, control-plane design, vertical partnerships, and deployment discipline. Closed-source protects the window to build those up.
