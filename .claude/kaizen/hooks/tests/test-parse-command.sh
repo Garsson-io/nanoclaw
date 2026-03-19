@@ -211,4 +211,57 @@ assert_eq "merge falls back to git diff when gh fails (4 files)" \
   "4" \
   "$FALLBACK_COUNT"
 
+echo ""
+echo "=== reconstruct_pr_url (kaizen #111) ==="
+
+# Fallback 1: URL in stdout
+assert_eq "URL from stdout" \
+  "https://github.com/Garsson-io/nanoclaw/pull/42" \
+  "$(reconstruct_pr_url "gh pr merge 42" "https://github.com/Garsson-io/nanoclaw/pull/42" "" "merge")"
+
+# Fallback 2: URL in stderr
+assert_eq "URL from stderr" \
+  "https://github.com/Garsson-io/nanoclaw/pull/42" \
+  "$(reconstruct_pr_url "gh pr merge 42" "" "https://github.com/Garsson-io/nanoclaw/pull/42" "merge")"
+
+# Fallback 3: URL in command args
+assert_eq "URL from command args" \
+  "https://github.com/Garsson-io/nanoclaw/pull/42" \
+  "$(reconstruct_pr_url "gh pr merge https://github.com/Garsson-io/nanoclaw/pull/42 --squash" "" "" "merge")"
+
+# Fallback 4: --repo + bare PR number
+assert_eq "reconstruct from --repo + bare number" \
+  "https://github.com/Garsson-io/nanoclaw/pull/150" \
+  "$(reconstruct_pr_url "gh pr merge 150 --repo Garsson-io/nanoclaw --squash --delete-branch --auto" "" "" "merge")"
+
+# Fallback 4 with different repo
+assert_eq "reconstruct from --repo + bare number (garsson-prints)" \
+  "https://github.com/Garsson-io/garsson-prints/pull/5" \
+  "$(reconstruct_pr_url "gh pr merge 5 --repo Garsson-io/garsson-prints --merge" "" "" "merge")"
+
+# Fallback 5: bare PR number + git remote detection
+assert_eq "reconstruct from bare number + git remote" \
+  "https://github.com/Garsson-io/nanoclaw/pull/99" \
+  "$(reconstruct_pr_url "gh pr merge 99 --squash" "" "" "merge")"
+
+# Empty when no PR number and no URL anywhere
+assert_eq "empty when no URL or number" \
+  "" \
+  "$(reconstruct_pr_url "gh pr merge --squash --delete-branch" "" "" "merge")"
+
+# Priority: stdout URL wins over --repo reconstruction
+assert_eq "stdout URL takes priority over reconstruction" \
+  "https://github.com/Garsson-io/nanoclaw/pull/42" \
+  "$(reconstruct_pr_url "gh pr merge 99 --repo Garsson-io/nanoclaw" "https://github.com/Garsson-io/nanoclaw/pull/42" "" "merge")"
+
+# Works with create subcommand
+assert_eq "reconstruct works for create" \
+  "https://github.com/Garsson-io/nanoclaw/pull/55" \
+  "$(reconstruct_pr_url "gh pr create" "https://github.com/Garsson-io/nanoclaw/pull/55" "" "create")"
+
+# --auto flag doesn't interfere
+assert_eq "works with --auto flag" \
+  "https://github.com/Garsson-io/nanoclaw/pull/150" \
+  "$(reconstruct_pr_url "gh pr merge 150 --repo Garsson-io/nanoclaw --squash --delete-branch --auto" "" "" "merge")"
+
 print_results
