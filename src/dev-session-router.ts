@@ -7,10 +7,7 @@
  * the admin via Telegram.
  */
 import { getDevBotClaim, isDevBotMention } from './dev-bot.js';
-import {
-  getActiveDevSession,
-  sendMessageToDevSession,
-} from './dev-session.js';
+import { getActiveDevSession, sendMessageToDevSession } from './dev-session.js';
 import { logger } from './logger.js';
 
 export interface DevRouterDeps {
@@ -146,9 +143,5 @@ export async function notifySessionCompleted(
   reason: string,
   deps: DevRouterDeps,
 ): Promise<void> {
-  await notifyFromDevSession(
-    caseId,
-    `Session ended: ${reason}`,
-    deps,
-  );
+  await notifyFromDevSession(caseId, `Session ended: ${reason}`, deps);
 }

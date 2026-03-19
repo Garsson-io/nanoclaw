@@ -110,7 +110,10 @@ export async function activateDevSession(
     // Notify admin that the dev session has started
     await notifySessionStarted(c.id, c.name, c.github_issue, deps).catch(
       (err) => {
-        logger.error({ caseId: c.id, err }, 'Failed to send session start notification');
+        logger.error(
+          { caseId: c.id, err },
+          'Failed to send session start notification',
+        );
       },
     );
 

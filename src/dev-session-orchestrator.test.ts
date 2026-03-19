@@ -38,7 +38,8 @@ const mockNotifySessionStarted = vi.fn();
 const mockNotifySessionCompleted = vi.fn();
 
 vi.mock('./dev-session-router.js', () => ({
-  notifySessionStarted: (...args: unknown[]) => mockNotifySessionStarted(...args),
+  notifySessionStarted: (...args: unknown[]) =>
+    mockNotifySessionStarted(...args),
   notifySessionCompleted: (...args: unknown[]) =>
     mockNotifySessionCompleted(...args),
 }));
