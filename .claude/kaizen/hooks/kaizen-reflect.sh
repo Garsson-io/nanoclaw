@@ -34,10 +34,11 @@ else
   exit 0
 fi
 
-# Extract PR URL from output
-PR_URL=$(echo "$STDOUT" | grep -oE 'https://github.com/[^ ]+/pull/[0-9]+' | head -1)
-if [ -z "$PR_URL" ]; then
-  PR_URL=$(echo "$STDERR" | grep -oE 'https://github.com/[^ ]+/pull/[0-9]+' | head -1)
+# Extract PR URL using full fallback chain (kaizen #111, #105)
+if $IS_CREATE; then
+  PR_URL=$(reconstruct_pr_url "$CMD_LINE" "$STDOUT" "$STDERR" "create")
+elif $IS_MERGE; then
+  PR_URL=$(reconstruct_pr_url "$CMD_LINE" "$STDOUT" "$STDERR" "merge")
 fi
 
 # Get current branch for context
@@ -49,6 +50,10 @@ CHANGED=$(get_pr_changed_files "$CMD_LINE" "$IS_MERGE" 2>/dev/null | head -20)
 if [ "$IS_CREATE" = true ]; then
   # L3 enforcement (kaizen #57): set state gate for PR creation kaizen
   source "$(dirname "$0")/lib/state-utils.sh"
+  # Guard: skip state file if PR URL is empty (kaizen #111)
+  if [ -z "$PR_URL" ]; then
+    exit 0
+  fi
   mkdir -p "$STATE_DIR" 2>/dev/null
   chmod 700 "$STATE_DIR" 2>/dev/null
   KAIZEN_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
@@ -113,6 +118,10 @@ if [ "$IS_MERGE" = true ]; then
   # Reuses the same needs_pr_kaizen gate as PR creation — same enforcement
   # infrastructure (enforce-pr-kaizen.sh blocks, pr-kaizen-clear.sh clears).
   source "$(dirname "$0")/lib/state-utils.sh"
+  # Guard: skip state file if PR URL is empty (kaizen #111)
+  if [ -z "$PR_URL" ]; then
+    exit 0
+  fi
   mkdir -p "$STATE_DIR" 2>/dev/null
   chmod 700 "$STATE_DIR" 2>/dev/null
   KAIZEN_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
