@@ -134,12 +134,21 @@ export class GitHubCaseSyncAdapter implements CaseSyncAdapter {
     });
 
     if (result.success && result.issueNumber) {
-      // Store the issue URL and number back in SQLite
+      // Store the CRM issue reference — but never overwrite an existing
+      // github_issue (e.g. a kaizen issue link set during case creation).
       try {
-        updateCase(c.id, {
-          github_issue: result.issueNumber,
-          github_issue_url: result.issueUrl ?? null,
-        });
+        const updates: Partial<
+          Pick<Case, 'github_issue' | 'github_issue_url'>
+        > = {};
+        if (!c.github_issue) {
+          updates.github_issue = result.issueNumber;
+        }
+        if (!c.github_issue_url) {
+          updates.github_issue_url = result.issueUrl ?? null;
+        }
+        if (Object.keys(updates).length > 0) {
+          updateCase(c.id, updates);
+        }
       } catch (err) {
         logger.warn(
           { caseId: c.id, err },

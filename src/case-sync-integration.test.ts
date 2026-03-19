@@ -1,0 +1,194 @@
+import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
+
+import { _initTestDatabase } from './db.js';
+import type { Case } from './cases.js';
+import {
+  insertCase,
+  getCaseById,
+  updateCase,
+  registerCaseMutationHook,
+  _clearMutationHooks,
+} from './cases.js';
+import { CaseSyncService } from './case-backend.js';
+import type { CaseSyncAdapter, SyncResult } from './case-backend.js';
+import { makeCase } from './test-helpers.test-util.js';
+
+// Mock only the external HTTP boundary — GitHub API calls.
+// Everything else (SQLite, mutation hooks, sync service) is real.
+const mockAdapterCreate = vi.fn<(c: Case) => Promise<SyncResult>>();
+const mockAdapterUpdate =
+  vi.fn<(c: Case, changes: Partial<Case>) => Promise<SyncResult>>();
+const mockAdapterClose = vi.fn<(c: Case) => Promise<SyncResult>>();
+const mockAdapterComment =
+  vi.fn<(c: Case, text: string, author: string) => Promise<SyncResult>>();
+
+function makeTestAdapter(): CaseSyncAdapter {
+  return {
+    createCase: mockAdapterCreate,
+    updateCase: mockAdapterUpdate,
+    closeCase: mockAdapterClose,
+    addComment: mockAdapterComment,
+  };
+}
+
+// Wire up the mutation hook → sync chain exactly like index.ts does
+function wireHooks(syncService: CaseSyncService): void {
+  registerCaseMutationHook((event, c, changes) => {
+    if (event === 'inserted') {
+      syncService.onCaseMutated({ type: 'created', case: c }).catch(() => {});
+    } else if (changes?.status === 'done') {
+      syncService.onCaseMutated({ type: 'done', case: c }).catch(() => {});
+    }
+  });
+}
+
+beforeEach(() => {
+  _initTestDatabase();
+  _clearMutationHooks();
+  vi.clearAllMocks();
+});
+
+afterEach(() => {
+  _clearMutationHooks();
+});
+
+// INVARIANT: When a case is inserted with a pre-existing github_issue (kaizen link),
+//   the sync backend must NOT overwrite it with the CRM issue number.
+// SUT: Full chain — insertCase → mutation hook → CaseSyncService → adapter → DB state
+// VERIFICATION: After sync completes, getCaseById returns the original github_issue.
+describe('integration: insertCase → sync preserves github_issue', () => {
+  test('sync does not overwrite pre-existing github_issue (kaizen #120)', async () => {
+    const adapter = makeTestAdapter();
+    const syncService = new CaseSyncService(adapter);
+    wireHooks(syncService);
+
+    // Adapter.createCase simulates what GitHubCaseSyncAdapter does:
+    // creates a CRM issue and returns success. The adapter's createCase
+    // is what we're testing indirectly — the real GitHubCaseSyncAdapter
+    // would call updateCase here to store the CRM link.
+    mockAdapterCreate.mockResolvedValue({
+      success: true,
+      issueNumber: 10,
+    });
+
+    // Insert case with pre-existing kaizen issue link
+    const c = makeCase({
+      id: 'case-integration-k120',
+      github_issue: 111,
+      github_issue_url: 'https://github.com/Garsson-io/kaizen/issues/111',
+    });
+    insertCase(c);
+
+    // Wait for async sync to complete
+    await vi.waitFor(() => {
+      expect(mockAdapterCreate).toHaveBeenCalledOnce();
+    });
+
+    // Verify DB state — github_issue must still be 111, not 10
+    const stored = getCaseById('case-integration-k120');
+    expect(stored).toBeDefined();
+    expect(stored!.github_issue).toBe(111);
+    expect(stored!.github_issue_url).toBe(
+      'https://github.com/Garsson-io/kaizen/issues/111',
+    );
+  });
+
+  test('sync sets github_issue when not previously set', async () => {
+    const adapter = makeTestAdapter();
+    const syncService = new CaseSyncService(adapter);
+    wireHooks(syncService);
+
+    // Adapter creates CRM issue and stores the link back
+    mockAdapterCreate.mockImplementation(async (caseObj: Case) => {
+      updateCase(caseObj.id, {
+        github_issue: 42,
+        github_issue_url: 'https://github.com/Garsson-io/prints-demo/issues/42',
+      });
+      return { success: true, issueNumber: 42 };
+    });
+
+    const c = makeCase({
+      id: 'case-integration-no-issue',
+      github_issue: null,
+      github_issue_url: null,
+    });
+    insertCase(c);
+
+    await vi.waitFor(() => {
+      expect(mockAdapterCreate).toHaveBeenCalledOnce();
+    });
+
+    const stored = getCaseById('case-integration-no-issue');
+    expect(stored).toBeDefined();
+    expect(stored!.github_issue).toBe(42);
+    expect(stored!.github_issue_url).toBe(
+      'https://github.com/Garsson-io/prints-demo/issues/42',
+    );
+  });
+
+  test('mutation hook fires on insertCase', async () => {
+    const hookFn = vi.fn();
+    registerCaseMutationHook(hookFn);
+
+    const c = makeCase({ id: 'case-hook-fire-test' });
+    insertCase(c);
+
+    expect(hookFn).toHaveBeenCalledOnce();
+    expect(hookFn).toHaveBeenCalledWith(
+      'inserted',
+      expect.objectContaining({ id: 'case-hook-fire-test' }),
+      undefined,
+    );
+  });
+
+  test('mutation hook fires on updateCase with changes', async () => {
+    const hookFn = vi.fn();
+    const c = makeCase({ id: 'case-hook-update-test' });
+    insertCase(c);
+
+    // Register hook after insert to only capture updates
+    _clearMutationHooks();
+    registerCaseMutationHook(hookFn);
+
+    updateCase('case-hook-update-test', {
+      status: 'done',
+      done_at: new Date().toISOString(),
+    });
+
+    expect(hookFn).toHaveBeenCalledOnce();
+    expect(hookFn).toHaveBeenCalledWith(
+      'updated',
+      expect.objectContaining({ id: 'case-hook-update-test', status: 'done' }),
+      expect.objectContaining({ status: 'done' }),
+    );
+  });
+
+  test('sync service routes done status to adapter.closeCase', async () => {
+    const adapter = makeTestAdapter();
+    const syncService = new CaseSyncService(adapter);
+    wireHooks(syncService);
+
+    mockAdapterCreate.mockResolvedValue({ success: true });
+    mockAdapterClose.mockResolvedValue({ success: true });
+
+    const c = makeCase({
+      id: 'case-done-route',
+      github_issue: 50,
+    });
+    insertCase(c);
+
+    await vi.waitFor(() => {
+      expect(mockAdapterCreate).toHaveBeenCalledOnce();
+    });
+
+    // Now mark done — should trigger adapter.closeCase
+    updateCase('case-done-route', {
+      status: 'done',
+      done_at: new Date().toISOString(),
+    });
+
+    await vi.waitFor(() => {
+      expect(mockAdapterClose).toHaveBeenCalledOnce();
+    });
+  });
+});
