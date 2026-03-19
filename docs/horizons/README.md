@@ -14,7 +14,7 @@ For the full framework design, see [`docs/horizons-framework-spec.md`](../horizo
 
 | # | Horizon | Current | Next Step | Doc |
 |---|---------|---------|-----------|-----|
-| 1 | **Autonomous Kaizen** | L3-4 (enforced + actionable reflection) | L5 meta-reflection enforcement | [kaizen.md](kaizen.md) |
+| 1 | **Autonomous Kaizen** | L3-4 (enforced + actionable reflection) | L5a incident data infrastructure | [kaizen.md](kaizen.md) |
 | 2 | **Incident-Driven Kaizen** | L0→L1 (manual recording) | L2 search-before-file enforcement | [incident-driven-kaizen.md](incident-driven-kaizen.md) |
 
 ### Quality (how well the output is)
