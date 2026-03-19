@@ -189,6 +189,58 @@ else
   ((FAIL++))
 fi
 
+echo ""
+echo "=== Active review: Agent with kaizen-bg subagent allowed (kaizen #151) ==="
+
+setup
+create_state "https://github.com/Garsson-io/nanoclaw/pull/42" "1" "needs_review"
+
+# INVARIANT: Agent tool with kaizen-bg subagent_type is allowed during review
+# (kaizen-bg runs background reflection and should not be blocked by review gate)
+run_agent_with_subagent() {
+  local subagent_type="$1"
+  local input
+  input=$(jq -n --arg subtype "$subagent_type" '{
+    tool_name: "Agent",
+    tool_input: {
+      prompt: "reflect on impediments",
+      subagent_type: $subtype,
+      run_in_background: true
+    }
+  }')
+  echo "$input" | bash "$HOOK" 2>/dev/null
+}
+
+OUTPUT=$(run_agent_with_subagent "kaizen-bg")
+if [ -z "$OUTPUT" ]; then
+  echo "  PASS: Agent(kaizen-bg) allowed during review"
+  ((PASS++))
+else
+  echo "  FAIL: Agent(kaizen-bg) blocked during review"
+  echo "    output: $OUTPUT"
+  ((FAIL++))
+fi
+
+# But Agent with other subagent types should still be blocked
+OUTPUT=$(run_agent_with_subagent "general-purpose")
+if is_denied "$OUTPUT"; then
+  echo "  PASS: Agent(general-purpose) blocked during review"
+  ((PASS++))
+else
+  echo "  FAIL: Agent(general-purpose) NOT blocked during review"
+  ((FAIL++))
+fi
+
+# Agent without subagent_type should still be blocked
+OUTPUT=$(run_tool_gate "Agent")
+if is_denied "$OUTPUT"; then
+  echo "  PASS: Agent(no subagent) blocked during review"
+  ((PASS++))
+else
+  echo "  FAIL: Agent(no subagent) NOT blocked during review"
+  ((FAIL++))
+fi
+
 teardown
 rm -rf "$TOOLS_MOCK_DIR"
 

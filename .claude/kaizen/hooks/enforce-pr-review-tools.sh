@@ -31,6 +31,15 @@ fi
 PR_URL=$(echo "$REVIEW_INFO" | cut -d'|' -f1)
 ROUND=$(echo "$REVIEW_INFO" | cut -d'|' -f2)
 
+# Allow Agent tool with kaizen-bg subagent (kaizen #151)
+# Background kaizen reflection should not be blocked by the review gate
+if [ "$TOOL_NAME" = "Agent" ]; then
+  SUBAGENT_TYPE=$(echo "$INPUT" | jq -r '.tool_input.subagent_type // empty')
+  if [ "$SUBAGENT_TYPE" = "kaizen-bg" ]; then
+    exit 0
+  fi
+fi
+
 # Block the tool — agent must review first
 jq -n \
   --arg tool "$TOOL_NAME" \

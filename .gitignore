@@ -24,6 +24,7 @@ groups/global/*
 
 # Temp files
 .tmp-*
+.worktree-lock.json
 
 # Kaizen audit logs (per-machine, not committed)
 .claude/kaizen/audit/
