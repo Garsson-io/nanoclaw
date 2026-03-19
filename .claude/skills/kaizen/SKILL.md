@@ -187,6 +187,8 @@ Every kaizen reflection must include a meta-reflection on the kaizen system itse
 - **Are the skills asking questions in the right way?** Was a prompt too prescriptive (caused underengineering by encouraging scope reduction)? Too vague (didn't guide useful thinking)?
 - **Are the skills asking about the right things?** Did you encounter friction that no skill addresses? Is there a gap in the workflow where a skill should exist but doesn't?
 - **Did the escalation framework fit?** Was the level classification obvious, or did you struggle with it? Does a new category of fix need a new level?
+- **Were all accept-case preventions dispositioned?** If `/accept-case` identified preventions or root causes, list each one and its status: implemented in this PR, filed as issue #N, or not addressed. If any are "not addressed," file them now — a prevention identified but not tracked is a prevention lost. *(Added after kaizen #143 where the reflection filed a symptom ticket (#155) instead of the real prevention (#157) because it re-derived from scratch instead of cross-checking accept-case findings.)*
+- **If the admin corrected you, what prompt change would have prevented it?** Name the specific skill, the current wording gap, and the proposed improvement. Admin corrections are the highest-signal data for improving the kaizen system — don't let them evaporate. *(Added after kaizen #143 where the admin asking "what would have made the prompt better?" surfaced a structural gap in the reflection prompt itself.)*
 
 If the answer to any of these is "no" or "I'm not sure," **file a kaizen issue about the skill or process itself.** The kaizen system is just code and prompts — it should improve as aggressively as the codebase does.
 
