@@ -13,6 +13,7 @@
  * 1. Auto-detection: promotes work→dev when description looks like code work
  * 2. Authorization: determines if dev case goes active or needs approval
  *    - isMain source → authorized (active immediately)
+ *    - devModeRequested (safe word) → authorized (active immediately)
  *    - non-main source → needs approval (suggested status)
  */
 import { logger } from './logger.js';
@@ -61,8 +62,11 @@ export function authorizeCaseCreation(params: {
   description: string;
   sourceGroup: string;
   isMain: boolean;
+  /** Safe word detected — bypass approval gate for dev cases */
+  devModeRequested?: boolean;
 }): CaseAuthDecision {
-  const { requestedType, description, sourceGroup, isMain } = params;
+  const { requestedType, description, sourceGroup, isMain, devModeRequested } =
+    params;
 
   // Policy 1: Auto-detect code work and promote to dev
   let caseType = requestedType;
@@ -84,6 +88,18 @@ export function authorizeCaseCreation(params: {
         status: 'active',
         autoPromoted,
         reason: 'Main group: dev case authorized immediately',
+      };
+    }
+    if (devModeRequested) {
+      logger.info(
+        { sourceGroup },
+        'Dev mode requested via safe word — bypassing approval gate',
+      );
+      return {
+        caseType,
+        status: 'active',
+        autoPromoted,
+        reason: `Safe word: dev case authorized via dev mode escalation`,
       };
     }
     return {

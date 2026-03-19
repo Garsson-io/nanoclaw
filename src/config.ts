@@ -17,6 +17,7 @@ const envConfig = readEnvFile([
   'ASSISTANT_HAS_OWN_NUMBER',
   'TELEGRAM_BOT_POOL',
   'CASE_SYNC_REPO',
+  'DEV_SAFE_WORDS',
 ]);
 
 export const ASSISTANT_NAME =
@@ -93,6 +94,18 @@ export const TRIGGER_PATTERN = new RegExp(
   `^@?${escapeRegex(ASSISTANT_NAME)}\\b|^@${escapeRegex(ASSISTANT_NAME)}PrintsBot\\b`,
   'i',
 );
+
+// Safe words: when detected anywhere in a trigger message, escalate to dev agent mode.
+// The safe word is stripped from the prompt before it reaches the agent.
+// Configure via DEV_SAFE_WORDS in .env (comma-separated) or per-group via containerConfig.devSafeWords.
+export const DEV_SAFE_WORDS: string[] = (
+  process.env.DEV_SAFE_WORDS ||
+  envConfig.DEV_SAFE_WORDS ||
+  ''
+)
+  .split(',')
+  .map((w) => w.trim())
+  .filter(Boolean);
 
 // Timezone for scheduled tasks (cron expressions, etc.)
 // Uses system timezone by default
