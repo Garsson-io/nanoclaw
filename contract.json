@@ -39,6 +39,8 @@
       "case_unlock",
       "case_update_activity",
       "create_github_issue",
+      "dev_session_start",
+      "dev_session_stop",
       "document",
       "image",
       "message",
