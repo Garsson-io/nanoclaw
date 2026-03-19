@@ -20,7 +20,11 @@ import fs from 'fs';
 import path from 'path';
 
 import { authorizeCaseCreation } from './case-auth.js';
-import { deactivateDevSession } from './dev-session-orchestrator.js';
+import {
+  activateDevSession,
+  deactivateDevSession,
+  canStartDevSession,
+} from './dev-session-orchestrator.js';
 import { getCaseSyncService } from './case-backend.js';
 import { DATA_DIR } from './config.js';
 import { sanitizeRequestId } from './ipc-sanitize.js';
@@ -360,6 +364,27 @@ export async function processCaseIpc(
             );
           }
         }
+      }
+      return true;
+
+    case 'dev_session_start':
+      await handleDevSessionStart(
+        data,
+        sourceGroup,
+        isMain,
+        deps,
+        registeredGroups,
+      );
+      return true;
+
+    case 'dev_session_stop':
+      if (data.caseId) {
+        const reason = (data.reason as string) || 'manual-stop';
+        await deactivateDevSession(data.caseId, reason, deps);
+        logger.info(
+          { caseId: data.caseId, reason, sourceGroup },
+          'Dev session stopped via IPC',
+        );
       }
       return true;
 
@@ -812,4 +837,120 @@ function handleCaseSuggestDev(
       )
       .catch(() => {});
   }
+}
+
+async function handleDevSessionStart(
+  data: Record<string, unknown>,
+  sourceGroup: string,
+  isMain: boolean,
+  deps: IpcDeps,
+  registeredGroups: Record<string, RegisteredGroup>,
+): Promise<void> {
+  const caseId = data.caseId as string | undefined;
+  const initialPrompt = (data.initialPrompt as string) || '';
+
+  if (!caseId) {
+    logger.warn({ sourceGroup }, 'dev_session_start missing caseId');
+    writeCaseErrorResult(data, sourceGroup, {
+      error: 'validation',
+      message: 'dev_session_start requires caseId',
+    });
+    return;
+  }
+
+  const caseItem = getCaseById(caseId);
+  if (!caseItem) {
+    logger.warn({ caseId, sourceGroup }, 'dev_session_start: case not found');
+    writeCaseErrorResult(data, sourceGroup, {
+      error: 'not_found',
+      message: `Case ${caseId} not found`,
+    });
+    return;
+  }
+
+  if (!isMain && caseItem.group_folder !== sourceGroup) {
+    logger.warn(
+      { caseId, sourceGroup },
+      'Unauthorized dev_session_start attempt',
+    );
+    return;
+  }
+
+  // Check availability before attempting
+  const availability = canStartDevSession();
+  if (!availability.available) {
+    logger.warn(
+      { caseId, reason: availability.reason },
+      'Cannot start dev session',
+    );
+    writeCaseErrorResult(data, sourceGroup, {
+      error: 'unavailable',
+      message: availability.reason || 'Dev bot unavailable',
+    });
+    return;
+  }
+
+  // Build orchestrator deps from IPC deps
+  const orchestratorDeps = {
+    sendMessage: deps.sendMessage,
+    sendPoolMessage: deps.sendPoolMessage,
+    getGroupByFolder: (folder: string) =>
+      Object.values(registeredGroups).find((g) => g.folder === folder),
+    isMainGroup: (folder: string) => {
+      const group = Object.values(registeredGroups).find(
+        (g) => g.folder === folder,
+      );
+      return group?.isMain === true;
+    },
+  };
+
+  const prompt =
+    initialPrompt ||
+    `You are working on case "${caseItem.name}": ${caseItem.description}` +
+      (caseItem.github_issue
+        ? `\nKaizen issue: #${caseItem.github_issue}`
+        : '');
+
+  const result = await activateDevSession(caseItem, prompt, orchestratorDeps);
+
+  if (result.error) {
+    logger.error(
+      { caseId, error: result.error },
+      'Failed to start dev session',
+    );
+    writeCaseErrorResult(data, sourceGroup, {
+      error: 'activation_failed',
+      message: result.error,
+    });
+    return;
+  }
+
+  // Write success result
+  const resultDir = path.join(DATA_DIR, 'ipc', sourceGroup, 'case_results');
+  fs.mkdirSync(resultDir, { recursive: true });
+  const safeReqId = data.requestId
+    ? sanitizeRequestId(String(data.requestId))
+    : '';
+  const resultFile = safeReqId
+    ? `${safeReqId}.json`
+    : `dev-session-${caseId}.json`;
+  fs.writeFileSync(
+    path.join(resultDir, resultFile),
+    JSON.stringify({
+      success: true,
+      caseId,
+      containerName: result.session?.containerName,
+      botName: result.session?.botName,
+    }),
+  );
+
+  logger.info(
+    {
+      caseId,
+      containerName: result.session?.containerName,
+      botName: result.session?.botName,
+      sourceGroup,
+    },
+    'Dev session started via IPC',
+  );
 }

@@ -816,6 +816,8 @@ export async function processTaskIpc(
     case 'case_suggest_dev':
     case 'case_heartbeat':
     case 'case_unlock':
+    case 'dev_session_start':
+    case 'dev_session_stop':
       await processCaseIpc(data, sourceGroup, isMain, deps);
       break;
 
