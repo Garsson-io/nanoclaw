@@ -11,6 +11,8 @@ import {
 } from './cases.js';
 import { CaseSyncService } from './case-backend.js';
 import type { CaseSyncAdapter, SyncResult } from './case-backend.js';
+import { onCaseEscalationEvent } from './escalation-hook.js';
+import { logger } from './logger.js';
 import { makeCase } from './test-helpers.test-util.js';
 
 // Mock only the external HTTP boundary — GitHub API calls.
@@ -189,6 +191,184 @@ describe('integration: insertCase → sync preserves github_issue', () => {
 
     await vi.waitFor(() => {
       expect(mockAdapterClose).toHaveBeenCalledOnce();
+    });
+  });
+});
+
+// INVARIANT: The escalation hook fires through the real mutation chain when cases
+//   with escalation data (priority + gap_type) are inserted or updated.
+// SUT: Full chain — insertCase/updateCase → fireMutationHooks → onCaseEscalationEvent → logger
+// VERIFICATION: logger.info is called with the correct escalation fields after real DB mutations.
+describe('integration: escalation hook fires through mutation chain', () => {
+  let logSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    logSpy = vi.spyOn(logger, 'info');
+  });
+
+  afterEach(() => {
+    logSpy.mockRestore();
+  });
+
+  test('escalation hook logs on insert with priority and gap_type', () => {
+    registerCaseMutationHook(onCaseEscalationEvent);
+
+    const c = makeCase({
+      id: 'case-esc-insert',
+      name: 'test-escalation-insert',
+      priority: 'high',
+      gap_type: 'information_expected',
+    });
+    insertCase(c);
+
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        caseId: 'case-esc-insert',
+        name: 'test-escalation-insert',
+        priority: 'high',
+        gapType: 'information_expected',
+      }),
+      'Case with escalation data inserted',
+    );
+  });
+
+  test('escalation hook does not log on insert without escalation data', () => {
+    registerCaseMutationHook(onCaseEscalationEvent);
+
+    const c = makeCase({
+      id: 'case-esc-no-data',
+      priority: null,
+      gap_type: null,
+    });
+    insertCase(c);
+
+    expect(logSpy).not.toHaveBeenCalledWith(
+      expect.anything(),
+      'Case with escalation data inserted',
+    );
+  });
+
+  test('escalation hook logs on priority update', () => {
+    const c = makeCase({
+      id: 'case-esc-update',
+      name: 'test-escalation-update',
+      priority: 'normal',
+      gap_type: 'information_expected',
+    });
+    insertCase(c);
+
+    _clearMutationHooks();
+    logSpy.mockClear();
+    registerCaseMutationHook(onCaseEscalationEvent);
+
+    updateCase('case-esc-update', { priority: 'critical' });
+
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        caseId: 'case-esc-update',
+        name: 'test-escalation-update',
+        newPriority: 'critical',
+      }),
+      'Case escalation priority updated',
+    );
+  });
+
+  test('escalation hook does not log on non-priority update', () => {
+    const c = makeCase({
+      id: 'case-esc-status-only',
+      priority: 'high',
+      gap_type: 'information_expected',
+    });
+    insertCase(c);
+
+    _clearMutationHooks();
+    logSpy.mockClear();
+    registerCaseMutationHook(onCaseEscalationEvent);
+
+    updateCase('case-esc-status-only', {
+      status: 'done',
+      done_at: new Date().toISOString(),
+    });
+
+    expect(logSpy).not.toHaveBeenCalledWith(
+      expect.anything(),
+      'Case escalation priority updated',
+    );
+  });
+});
+
+// INVARIANT: Both sync and escalation hooks can be registered simultaneously and
+//   fire independently on the same mutation event without interference.
+// SUT: Full chain — insertCase → fireMutationHooks → [sync hook, escalation hook]
+// VERIFICATION: Both hooks produce their expected side effects on the same insert.
+describe('integration: sync + escalation hooks coexist without interference', () => {
+  let logSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    logSpy = vi.spyOn(logger, 'info');
+  });
+
+  afterEach(() => {
+    logSpy.mockRestore();
+  });
+
+  test('both hooks fire on insert — sync calls adapter, escalation logs', async () => {
+    const adapter = makeTestAdapter();
+    const syncService = new CaseSyncService(adapter);
+    wireHooks(syncService);
+    registerCaseMutationHook(onCaseEscalationEvent);
+
+    mockAdapterCreate.mockResolvedValue({ success: true });
+
+    const c = makeCase({
+      id: 'case-both-hooks',
+      name: 'test-both-hooks',
+      priority: 'high',
+      gap_type: 'information_expected',
+      github_issue: 99,
+    });
+    insertCase(c);
+
+    // Sync hook fired — adapter was called
+    await vi.waitFor(() => {
+      expect(mockAdapterCreate).toHaveBeenCalledOnce();
+    });
+
+    // Escalation hook fired — logger was called
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        caseId: 'case-both-hooks',
+        priority: 'high',
+        gapType: 'information_expected',
+      }),
+      'Case with escalation data inserted',
+    );
+
+    // DB state is consistent — github_issue preserved
+    const stored = getCaseById('case-both-hooks');
+    expect(stored).toBeDefined();
+    expect(stored!.github_issue).toBe(99);
+  });
+
+  test('escalation hook failure does not block sync hook', async () => {
+    const adapter = makeTestAdapter();
+    const syncService = new CaseSyncService(adapter);
+
+    // Register a broken escalation hook first
+    registerCaseMutationHook(() => {
+      throw new Error('escalation hook crashed');
+    });
+    // Then register sync hook — it should still fire despite prior hook failure
+    wireHooks(syncService);
+
+    mockAdapterCreate.mockResolvedValue({ success: true });
+
+    const c = makeCase({ id: 'case-hook-crash' });
+    insertCase(c);
+
+    // Sync hook still fires despite the earlier hook throwing
+    await vi.waitFor(() => {
+      expect(mockAdapterCreate).toHaveBeenCalledOnce();
     });
   });
 });
