@@ -132,9 +132,48 @@ Before adding logic to an existing file, assess the testability cost. *"Avoiding
 
 **The signal to watch for:** You're about to add an if-branch to a 500+ line file with 10+ imports. Stop. Extract first, then add.
 
+## TDD — Write Failing Tests First (MANDATORY)
+
+After re-examining the spec and before writing any production code, write failing tests that express the target invariants. This is not just about test coverage — **tests-first is a diagnostic tool** that reveals bugs and misunderstandings that code reading alone misses.
+
+*Incident that motivated this: kaizen #120 — TDD revealed a second bug (null `github_issue_url`) that pure code reading missed. The failing test was the diagnostic that found the real bug surface.*
+
+### The RED-GREEN-REFACTOR cycle
+
+**RED — Write failing tests first:**
+1. State the invariants explicitly (per CLAUDE.md's Invariant Statement requirement)
+2. Write test file(s) expressing the target behavior — what SHOULD be true after the fix
+3. Run the tests. **They must fail.** If they pass, either:
+   - The problem is already fixed (re-examine — is this work still needed?)
+   - Your tests aren't testing the right thing (fix the tests)
+4. Confirm they fail **for the expected reason** — not for an import error, mock issue, or unrelated crash
+
+**GREEN — Write minimal production code:**
+5. Make the failing tests pass with the simplest correct change
+6. Run the full test suite — no regressions
+
+**REFACTOR — Clean up:**
+7. Improve code structure if needed, keeping tests green
+
+### Why this ordering matters
+
+- **Tests written after code** verify what you built — they confirm your implementation, not your understanding
+- **Tests written before code** verify what should be true — they catch gaps in your mental model
+- **Unexpectedly passing tests** reveal that the problem is different than you thought (kaizen #120: the host-side handler already worked, the bug was elsewhere)
+- **Unexpectedly failing tests** reveal bugs you hadn't noticed (kaizen #120: `github_issue_url` was null — a second bug invisible during code reading)
+
+### When to skip (rare)
+
+TDD may not apply when:
+- The change is purely docs/config with no testable behavior
+- You're writing a spec or PRD (no production code)
+- The change is a one-line fix where the existing test suite already covers the invariant (state why in the PR)
+
+When you skip TDD, say so in the PR body and explain why.
+
 ## The Implementation Loop
 
-After re-examining the spec, you have a refined understanding. Now execute:
+After writing failing tests, you have both a refined understanding AND a concrete definition of done. Now execute:
 
 ### 1. State what you're building
 

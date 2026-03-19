@@ -153,6 +153,11 @@ export function registerCaseMutationHook(hook: CaseMutationHook): void {
   mutationHooks.push(hook);
 }
 
+/** @internal — for tests only. Clears all registered mutation hooks. */
+export function _clearMutationHooks(): void {
+  mutationHooks.length = 0;
+}
+
 function fireMutationHooks(
   event: 'inserted' | 'updated',
   c: Case,

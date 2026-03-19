@@ -29,6 +29,9 @@ import {
   GitHubCaseSyncAdapter,
   type CaseMetadata,
 } from './case-backend-github.js';
+import { updateCase as _updateCase } from './cases.js';
+
+const mockUpdateCase = vi.mocked(_updateCase);
 
 function makeTestCase(overrides: Partial<Case> = {}): Case {
   return {
@@ -260,6 +263,71 @@ describe('GitHubCaseSyncAdapter', () => {
 
       // createCase should still succeed even if comment fails
       expect(result.success).toBe(true);
+    });
+  });
+
+  // INVARIANT: When a case already has github_issue set (e.g. linked to a kaizen issue),
+  //   the CRM sync must NOT overwrite it with the CRM issue number.
+  // SUT: GitHubCaseSyncAdapter.createCase
+  // VERIFICATION: updateCase is called without github_issue/github_issue_url when they're already set
+  describe('createCase — preserves existing github_issue (kaizen #120)', () => {
+    test('does not overwrite github_issue when already set', async () => {
+      mockCreateGitHubIssue.mockResolvedValue({
+        success: true,
+        issueNumber: 10, // CRM issue number (different from kaizen issue)
+        issueUrl: 'https://github.com/Garsson-io/prints-demo/issues/10',
+      });
+      mockAddGitHubIssueComment.mockResolvedValue({ success: true });
+
+      const c = makeTestCase({
+        github_issue: 111, // Pre-existing kaizen issue link
+        github_issue_url: 'https://github.com/Garsson-io/kaizen/issues/111',
+      });
+      await adapter.createCase(c);
+
+      // updateCase should NOT be called since both fields are already set
+      expect(mockUpdateCase).not.toHaveBeenCalled();
+    });
+
+    test('sets github_issue when not previously set', async () => {
+      mockCreateGitHubIssue.mockResolvedValue({
+        success: true,
+        issueNumber: 10,
+        issueUrl: 'https://github.com/Garsson-io/prints-demo/issues/10',
+      });
+      mockAddGitHubIssueComment.mockResolvedValue({ success: true });
+
+      const c = makeTestCase({ github_issue: null, github_issue_url: null });
+      await adapter.createCase(c);
+
+      expect(mockUpdateCase).toHaveBeenCalledOnce();
+      const updateArgs = mockUpdateCase.mock.calls[0];
+      expect(updateArgs[1]).toEqual({
+        github_issue: 10,
+        github_issue_url: 'https://github.com/Garsson-io/prints-demo/issues/10',
+      });
+    });
+
+    test('preserves github_issue but sets github_issue_url when url is missing', async () => {
+      mockCreateGitHubIssue.mockResolvedValue({
+        success: true,
+        issueNumber: 10,
+        issueUrl: 'https://github.com/Garsson-io/prints-demo/issues/10',
+      });
+      mockAddGitHubIssueComment.mockResolvedValue({ success: true });
+
+      const c = makeTestCase({
+        github_issue: 111, // Has issue number
+        github_issue_url: null, // But no URL yet
+      });
+      await adapter.createCase(c);
+
+      expect(mockUpdateCase).toHaveBeenCalledOnce();
+      const updateArgs = mockUpdateCase.mock.calls[0];
+      // Should only set the URL, not overwrite the issue number
+      expect(updateArgs[1]).toEqual({
+        github_issue_url: 'https://github.com/Garsson-io/prints-demo/issues/10',
+      });
     });
   });
 
