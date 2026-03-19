@@ -105,6 +105,16 @@
         ]
       },
       {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./.claude/kaizen/hooks/warn-mock-count.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
         "matcher": "Skill",
         "hooks": [
           {
