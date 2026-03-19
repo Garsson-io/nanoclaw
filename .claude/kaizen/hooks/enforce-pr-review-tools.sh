@@ -6,8 +6,11 @@
 #
 # Companion to enforce-pr-review.sh (which handles Bash commands with
 # an allowlist for review commands like gh pr diff). This hook is simpler:
-# during an active review, these tools are always blocked because the agent
+# during an active review, these tools are generally blocked because the agent
 # should be reviewing, not editing or spawning subagents.
+#
+# Exceptions:
+#   - Agent(kaizen-bg, background=true): parallel kaizen reflection (kaizen #151)
 #
 # Read-only tools (Read, Glob, Grep) are NOT blocked because they're useful
 # for reviewing code during the review process.
@@ -19,6 +22,16 @@ TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
 
 if [ -z "$TOOL_NAME" ]; then
   exit 0
+fi
+
+# Allow Agent tool when it's launching kaizen-bg subagent (kaizen #151)
+# Background kaizen reflection should run in parallel with PR review
+if [ "$TOOL_NAME" = "Agent" ]; then
+  SUBAGENT_TYPE=$(echo "$INPUT" | jq -r '.tool_input.subagent_type // empty')
+  RUN_BG=$(echo "$INPUT" | jq -r '.tool_input.run_in_background // false')
+  if [ "$SUBAGENT_TYPE" = "kaizen-bg" ] && [ "$RUN_BG" = "true" ]; then
+    exit 0
+  fi
 fi
 
 # Uses shared find_needs_review_state from state-utils.sh
