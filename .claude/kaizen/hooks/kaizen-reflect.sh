@@ -100,6 +100,10 @@ If the subagent found no impediments: \`echo 'KAIZEN_IMPEDIMENTS: []'\`
 
 ⛔ You are GATED until you submit a valid KAIZEN_IMPEDIMENTS declaration.
 Allowed commands: gh issue/pr, gh api, gh run, git read-only, ls/cat.
+
+For trivial changes (typo, formatting, docs-only), you may also use:
+  \`echo 'KAIZEN_NO_ACTION [docs-only]: updated README formatting'\`
+Valid categories: docs-only, formatting, typo, config-only, test-only, trivial-refactor
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 REFLECT
 fi
@@ -161,6 +165,10 @@ If the subagent found no impediments: \`echo 'KAIZEN_IMPEDIMENTS: []'\`
 
 ⛔ You are GATED until you submit a valid KAIZEN_IMPEDIMENTS declaration.
 Allowed commands: gh issue/pr, gh api, gh run, git read-only, ls/cat.
+
+For trivial changes (typo, formatting, docs-only), you may also use:
+  \`echo 'KAIZEN_NO_ACTION [docs-only]: updated README formatting'\`
+Valid categories: docs-only, formatting, typo, config-only, test-only, trivial-refactor
 
 **Also complete post-merge steps** (these are NOT delegated to the subagent):
 - Follow Post-Merge deployment procedure in CLAUDE.md
