@@ -133,6 +133,7 @@ async function handleCaseCreate(args: string[]): Promise<void> {
   // import time, which would point to the worktree instead of the shared DB.
   const mainRoot = resolveMainRepoRoot();
   const dbPath = path.join(mainRoot, 'store', 'messages.db');
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   const database = new Database(dbPath);
   createCasesSchema(database);
 
