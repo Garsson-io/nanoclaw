@@ -12,7 +12,7 @@
 #   gh issue comment (adding incidents to existing issues)
 #   echo "KAIZEN_IMPEDIMENTS: ..." (structured impediment declaration)
 #   echo "KAIZEN_NO_ACTION: ..." (legacy — still accepted for compatibility)
-#   gh pr view, gh pr diff, gh pr edit, gh pr comment (PR-related)
+#   gh pr view, gh pr diff, gh pr edit, gh pr comment, gh pr checks (PR-related)
 #   gh api (read-only API calls — CI monitoring, PR status)
 #   gh run view, gh run list, gh run watch (CI monitoring)
 #   git diff, git log, git show, git status, git branch, git fetch
@@ -58,8 +58,8 @@ is_kaizen_command() {
   if echo "$cmd" | grep -qE 'KAIZEN_NO_ACTION:'; then
     return 0
   fi
-  # gh pr diff/view/comment/edit — PR-related commands
-  if is_gh_pr_command "$cmd" "diff|view|comment|edit"; then
+  # gh pr diff/view/comment/edit/checks — PR-related commands
+  if is_gh_pr_command "$cmd" "diff|view|comment|edit|checks"; then
     return 0
   fi
   # gh api — read-only API calls (CI monitoring, PR status checks)

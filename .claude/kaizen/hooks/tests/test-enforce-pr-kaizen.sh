@@ -191,6 +191,16 @@ assert_contains "blocked message mentions PR" "pull/42" "$OUTPUT"
 assert_contains "blocked message mentions KAIZEN_IMPEDIMENTS" "KAIZEN_IMPEDIMENTS" "$OUTPUT"
 
 echo ""
+echo "=== Kaizen gate active: gh pr checks allowed ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: gh pr checks is allowed (read-only CI monitoring)
+OUTPUT=$(run_pretool_hook "gh pr checks 42 --repo Garsson-io/nanoclaw")
+assert_eq "gh pr checks allowed" "" "$OUTPUT"
+
+echo ""
 echo "=== Kaizen gate active: KAIZEN_IMPEDIMENTS allowed ==="
 
 setup
