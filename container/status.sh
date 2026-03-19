@@ -36,7 +36,7 @@ else
     status=""
     if [ "$tag" = "latest" ]; then
       status="[compat]"
-    elif echo "$tag" | grep -qE '-(current|previous)$'; then
+    elif echo "$tag" | grep -q -E -- '-(current|previous)$'; then
       branch_prefix=$(echo "$tag" | sed 's/-\(current\|previous\)$//')
       is_active=false
       while IFS= read -r active_branch; do
@@ -65,7 +65,7 @@ echo "Dangling images: $dangling"
 # Build cache
 echo ""
 echo "Build cache:"
-${CONTAINER_RUNTIME} system df --format '{{.Type}}\t{{.TotalCount}}\t{{.Size}}\t{{.Reclaimable}}' 2>/dev/null | \
+"${CONTAINER_RUNTIME}" system df --format '{{.Type}}\t{{.TotalCount}}\t{{.Size}}\t{{.Reclaimable}}' 2>/dev/null | \
   grep -i "build" | while IFS=$'\t' read -r type count size reclaimable; do
     echo "  Entries: $count  Size: $size  Reclaimable: $reclaimable"
   done || echo "  (unable to query)"
@@ -88,7 +88,7 @@ if [ -f /proc/version ] && grep -qi microsoft /proc/version 2>/dev/null; then
     vhdx_size=$(du -sh "$VHDX_PATH" 2>/dev/null | cut -f1)
     echo "WSL Docker VHDX: $vhdx_size"
     # Show actual Docker disk usage for comparison
-    actual=$(${CONTAINER_RUNTIME} system df --format '{{.Size}}' 2>/dev/null | paste -sd+ | bc 2>/dev/null || echo "unknown")
+    actual=$("${CONTAINER_RUNTIME}" system df --format '{{.Size}}' 2>/dev/null | paste -sd+ | bc 2>/dev/null || echo "unknown")
     echo "  VHDX does not auto-shrink. Use 'wsl --shutdown && diskpart' to compact."
   fi
 fi

@@ -26,27 +26,27 @@ detect_branch() {
 # Check if a Docker image exists locally.
 image_exists() {
   local tag="$1"
-  ${CONTAINER_RUNTIME} image inspect "${IMAGE_NAME}:${tag}" >/dev/null 2>&1
+  "${CONTAINER_RUNTIME}" image inspect "${IMAGE_NAME}:${tag}" >/dev/null 2>&1
 }
 
 # List all nanoclaw-agent tags matching a pattern (or all if no pattern).
 list_image_tags() {
   local filter="${1:-}"
-  ${CONTAINER_RUNTIME} images "${IMAGE_NAME}" --format '{{.Tag}}' | \
-    if [ -n "$filter" ]; then grep -E "$filter"; else cat; fi | \
+  "${CONTAINER_RUNTIME}" images "${IMAGE_NAME}" --format '{{.Tag}}' | \
+    if [ -n "$filter" ]; then grep -E -- "$filter"; else cat; fi | \
     sort
 }
 
 # Get image size in human-readable form.
 image_size() {
   local tag="$1"
-  ${CONTAINER_RUNTIME} images "${IMAGE_NAME}:${tag}" --format '{{.Size}}' 2>/dev/null
+  "${CONTAINER_RUNTIME}" images "${IMAGE_NAME}:${tag}" --format '{{.Size}}' 2>/dev/null
 }
 
 # Get image creation time.
 image_created() {
   local tag="$1"
-  ${CONTAINER_RUNTIME} images "${IMAGE_NAME}:${tag}" --format '{{.CreatedSince}}' 2>/dev/null
+  "${CONTAINER_RUNTIME}" images "${IMAGE_NAME}:${tag}" --format '{{.CreatedSince}}' 2>/dev/null
 }
 
 # Get the project root (where store/messages.db lives).
@@ -125,11 +125,11 @@ calculate_soft_cap() {
 # Count current tagged nanoclaw-agent images (excluding <none>).
 count_tagged_images() {
   local count
-  count=$(${CONTAINER_RUNTIME} images "${IMAGE_NAME}" --format '{{.Tag}}' 2>/dev/null | grep -cv '<none>' || true)
+  count=$("${CONTAINER_RUNTIME}" images "${IMAGE_NAME}" --format '{{.Tag}}' 2>/dev/null | grep -cv '<none>' || true)
   echo "${count:-0}"
 }
 
 # Count dangling images.
 count_dangling_images() {
-  ${CONTAINER_RUNTIME} images --filter "dangling=true" --format '{{.ID}}' 2>/dev/null | wc -l | tr -d ' '
+  "${CONTAINER_RUNTIME}" images --filter "dangling=true" --format '{{.ID}}' 2>/dev/null | wc -l | tr -d ' '
 }

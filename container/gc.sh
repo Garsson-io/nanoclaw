@@ -74,7 +74,7 @@ if [ "$stale_count" -gt 0 ]; then
     size=$(image_size "$tag")
     echo "  ${IMAGE_NAME}:${tag} ($size)"
     if ! $DRY_RUN; then
-      ${CONTAINER_RUNTIME} rmi "${IMAGE_NAME}:${tag}" 2>/dev/null || true
+      "${CONTAINER_RUNTIME}" rmi "${IMAGE_NAME}:${tag}" 2>/dev/null || true
     fi
   done < "$STALE_TAGS"
   echo ""
@@ -85,7 +85,7 @@ dangling=$(count_dangling_images)
 if [ "$dangling" -gt 0 ]; then
   echo "Dangling images: $dangling"
   if ! $DRY_RUN; then
-    ${CONTAINER_RUNTIME} image prune -f
+    "${CONTAINER_RUNTIME}" image prune -f
   fi
   echo ""
 fi
@@ -93,7 +93,7 @@ fi
 # Prune unreferenced build cache
 if ! $DRY_RUN; then
   echo "Pruning unreferenced build cache..."
-  ${CONTAINER_RUNTIME} builder prune -f 2>/dev/null || true
+  "${CONTAINER_RUNTIME}" builder prune -f 2>/dev/null || true
   echo ""
 fi
 
