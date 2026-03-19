@@ -28,14 +28,26 @@ import {
   insertCase,
 } from './cases.js';
 import type { Case, CaseType } from './cases.js';
-import { STORE_DIR } from './config.js';
+import { resolveProjectRoot } from './resolve-project-root.js';
 
 const { owner, repo } = DEV_CASE_ISSUE_REPO;
 
+/**
+ * Resolve the store directory for the MAIN checkout, not the current worktree.
+ * Uses resolveProjectRoot() which handles worktree detection via git.
+ */
+export function resolveMainStoreDir(): string {
+  const instanceId = process.env.NANOCLAW_INSTANCE || '';
+  const instanceSuffix = instanceId ? `-${instanceId}` : '';
+  const mainRoot = resolveProjectRoot();
+  return path.join(mainRoot, `store${instanceSuffix}`);
+}
+
 /** Initialize the cases DB for CLI use (not running inside the main service). */
 export function initCasesDb(): void {
-  fs.mkdirSync(STORE_DIR, { recursive: true });
-  const dbPath = path.join(STORE_DIR, 'messages.db');
+  const storeDir = resolveMainStoreDir();
+  fs.mkdirSync(storeDir, { recursive: true });
+  const dbPath = path.join(storeDir, 'messages.db');
   const database = new Database(dbPath);
   createCasesSchema(database);
 }
