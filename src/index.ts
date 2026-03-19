@@ -19,6 +19,8 @@ import {
   getRegisteredChannelNames,
 } from './channels/registry.js';
 import { initBotPool, sendPoolMessage } from './channels/telegram.js';
+import { activateDevSession } from './dev-session-orchestrator.js';
+import { detectDevSafeWord } from './dev-safe-word.js';
 import { tryRouteToDevSession } from './dev-session-router.js';
 import { sendResponse, SendResponseDeps } from './send-response.js';
 import {
@@ -345,30 +347,8 @@ export function _setRegisteredGroups(
   registeredGroups = groups;
 }
 
-/**
- * Detect dev safe word in message content.
- * Checks both global DEV_SAFE_WORDS and group-specific devSafeWords.
- * Returns { found, strippedContent } — the safe word is removed from content.
- */
-export function detectDevSafeWord(
-  content: string,
-  groupSafeWords?: string[],
-): {
-  found: boolean;
-  strippedContent: string;
-} {
-  const allWords = [...DEV_SAFE_WORDS, ...(groupSafeWords || [])];
-  for (const word of allWords) {
-    if (content.includes(word)) {
-      const stripped = content
-        .replace(word, '')
-        .replace(/\s{2,}/g, ' ')
-        .trim();
-      return { found: true, strippedContent: stripped };
-    }
-  }
-  return { found: false, strippedContent: content };
-}
+// Re-export detectDevSafeWord for backward compat (other modules import from index)
+export { detectDevSafeWord };
 
 /** Build the prefix for progress/ack messages when a case is active. */
 export function buildAckPrefix(
@@ -640,6 +620,68 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         )
         .catch(() => {});
     }
+  }
+
+  // --- Dev session activation ---
+  // When safe word is detected and there's an active dev case, activate a
+  // persistent dev session instead of the per-message container path.
+  // The dev session spawns a long-lived container with rw clone + GITHUB_TOKEN.
+  if (devModeRequested && targetCase?.type === 'dev') {
+    const orchestratorDeps = {
+      sendMessage: (jid: string, text: string) =>
+        channel.sendMessage(jid, text),
+      sendPoolMessage: sendPoolMessage
+        ? (jid: string, text: string, sender: string, gf: string) =>
+            sendPoolMessage(jid, text, sender, gf)
+        : undefined,
+      getGroupByFolder: (folder: string) =>
+        Object.values(registeredGroups).find((g) => g.folder === folder),
+      isMainGroup: (folder: string) => {
+        const g = Object.values(registeredGroups).find(
+          (rg) => rg.folder === folder,
+        );
+        return g?.isMain === true;
+      },
+    };
+
+    const result = await activateDevSession(
+      targetCase,
+      prompt,
+      orchestratorDeps,
+    );
+
+    if (result.session) {
+      logger.info(
+        {
+          caseId: targetCase.id,
+          containerName: result.session.containerName,
+          botName: result.session.botName,
+        },
+        'Dev session activated via safe word',
+      );
+      // Clean up dev mode marker
+      if (fs.existsSync(devModeMarkerPath)) {
+        try {
+          fs.unlinkSync(devModeMarkerPath);
+        } catch {
+          // already cleaned
+        }
+      }
+      await channel.setTyping?.(chatJid, false);
+      return true;
+    }
+
+    // Dev session activation failed — fall through to regular agent as fallback
+    logger.warn(
+      { caseId: targetCase.id, error: result.error },
+      'Dev session activation failed, falling back to regular agent',
+    );
+    await channel
+      .sendMessage(
+        chatJid,
+        `⚠️ Dev session failed to start: ${result.error}. Running as regular agent.`,
+      )
+      .catch(() => {});
   }
 
   // Case-specific session key to isolate conversation context per case
