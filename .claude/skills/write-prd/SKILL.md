@@ -29,7 +29,9 @@ This distinction matters because:
 **You won't accumulate many horizons.** A horizon is a fundamental quality dimension — testing, security, observability, developer ergonomics, autonomous operations. If you're creating dozens, you're tracking features, not horizons.
 
 **What you produce:**
-1. A spec document in `docs/` (the single source of truth)
+1. A spec document:
+   - **Feature or feature-within-horizon:** `docs/{name}-spec.md` (the single source of truth)
+   - **Horizon:** The taxonomy lives with the domain it covers (e.g., `.claude/kaizen/horizon.md` for the kaizen horizon), with a symlink from `docs/horizons/{name}.md`. Check `docs/horizons/` for existing horizons before creating a new one.
 2. A GitHub issue (the tracking anchor for all future implementation)
 3. A docs-only PR (reviewable, versionable)
 
