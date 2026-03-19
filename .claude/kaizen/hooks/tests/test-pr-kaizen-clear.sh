@@ -1,9 +1,10 @@
 #!/bin/bash
 # Tests for pr-kaizen-clear.sh — PostToolUse hook that clears the PR
-# creation kaizen gate when the agent takes a kaizen action.
+# creation kaizen gate when the agent submits structured impediments.
 #
 # INVARIANT UNDER TEST: The PR kaizen gate (needs_pr_kaizen) is cleared
-# when the agent files a kaizen issue or declares no action needed.
+# only when the agent submits a valid KAIZEN_IMPEDIMENTS JSON declaration
+# covering all identified impediments with proper dispositions.
 source "$(dirname "$0")/test-helpers.sh"
 
 HOOK="$(dirname "$0")/../pr-kaizen-clear.sh"
@@ -46,81 +47,301 @@ has_pr_kaizen_state() {
   [ "$count" -gt 0 ]
 }
 
-echo "=== gh issue create clears kaizen gate ==="
+echo "=== Valid KAIZEN_IMPEDIMENTS with filed disposition clears gate ==="
 
 setup
 create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
 
-# INVARIANT: Filing a kaizen issue clears the gate
+# INVARIANT: A valid structured impediment declaration clears the gate
 OUTPUT=$(run_posttool_bash \
-  "gh issue create --repo Garsson-io/kaizen --title 'improve X' --body 'details'" \
-  "https://github.com/Garsson-io/kaizen/issues/99")
+  "echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
+[{\"impediment\": \"IPC case creation fragile\", \"disposition\": \"filed\", \"ref\": \"#112\"}]
+IMPEDIMENTS" \
+  'KAIZEN_IMPEDIMENTS:
+[{"impediment": "IPC case creation fragile", "disposition": "filed", "ref": "#112"}]')
 
 if ! has_pr_kaizen_state; then
-  echo "  PASS: gh issue create cleared kaizen gate"
+  echo "  PASS: valid KAIZEN_IMPEDIMENTS cleared gate"
   ((PASS++))
 else
-  echo "  FAIL: gh issue create did NOT clear kaizen gate"
+  echo "  FAIL: valid KAIZEN_IMPEDIMENTS did NOT clear gate"
   ((FAIL++))
 fi
 assert_contains "output mentions gate cleared" "gate cleared" "$OUTPUT"
+assert_contains "output mentions impediment count" "1 impediment" "$OUTPUT"
 
 echo ""
-echo "=== KAIZEN_NO_ACTION clears kaizen gate ==="
+echo "=== Empty array KAIZEN_IMPEDIMENTS clears gate (no impediments) ==="
 
 setup
 create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
 
-# INVARIANT: Explicit no-action declaration clears the gate
+# INVARIANT: Empty array is valid — genuinely no impediments
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS: []'" \
+  "KAIZEN_IMPEDIMENTS: []")
+
+if ! has_pr_kaizen_state; then
+  echo "  PASS: empty KAIZEN_IMPEDIMENTS cleared gate"
+  ((PASS++))
+else
+  echo "  FAIL: empty KAIZEN_IMPEDIMENTS did NOT clear gate"
+  ((FAIL++))
+fi
+assert_contains "output mentions no impediments" "no impediments" "$OUTPUT"
+
+echo ""
+echo "=== Multiple impediments with mixed dispositions clears gate ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: All valid dispositions are accepted
+MULTI_JSON='[
+  {"impediment": "slow CI", "disposition": "filed", "ref": "#200"},
+  {"impediment": "hook confusion", "disposition": "incident", "ref": "#125"},
+  {"impediment": "typo in docs", "disposition": "fixed-in-pr"},
+  {"impediment": "minor lint warning", "disposition": "waived", "reason": "one-time occurrence"}
+]'
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
+$MULTI_JSON
+IMPEDIMENTS" \
+  "KAIZEN_IMPEDIMENTS:
+$MULTI_JSON")
+
+if ! has_pr_kaizen_state; then
+  echo "  PASS: multi-impediment declaration cleared gate"
+  ((PASS++))
+else
+  echo "  FAIL: multi-impediment declaration did NOT clear gate"
+  ((FAIL++))
+fi
+assert_contains "output mentions 4 impediments" "4 impediment" "$OUTPUT"
+
+echo ""
+echo "=== Invalid JSON does NOT clear gate ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: Malformed JSON is rejected
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS: not valid json'" \
+  "KAIZEN_IMPEDIMENTS: not valid json")
+
+if has_pr_kaizen_state; then
+  echo "  PASS: invalid JSON did not clear gate"
+  ((PASS++))
+else
+  echo "  FAIL: invalid JSON incorrectly cleared gate"
+  ((FAIL++))
+fi
+assert_contains "output mentions invalid JSON" "Invalid JSON" "$OUTPUT"
+
+echo ""
+echo "=== Missing impediment field does NOT clear gate ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: Entries without "impediment" field are rejected
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS:' && echo '[{\"disposition\": \"filed\", \"ref\": \"#99\"}]'" \
+  'KAIZEN_IMPEDIMENTS:
+[{"disposition": "filed", "ref": "#99"}]')
+
+if has_pr_kaizen_state; then
+  echo "  PASS: missing impediment field rejected"
+  ((PASS++))
+else
+  echo "  FAIL: missing impediment field incorrectly accepted"
+  ((FAIL++))
+fi
+assert_contains "output mentions missing impediment" "missing" "$OUTPUT"
+
+echo ""
+echo "=== Missing disposition field does NOT clear gate ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: Entries without "disposition" field are rejected
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS:' && echo '[{\"impediment\": \"slow CI\"}]'" \
+  'KAIZEN_IMPEDIMENTS:
+[{"impediment": "slow CI"}]')
+
+if has_pr_kaizen_state; then
+  echo "  PASS: missing disposition field rejected"
+  ((PASS++))
+else
+  echo "  FAIL: missing disposition field incorrectly accepted"
+  ((FAIL++))
+fi
+assert_contains "output mentions missing disposition" "missing" "$OUTPUT"
+
+echo ""
+echo "=== Invalid disposition value does NOT clear gate ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: Only filed|incident|fixed-in-pr|waived are valid dispositions
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS:' && echo '[{\"impediment\": \"slow CI\", \"disposition\": \"ignored\"}]'" \
+  'KAIZEN_IMPEDIMENTS:
+[{"impediment": "slow CI", "disposition": "ignored"}]')
+
+if has_pr_kaizen_state; then
+  echo "  PASS: invalid disposition value rejected"
+  ((PASS++))
+else
+  echo "  FAIL: invalid disposition value incorrectly accepted"
+  ((FAIL++))
+fi
+assert_contains "output mentions invalid disposition" "invalid disposition" "$OUTPUT"
+
+echo ""
+echo "=== filed without ref does NOT clear gate ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: disposition "filed" requires a "ref" field
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS:' && echo '[{\"impediment\": \"slow CI\", \"disposition\": \"filed\"}]'" \
+  'KAIZEN_IMPEDIMENTS:
+[{"impediment": "slow CI", "disposition": "filed"}]')
+
+if has_pr_kaizen_state; then
+  echo "  PASS: filed without ref rejected"
+  ((PASS++))
+else
+  echo "  FAIL: filed without ref incorrectly accepted"
+  ((FAIL++))
+fi
+assert_contains "output mentions ref required" "requires" "$OUTPUT"
+
+echo ""
+echo "=== incident without ref does NOT clear gate ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: disposition "incident" requires a "ref" field
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS:' && echo '[{\"impediment\": \"hook confusion\", \"disposition\": \"incident\"}]'" \
+  'KAIZEN_IMPEDIMENTS:
+[{"impediment": "hook confusion", "disposition": "incident"}]')
+
+if has_pr_kaizen_state; then
+  echo "  PASS: incident without ref rejected"
+  ((PASS++))
+else
+  echo "  FAIL: incident without ref incorrectly accepted"
+  ((FAIL++))
+fi
+assert_contains "output mentions ref required" "requires" "$OUTPUT"
+
+echo ""
+echo "=== waived without reason does NOT clear gate ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: disposition "waived" requires a "reason" field
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS:' && echo '[{\"impediment\": \"minor thing\", \"disposition\": \"waived\"}]'" \
+  'KAIZEN_IMPEDIMENTS:
+[{"impediment": "minor thing", "disposition": "waived"}]')
+
+if has_pr_kaizen_state; then
+  echo "  PASS: waived without reason rejected"
+  ((PASS++))
+else
+  echo "  FAIL: waived without reason incorrectly accepted"
+  ((FAIL++))
+fi
+assert_contains "output mentions reason required" "requires" "$OUTPUT"
+
+echo ""
+echo "=== fixed-in-pr needs no extra fields ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: fixed-in-pr only requires impediment + disposition
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS:' && echo '[{\"impediment\": \"typo\", \"disposition\": \"fixed-in-pr\"}]'" \
+  'KAIZEN_IMPEDIMENTS:
+[{"impediment": "typo", "disposition": "fixed-in-pr"}]')
+
+if ! has_pr_kaizen_state; then
+  echo "  PASS: fixed-in-pr with no extra fields cleared gate"
+  ((PASS++))
+else
+  echo "  FAIL: fixed-in-pr with no extra fields did NOT clear gate"
+  ((FAIL++))
+fi
+
+echo ""
+echo "=== Legacy KAIZEN_NO_ACTION still clears gate ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: Legacy declaration still works for backwards compatibility
 OUTPUT=$(run_posttool_bash \
   'echo "KAIZEN_NO_ACTION: straightforward config change" >/dev/null' \
   "")
 
 if ! has_pr_kaizen_state; then
-  echo "  PASS: KAIZEN_NO_ACTION cleared kaizen gate"
+  echo "  PASS: KAIZEN_NO_ACTION cleared gate (legacy)"
   ((PASS++))
 else
-  echo "  FAIL: KAIZEN_NO_ACTION did NOT clear kaizen gate"
+  echo "  FAIL: KAIZEN_NO_ACTION did NOT clear gate"
   ((FAIL++))
 fi
-assert_contains "output mentions no action" "no action needed" "$OUTPUT"
+assert_contains "output mentions legacy" "legacy" "$OUTPUT"
 
 echo ""
-echo "=== Failed gh issue create does NOT clear gate ==="
+echo "=== gh issue create alone does NOT clear gate ==="
 
 setup
 create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
 
-# INVARIANT: Failed issue creation does not clear the gate
+# INVARIANT: gh issue create is allowed (by enforce-pr-kaizen) but does not
+# clear the gate — agent must submit KAIZEN_IMPEDIMENTS afterward
 OUTPUT=$(run_posttool_bash \
-  "gh issue create --repo Garsson-io/kaizen --title 'test'" \
-  "error: could not create issue" \
+  "gh issue create --repo Garsson-io/kaizen --title 'improve X' --body 'details'" \
+  "https://github.com/Garsson-io/kaizen/issues/99")
+
+if has_pr_kaizen_state; then
+  echo "  PASS: gh issue create alone did not clear gate"
+  ((PASS++))
+else
+  echo "  FAIL: gh issue create alone incorrectly cleared gate"
+  ((FAIL++))
+fi
+
+echo ""
+echo "=== Failed command does NOT clear gate ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: Failed commands never clear the gate
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS: []'" \
+  "KAIZEN_IMPEDIMENTS: []" \
   "1")
 
 if has_pr_kaizen_state; then
-  echo "  PASS: failed gh issue create did not clear gate"
+  echo "  PASS: failed command did not clear gate"
   ((PASS++))
 else
   echo "  FAIL: failed command incorrectly cleared gate"
-  ((FAIL++))
-fi
-
-echo ""
-echo "=== gh issue create without issue URL does NOT clear gate ==="
-
-setup
-create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
-
-# INVARIANT: Issue creation that doesn't return a URL is suspicious
-OUTPUT=$(run_posttool_bash \
-  "gh issue create --repo Garsson-io/kaizen --title 'test'" \
-  "some output without a url")
-
-if has_pr_kaizen_state; then
-  echo "  PASS: gh issue create without URL did not clear gate"
-  ((PASS++))
-else
-  echo "  FAIL: gh issue create without URL incorrectly cleared gate"
   ((FAIL++))
 fi
 
@@ -156,8 +377,8 @@ setup
 
 # INVARIANT: Without pending state, no output or side effects
 OUTPUT=$(run_posttool_bash \
-  "gh issue create --repo Garsson-io/kaizen --title 'test'" \
-  "https://github.com/Garsson-io/kaizen/issues/99")
+  "echo 'KAIZEN_IMPEDIMENTS: []'" \
+  "KAIZEN_IMPEDIMENTS: []")
 assert_eq "no pending state, no output" "" "$OUTPUT"
 
 echo ""
@@ -191,8 +412,8 @@ create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/43" "$CURREN
 
 # INVARIANT: Clearing only affects state for the current branch
 OUTPUT=$(run_posttool_bash \
-  "gh issue create --repo Garsson-io/kaizen --title 'test'" \
-  "https://github.com/Garsson-io/kaizen/issues/99")
+  "echo 'KAIZEN_IMPEDIMENTS: []'" \
+  "KAIZEN_IMPEDIMENTS: []")
 
 # PR 42 (other branch) should still exist
 if [ -f "$STATE_DIR/pr-kaizen-Garsson-io_nanoclaw_42" ]; then

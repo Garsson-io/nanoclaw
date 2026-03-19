@@ -3,7 +3,7 @@
 # commands until PR creation kaizen reflection is complete.
 #
 # INVARIANT UNDER TEST: After gh pr create, non-kaizen Bash commands are
-# blocked until the agent files a kaizen issue or declares no action needed.
+# blocked until the agent submits a valid KAIZEN_IMPEDIMENTS declaration.
 source "$(dirname "$0")/test-helpers.sh"
 
 HOOK="$(dirname "$0")/../enforce-pr-kaizen.sh"
@@ -188,7 +188,32 @@ create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
 
 OUTPUT=$(run_pretool_hook "npm run build")
 assert_contains "blocked message mentions PR" "pull/42" "$OUTPUT"
-assert_contains "blocked message mentions kaizen" "kaizen" "$OUTPUT"
+assert_contains "blocked message mentions KAIZEN_IMPEDIMENTS" "KAIZEN_IMPEDIMENTS" "$OUTPUT"
+
+echo ""
+echo "=== Kaizen gate active: KAIZEN_IMPEDIMENTS allowed ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: KAIZEN_IMPEDIMENTS declaration is allowed through
+OUTPUT=$(run_pretool_hook "echo 'KAIZEN_IMPEDIMENTS: []'")
+assert_eq "KAIZEN_IMPEDIMENTS allowed" "" "$OUTPUT"
+
+OUTPUT=$(run_pretool_hook "echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
+[{\"impediment\": \"test\", \"disposition\": \"waived\", \"reason\": \"test\"}]
+IMPEDIMENTS")
+assert_eq "KAIZEN_IMPEDIMENTS with heredoc allowed" "" "$OUTPUT"
+
+echo ""
+echo "=== Kaizen gate active: gh issue comment allowed ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: gh issue comment is allowed (for adding incidents to existing issues)
+OUTPUT=$(run_pretool_hook "gh issue comment 125 --repo Garsson-io/kaizen --body 'Incident #2'")
+assert_eq "gh issue comment allowed" "" "$OUTPUT"
 
 teardown
 print_results
