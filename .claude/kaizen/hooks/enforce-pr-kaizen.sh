@@ -1,0 +1,93 @@
+#!/bin/bash
+# Part of kAIzen Agent Control Flow — see .claude/kaizen/README.md
+# enforce-pr-kaizen.sh — Level 3 kaizen enforcement (Issue #57)
+# PreToolUse gate: blocks non-kaizen Bash commands until the agent
+# completes kaizen reflection after `gh pr create`.
+#
+# State is set by kaizen-reflect.sh (PostToolUse) with STATUS=needs_pr_kaizen.
+# Gate clears when pr-kaizen-clear.sh detects kaizen action was taken.
+#
+# Allowed commands during kaizen gate:
+#   gh issue create (filing kaizen issues)
+#   echo "KAIZEN_NO_ACTION: ..." (explicit no-action declaration)
+#   gh pr view, gh pr diff, gh pr edit, gh pr comment (PR-related)
+#   git diff, git log, git show, git status, git branch, git fetch
+#   ls, cat, stat, find, head, tail, wc, file (read-only)
+
+source "$(dirname "$0")/lib/parse-command.sh"
+source "$(dirname "$0")/lib/state-utils.sh"
+
+INPUT=$(cat)
+COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
+
+if [ -z "$COMMAND" ]; then
+  exit 0
+fi
+
+CMD_LINE=$(strip_heredoc_body "$COMMAND")
+
+# Check for active PR kaizen gate
+STATE_INFO=$(find_state_with_status "needs_pr_kaizen")
+if [ $? -ne 0 ] || [ -z "$STATE_INFO" ]; then
+  # No active kaizen gate — allow everything
+  exit 0
+fi
+
+PR_URL=$(echo "$STATE_INFO" | cut -d'|' -f1)
+
+# Check if the command is allowed during kaizen gate
+is_kaizen_command() {
+  local cmd="$1"
+  # gh issue create — filing kaizen issues (the primary action we're enforcing)
+  if echo "$cmd" | grep -qE '^\s*gh\s+issue\s+create'; then
+    return 0
+  fi
+  # KAIZEN_NO_ACTION declaration — explicit opt-out
+  if echo "$cmd" | grep -qE 'KAIZEN_NO_ACTION:'; then
+    return 0
+  fi
+  # gh pr diff/view/comment/edit — PR-related commands
+  if is_gh_pr_command "$cmd" "diff|view|comment|edit"; then
+    return 0
+  fi
+  # git read-only commands
+  if is_git_command "$cmd" "diff|log|show|status|branch|fetch"; then
+    return 0
+  fi
+  # Read-only filesystem commands
+  local first_word
+  first_word=$(echo "$cmd" | awk '{print $1}')
+  case "$first_word" in
+    ls|cat|stat|find|head|tail|wc|file) return 0 ;;
+  esac
+  return 1
+}
+
+if is_kaizen_command "$CMD_LINE"; then
+  exit 0
+fi
+
+# Block the command — agent must complete kaizen reflection first
+jq -n \
+  --arg reason "BLOCKED: PR creation kaizen reflection required.
+
+You just created a PR and must reflect on the development process before proceeding.
+  PR: $PR_URL
+
+To clear this gate, do ONE of:
+1. File a kaizen issue: use the create_github_issue MCP tool
+2. Create a dev case: use the case_suggest_dev MCP tool
+3. Declare no action needed: echo \"KAIZEN_NO_ACTION: <reason>\" >/dev/null
+
+Allowed commands during kaizen reflection:
+  gh issue create, gh pr diff/view/comment/edit
+  git diff, git log, git show, git status, git branch" \
+  '{
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "deny",
+      permissionDecisionReason: $reason
+    }
+  }'
+
+exit 0

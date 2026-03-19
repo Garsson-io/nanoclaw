@@ -769,6 +769,9 @@ server.tool(
 2. A kaizen reflection: list any bugs, impediments, inefficiencies, difficulties, annoyances, or blockers you encountered.
    For each, suggest what improvement would help: QoL features, bug fixes, cached knowledge, hooks, gates/reviews/checks, workflow improvements.
    These become suggested dev cases for continuous improvement.
+3. If you genuinely encountered no issues, set no_kaizen_needed=true with a reason explaining why (e.g., "straightforward config change with no friction").
+
+You MUST provide either a non-empty kaizen array OR no_kaizen_needed=true with a reason. Empty reflections are rejected.
 
 The case will move to DONE status and await user review before being pruned.`,
   {
@@ -792,14 +795,47 @@ The case will move to DONE status and await user review before being pruned.`,
       )
       .optional()
       .describe(
-        'Kaizen reflections — improvements that would make future cases better',
+        'Kaizen reflections — improvements that would make future cases better. Required unless no_kaizen_needed is true.',
+      ),
+    no_kaizen_needed: z
+      .boolean()
+      .optional()
+      .describe(
+        'Set to true ONLY if no improvements were identified. Must include no_kaizen_reason.',
+      ),
+    no_kaizen_reason: z
+      .string()
+      .optional()
+      .describe(
+        'Why no kaizen items were identified (e.g., "straightforward config change with no friction"). Required when no_kaizen_needed is true.',
       ),
   },
   async (args) => {
+    // L3 enforcement (kaizen #57): require either kaizen reflections or explicit opt-out
+    const hasKaizen = args.kaizen && args.kaizen.length > 0;
+    const hasOptOut =
+      args.no_kaizen_needed === true &&
+      args.no_kaizen_reason &&
+      args.no_kaizen_reason.trim().length > 0;
+
+    if (!hasKaizen && !hasOptOut) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: 'Rejected: You must provide either a non-empty kaizen array with reflections, or set no_kaizen_needed=true with a no_kaizen_reason explaining why no improvements were identified. Empty reflections are not allowed — every case teaches something.',
+          },
+        ],
+        isError: true,
+      };
+    }
+
     const data = {
       type: 'case_mark_done',
       caseId: args.case_id,
       conclusion: args.conclusion,
+      noKaizenNeeded: args.no_kaizen_needed || false,
+      noKaizenReason: args.no_kaizen_reason || '',
       groupFolder,
       timestamp: new Date().toISOString(),
     };
@@ -807,8 +843,8 @@ The case will move to DONE status and await user review before being pruned.`,
     writeIpcFile(TASKS_DIR, data);
 
     // Submit each kaizen reflection as a suggested dev case
-    if (args.kaizen && args.kaizen.length > 0) {
-      for (const k of args.kaizen) {
+    if (hasKaizen) {
+      for (const k of args.kaizen!) {
         const suggestData = {
           type: 'case_suggest_dev',
           sourceCaseId: args.case_id,
@@ -826,7 +862,7 @@ The case will move to DONE status and await user review before being pruned.`,
       content: [
         {
           type: 'text' as const,
-          text: `Case ${args.case_id} marked as done. Awaiting review.${kaizenCount > 0 ? ` ${kaizenCount} kaizen suggestion(s) submitted.` : ''}`,
+          text: `Case ${args.case_id} marked as done. Awaiting review.${kaizenCount > 0 ? ` ${kaizenCount} kaizen suggestion(s) submitted.` : hasOptOut ? ' No kaizen needed: ' + args.no_kaizen_reason : ''}`,
         },
       ],
     };

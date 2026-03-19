@@ -1,0 +1,151 @@
+#!/bin/bash
+# Tests for enforce-pr-kaizen.sh — PreToolUse hook that blocks non-kaizen
+# commands until PR creation kaizen reflection is complete.
+#
+# INVARIANT UNDER TEST: After gh pr create, non-kaizen Bash commands are
+# blocked until the agent files a kaizen issue or declares no action needed.
+source "$(dirname "$0")/test-helpers.sh"
+
+HOOK="$(dirname "$0")/../enforce-pr-kaizen.sh"
+setup_test_env
+
+setup() { reset_state; }
+teardown() { reset_state; }
+
+# Helper: create PR kaizen state file
+create_pr_kaizen_state() {
+  local pr_url="$1"
+  local branch="${2:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)}"
+  local filename
+  filename="pr-kaizen-$(echo "$pr_url" | sed 's|https://github\.com/||;s|/pull/|_|;s|/|_|g')"
+  printf 'PR_URL=%s\nSTATUS=%s\nBRANCH=%s\n' \
+    "$pr_url" "needs_pr_kaizen" "$branch" > "$STATE_DIR/$filename"
+}
+
+# Helper: run the PreToolUse hook with a command
+run_pretool_hook() {
+  local command="$1"
+  local input
+  input=$(jq -n --arg cmd "$command" '{"tool_input":{"command":$cmd}}')
+  echo "$input" | bash "$HOOK" 2>/dev/null
+}
+
+echo "=== No kaizen gate: all commands allowed ==="
+
+setup
+
+# INVARIANT: Without kaizen gate, commands pass through
+OUTPUT=$(run_pretool_hook "npm run build")
+assert_eq "no gate, build allowed" "" "$OUTPUT"
+
+echo ""
+echo "=== Kaizen gate active: non-kaizen commands blocked ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: Non-kaizen commands are denied when gate is active
+OUTPUT=$(run_pretool_hook "npm run build")
+if is_denied "$OUTPUT"; then
+  echo "  PASS: npm run build denied during kaizen gate"
+  ((PASS++))
+else
+  echo "  FAIL: npm run build NOT denied"
+  echo "    output: $OUTPUT"
+  ((FAIL++))
+fi
+
+OUTPUT=$(run_pretool_hook "git commit -m 'fix'")
+if is_denied "$OUTPUT"; then
+  echo "  PASS: git commit denied during kaizen gate"
+  ((PASS++))
+else
+  echo "  FAIL: git commit NOT denied"
+  ((FAIL++))
+fi
+
+echo ""
+echo "=== Kaizen gate active: gh issue create allowed ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: gh issue create is allowed (it's the kaizen action)
+OUTPUT=$(run_pretool_hook "gh issue create --repo Garsson-io/kaizen --title 'test'")
+assert_eq "gh issue create allowed" "" "$OUTPUT"
+
+echo ""
+echo "=== Kaizen gate active: KAIZEN_NO_ACTION allowed ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: KAIZEN_NO_ACTION declaration is allowed
+OUTPUT=$(run_pretool_hook 'echo "KAIZEN_NO_ACTION: straightforward fix" >/dev/null')
+assert_eq "KAIZEN_NO_ACTION allowed" "" "$OUTPUT"
+
+echo ""
+echo "=== Kaizen gate active: read-only commands allowed ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: Read-only git commands are allowed during kaizen gate
+OUTPUT=$(run_pretool_hook "git status")
+assert_eq "git status allowed" "" "$OUTPUT"
+
+OUTPUT=$(run_pretool_hook "git diff HEAD")
+assert_eq "git diff allowed" "" "$OUTPUT"
+
+OUTPUT=$(run_pretool_hook "git log --oneline -5")
+assert_eq "git log allowed" "" "$OUTPUT"
+
+# INVARIANT: PR review commands are allowed
+OUTPUT=$(run_pretool_hook "gh pr view https://github.com/Garsson-io/nanoclaw/pull/42")
+assert_eq "gh pr view allowed" "" "$OUTPUT"
+
+OUTPUT=$(run_pretool_hook "gh pr diff https://github.com/Garsson-io/nanoclaw/pull/42")
+assert_eq "gh pr diff allowed" "" "$OUTPUT"
+
+# INVARIANT: Read-only filesystem commands are allowed
+OUTPUT=$(run_pretool_hook "ls -la")
+assert_eq "ls allowed" "" "$OUTPUT"
+
+OUTPUT=$(run_pretool_hook "cat README.md")
+assert_eq "cat allowed" "" "$OUTPUT"
+
+echo ""
+echo "=== Cross-worktree isolation: only blocks own branch ==="
+
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42" "wt/other-branch"
+
+# INVARIANT: Kaizen gate from another branch does not block this branch
+OUTPUT=$(run_pretool_hook "npm run build")
+assert_eq "other branch gate does not block" "" "$OUTPUT"
+
+echo ""
+echo "=== Stale state files are ignored ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+# Backdate the state file to make it stale (>2 hours)
+backdate_file "$STATE_DIR/pr-kaizen-Garsson-io_nanoclaw_42" 3
+
+# INVARIANT: Stale state files do not block
+OUTPUT=$(run_pretool_hook "npm run build")
+assert_eq "stale gate does not block" "" "$OUTPUT"
+
+echo ""
+echo "=== Blocked message mentions PR URL ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+OUTPUT=$(run_pretool_hook "npm run build")
+assert_contains "blocked message mentions PR" "pull/42" "$OUTPUT"
+assert_contains "blocked message mentions kaizen" "kaizen" "$OUTPUT"
+
+teardown
+print_results
