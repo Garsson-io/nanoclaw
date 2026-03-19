@@ -1,41 +1,52 @@
-import { describe, test, expect, vi } from 'vitest';
+import { describe, test, expect } from 'vitest';
 import { execSync } from 'child_process';
+import fs from 'fs';
 import path from 'path';
 
 import { resolveProjectRoot } from './resolve-project-root.js';
 
 // INVARIANT: resolveProjectRoot() returns the main checkout root regardless of cwd.
 // SUT: resolveProjectRoot()
-// VERIFICATION: Call from this worktree, verify it returns the main checkout path.
+// VERIFICATION: Verify it returns a valid git root with expected structure.
+
+const isWorktree = process.cwd().includes('.claude/worktrees');
 
 describe('resolveProjectRoot', () => {
-  test('returns main checkout root when called from a worktree', () => {
-    // We ARE in a worktree right now — this is a real integration test
+  test('returns a directory that is a git root', () => {
+    const root = resolveProjectRoot();
+
+    // The resolved root should contain a .git entry (file or dir)
+    expect(fs.existsSync(path.join(root, '.git'))).toBe(true);
+  });
+
+  test('returns a directory containing package.json', () => {
+    const root = resolveProjectRoot();
+
+    // Main checkout has package.json at root
+    expect(fs.existsSync(path.join(root, 'package.json'))).toBe(true);
+  });
+
+  test('returns main checkout root, not worktree, when in a worktree', () => {
+    if (!isWorktree) {
+      // In the main checkout, resolveProjectRoot should equal cwd
+      expect(resolveProjectRoot()).toBe(process.cwd());
+      return;
+    }
+
     const root = resolveProjectRoot();
     const cwd = process.cwd();
 
-    // cwd is a worktree path like .../nanoclaw/.claude/worktrees/260319-...
-    expect(cwd).toContain('.claude/worktrees');
-
-    // resolveProjectRoot should return the main checkout, NOT the worktree
+    // resolveProjectRoot should NOT return the worktree path
     expect(root).not.toContain('.claude/worktrees');
-    expect(root).toBe('/home/aviadr1/projects/nanoclaw');
+    // But cwd IS a worktree
+    expect(cwd).toContain('.claude/worktrees');
+    // The worktree should be under the resolved root
+    expect(cwd).toContain(root);
   });
 
-  test('returns path that contains store/messages.db', () => {
-    const root = resolveProjectRoot();
-    const dbPath = path.join(root, 'store', 'messages.db');
-
-    // The main checkout's DB should exist
-    const fs = require('fs');
-    expect(fs.existsSync(dbPath)).toBe(true);
-  });
-
-  test('returns path that contains .claude/worktrees/', () => {
-    const root = resolveProjectRoot();
-    const worktreesDir = path.join(root, '.claude', 'worktrees');
-
-    const fs = require('fs');
-    expect(fs.existsSync(worktreesDir)).toBe(true);
+  test('returns consistent results across calls', () => {
+    const root1 = resolveProjectRoot();
+    const root2 = resolveProjectRoot();
+    expect(root1).toBe(root2);
   });
 });
