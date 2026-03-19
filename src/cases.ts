@@ -8,6 +8,7 @@ import path from 'path';
 
 import { DATA_DIR } from './config.js';
 import { logger } from './logger.js';
+import { resolveProjectRoot } from './resolve-project-root.js';
 import { WorktreeLockSchema } from './schemas.js';
 
 // ---------------------------------------------------------------------------
@@ -425,7 +426,7 @@ export function addCaseTime(id: string, durationMs: number): void {
 // Workspace management
 // ---------------------------------------------------------------------------
 
-const PROJECT_ROOT = process.cwd();
+const PROJECT_ROOT = resolveProjectRoot();
 const WORKTREES_DIR = path.join(PROJECT_ROOT, '.claude', 'worktrees');
 const WORKSPACES_DIR = path.join(DATA_DIR, 'case-workspaces');
 

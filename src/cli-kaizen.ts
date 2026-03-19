@@ -10,7 +10,6 @@
  *     [--worktree-path PATH --branch-name BRANCH]  (adopt existing worktree)
  */
 
-import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -31,23 +30,18 @@ import {
   resolveExistingWorktree,
 } from './cases.js';
 import type { Case, CaseType } from './cases.js';
+import { resolveProjectRoot } from './resolve-project-root.js';
 
 const { owner, repo } = DEV_CASE_ISSUE_REPO;
 
 /**
  * Resolve the store directory for the MAIN checkout, not the current worktree.
- * Uses `git rev-parse --git-common-dir` to find the shared .git dir,
- * then resolves store/ relative to its parent (the main checkout root).
+ * Uses resolveProjectRoot() which handles worktree detection via git.
  */
-export function resolveMainStoreDir(gitCommonDir?: string): string {
+export function resolveMainStoreDir(): string {
   const instanceId = process.env.NANOCLAW_INSTANCE || '';
   const instanceSuffix = instanceId ? `-${instanceId}` : '';
-  const commonDir =
-    gitCommonDir ||
-    execSync('git rev-parse --path-format=absolute --git-common-dir', {
-      encoding: 'utf-8',
-    }).trim();
-  const mainRoot = path.dirname(commonDir);
+  const mainRoot = resolveProjectRoot();
   return path.join(mainRoot, `store${instanceSuffix}`);
 }
 
