@@ -212,6 +212,22 @@ When you complete a phase (or a meaningful chunk of a phase), **update the spec 
 
 **Anti-pattern: "I'll update the spec later."** You won't. The learnings are freshest right after implementation. The update is part of the phase, not an afterthought.
 
+### 4b. Documentation and policy deliverables
+
+When your implementation introduces **new operational processes** — scripts operators must run, policies for when to clean up resources, new lifecycle management, new scheduled tasks — you must produce documentation alongside the code. Code without docs creates tribal knowledge that agents and humans can't discover.
+
+**Ask yourself:** "If someone encounters this system for the first time in 3 months, what do they need to know to operate it?" If the answer is more than "read the code," write docs.
+
+**What to produce:**
+
+1. **Operational documentation** (`docs/{feature-name}.md`): How it works, when to run it, what the policy is. Written for operators (both human and agent).
+2. **CLAUDE.md section**: Brief policy summary that agents see in every conversation. Link to the full docs. Keep it to 5-10 lines — CLAUDE.md is expensive context.
+3. **Skill (if interactive)**: When the feature has a "run this when X happens" flow, create a skill that guides the user through it (e.g., `/docker-gc` for cleanup workflows).
+
+**When to skip:** Pure library code, internal refactors, bug fixes, test additions — these don't need operational docs. The test is: does this change introduce a new **operational process** that someone needs to know about?
+
+**Anti-pattern: "The code is self-documenting."** Shell scripts with `--help` flags are not documentation. They tell you what flags exist, not when to run the command, what the policy is, or what happens if you don't.
+
 ### 5. Re-enter the loop
 
 After updating the spec, the landscape has changed:

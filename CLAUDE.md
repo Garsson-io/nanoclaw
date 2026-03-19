@@ -497,6 +497,18 @@ git -C /home/aviadr1/projects/nanoclaw fetch origin main && git -C /home/aviadr1
 
 **If state is not MERGED after CI passes**: check `gh pr view --json mergeStateStatus` for the reason and fix it. This is rare — usually means another PR merged during your CI run and `strict` requires re-running. Push triggers a new CI run and auto-merge retries.
 
+## Docker Image Lifecycle
+
+`build.sh` uses per-branch slot rotation: each branch gets `{branch}-current` and `{branch}-previous` tags. `:latest` always tracks the last-built `:current` for backward compatibility. Failed builds leave the current slot unchanged.
+
+**Policy:**
+- `./container/build.sh` — build with auto-rotation (no args) or legacy mode (`./container/build.sh <tag>`)
+- `./container/gc.sh` — dry run by default, `--force` to clean stale images. Stale = no worktree + no active case.
+- `./container/status.sh` — shows all images, active/stale status, build cache, soft cap
+- Soft cap: `(active_cases + 1) × 2`. Startup advisory warns when exceeded.
+- **Never run `docker builder prune --all`** — it nukes base layers (chromium 1.4GB) and makes next build take 5+ minutes.
+- See [`docs/docker-image-lifecycle.md`](docs/docker-image-lifecycle.md) for full documentation.
+
 ## Container Build Cache
 
 The container buildkit caches the build context aggressively. `--no-cache` alone does NOT invalidate COPY steps — the builder's volume retains stale files. To force a truly clean rebuild, prune the builder then re-run `./container/build.sh`.
