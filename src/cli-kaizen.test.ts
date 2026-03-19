@@ -1,17 +1,10 @@
-import { describe, test, expect, beforeEach, afterEach } from 'vitest';
+import { describe, test, expect, afterEach } from 'vitest';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import Database from 'better-sqlite3';
 
-import { _initTestDatabase } from './db.js';
-import {
-  insertCase,
-  getActiveCasesByGithubIssue,
-  generateCaseId,
-  generateCaseName,
-} from './cases.js';
-import { makeCase } from './test-helpers.test-util.js';
+import { generateCaseName } from './cases.js';
 
 const exec = promisify(execFile);
 const CLI_SOURCE = path.resolve(__dirname, 'cli-kaizen.ts');
