@@ -119,6 +119,24 @@ is_branch_merged() {
   get_merged_branches | grep -Fxq "$1" 2>/dev/null
 }
 
+# Distinguish "truly merged" (diverged then merged back) from "at-main" (never diverged)
+# Returns: "merged", "at-main", or "unmerged"
+branch_merge_status() {
+  local branch="$1"
+  if ! is_branch_merged "$branch"; then
+    echo "unmerged"
+    return
+  fi
+  # Branch is in --merged list. Check if it actually diverged from main.
+  local ahead
+  ahead=$(git -C "$PROJECT_ROOT" rev-list --count "main..$branch" 2>/dev/null || echo "0")
+  if [ "$ahead" -eq 0 ]; then
+    echo "at-main"
+  else
+    echo "merged"
+  fi
+}
+
 # Analyze worktrees
 analyze_worktrees() {
   echo -e "${BOLD}Worktrees${NC}"
@@ -164,12 +182,13 @@ analyze_worktrees() {
 
     # Git state
     local state_parts=""
-    if is_branch_merged "$branch"; then
-      state_parts="${GREEN}merged${NC}"
-      merged=$((merged + 1))
-    else
-      state_parts="unmerged"
-    fi
+    local merge_status
+    merge_status=$(branch_merge_status "$branch")
+    case "$merge_status" in
+      merged)  state_parts="${GREEN}merged${NC}"; merged=$((merged + 1)) ;;
+      at-main) state_parts="${DIM}at-main${NC}" ;;
+      *)       state_parts="unmerged" ;;
+    esac
 
     local dirty_files
     dirty_files=$(git -C "$wt" status --porcelain 2>/dev/null | grep -cv '.worktree-lock.json' || true)
@@ -373,8 +392,10 @@ do_cleanup() {
       continue
     fi
 
-    # Must be merged
-    is_branch_merged "$branch" || continue
+    # Must be truly merged (not just sitting at main)
+    local merge_status
+    merge_status=$(branch_merge_status "$branch")
+    [ "$merge_status" = "merged" ] || continue
 
     # Must be clean
     local dirty
