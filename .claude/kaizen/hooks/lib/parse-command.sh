@@ -110,3 +110,58 @@ get_pr_changed_files() {
     git diff --name-only main...HEAD 2>/dev/null || true
   fi
 }
+
+# Reconstruct a full PR URL from a gh pr command line.
+# Fallback chain:
+#   1. Extract URL from stdout/stderr
+#   2. Extract URL from command args
+#   3. Parse --repo + bare PR number from command, construct URL
+#   4. Parse bare PR number + detect repo from git remote
+#
+# Usage: PR_URL=$(reconstruct_pr_url "$CMD_LINE" "$STDOUT" "$STDERR" "merge")
+# Returns the URL if found, empty string otherwise.
+reconstruct_pr_url() {
+  local cmd_line="$1"
+  local stdout="$2"
+  local stderr="$3"
+  local subcommand="$4"
+
+  local url=""
+
+  # Try stdout
+  url=$(echo "$stdout" | grep -oE 'https://github\.com/[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+/pull/[0-9]+' | head -1)
+  if [ -n "$url" ]; then
+    echo "$url"
+    return 0
+  fi
+
+  # Try stderr
+  url=$(echo "$stderr" | grep -oE 'https://github\.com/[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+/pull/[0-9]+' | head -1)
+  if [ -n "$url" ]; then
+    echo "$url"
+    return 0
+  fi
+
+  # Try command args (full URL in the command)
+  url=$(echo "$cmd_line" | grep -oE 'https://github\.com/[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+/pull/[0-9]+' | head -1)
+  if [ -n "$url" ]; then
+    echo "$url"
+    return 0
+  fi
+
+  # Reconstruct from --repo + bare PR number
+  local pr_num repo
+  pr_num=$(extract_pr_number "$cmd_line" "$subcommand")
+  if [ -n "$pr_num" ]; then
+    repo=$(extract_repo_flag "$cmd_line")
+    if [ -z "$repo" ]; then
+      repo=$(detect_gh_repo)
+    fi
+    if [ -n "$repo" ]; then
+      echo "https://github.com/${repo}/pull/${pr_num}"
+      return 0
+    fi
+  fi
+
+  return 1
+}
