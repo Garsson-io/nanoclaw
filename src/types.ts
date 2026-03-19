@@ -30,6 +30,8 @@ export interface AllowedRoot {
 export interface ContainerConfig {
   additionalMounts?: AdditionalMount[];
   timeout?: number; // Default: 300000 (5 minutes)
+  /** Safe words that escalate to dev agent mode for this group */
+  devSafeWords?: string[];
 }
 
 export interface RegisteredGroup {

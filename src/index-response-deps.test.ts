@@ -213,6 +213,23 @@ describe('detectDevSafeWord', () => {
     expect(result.found).toBe(true);
     expect(result.strippedContent).not.toContain('  ');
   });
+
+  test('detects group-specific safe word', () => {
+    const result = detectDevSafeWord('devmode fix something', ['devmode']);
+    expect(result.found).toBe(true);
+    expect(result.strippedContent).toBe('fix something');
+  });
+
+  test('detects global safe word even when group words provided', () => {
+    const result = detectDevSafeWord('תברווז fix it', ['other-word']);
+    expect(result.found).toBe(true);
+    expect(result.strippedContent).toBe('fix it');
+  });
+
+  test('no match when neither global nor group words present', () => {
+    const result = detectDevSafeWord('just a normal message', ['devmode']);
+    expect(result.found).toBe(false);
+  });
 });
 
 describe('makeResponseDeps', () => {

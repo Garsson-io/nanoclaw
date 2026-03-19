@@ -346,13 +346,18 @@ export function _setRegisteredGroups(
 
 /**
  * Detect dev safe word in message content.
+ * Checks both global DEV_SAFE_WORDS and group-specific devSafeWords.
  * Returns { found, strippedContent } — the safe word is removed from content.
  */
-export function detectDevSafeWord(content: string): {
+export function detectDevSafeWord(
+  content: string,
+  groupSafeWords?: string[],
+): {
   found: boolean;
   strippedContent: string;
 } {
-  for (const word of DEV_SAFE_WORDS) {
+  const allWords = [...DEV_SAFE_WORDS, ...(groupSafeWords || [])];
+  for (const word of allWords) {
     if (content.includes(word)) {
       const stripped = content
         .replace(word, '')
@@ -428,9 +433,10 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   // --- Dev safe word detection ---
   // Check if any message contains a safe word that escalates to dev mode.
   // If found, strip it from message content and write a marker file for IPC.
+  const groupSafeWords = group.containerConfig?.devSafeWords;
   let devModeRequested = false;
   for (const msg of missedMessages) {
-    const result = detectDevSafeWord(msg.content);
+    const result = detectDevSafeWord(msg.content, groupSafeWords);
     if (result.found) {
       devModeRequested = true;
       msg.content = result.strippedContent;
