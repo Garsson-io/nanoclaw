@@ -99,7 +99,7 @@ export function startAgent(
   const groupDir = path.join(tmpDir, 'group');
   const claudeDir = path.join(tmpDir, 'claude');
   const globalDir = path.join(tmpDir, 'global');
-  const agentRunnerSrcDir = path.join(tmpDir, 'agent-runner-src');
+  const agentRunnerDistDir = path.join(tmpDir, 'agent-runner-dist');
 
   for (const dir of [
     messagesDir,
@@ -108,15 +108,15 @@ export function startAgent(
     groupDir,
     claudeDir,
     globalDir,
-    agentRunnerSrcDir,
+    agentRunnerDistDir,
   ]) {
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  // Copy agent-runner source for container compilation
-  const srcDir = path.join(PROJECT_ROOT, 'container/agent-runner/src');
-  if (fs.existsSync(srcDir)) {
-    fs.cpSync(srcDir, agentRunnerSrcDir, { recursive: true });
+  // Copy pre-compiled agent-runner dist/ (no runtime tsc — kaizen #123)
+  const distDir = path.join(PROJECT_ROOT, 'container/agent-runner/dist');
+  if (fs.existsSync(distDir)) {
+    fs.cpSync(distDir, agentRunnerDistDir, { recursive: true });
   }
 
   const hostGateway =
@@ -154,7 +154,7 @@ export function startAgent(
       '-v',
       `${globalDir}:/workspace/global:ro`,
       '-v',
-      `${agentRunnerSrcDir}:/app/src`,
+      `${agentRunnerDistDir}:/app/dist`,
       CONTAINER_IMAGE,
     ],
     { stdio: ['pipe', 'pipe', 'pipe'] },
