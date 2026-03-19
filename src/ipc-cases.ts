@@ -449,12 +449,22 @@ async function handleCaseCreate(
     }
   }
 
+  // Check for dev mode marker (written by message loop when safe word detected)
+  const devModeMarkerPath = path.join(
+    DATA_DIR,
+    'ipc',
+    sourceGroup,
+    '.dev-mode',
+  );
+  const devModeRequested = fs.existsSync(devModeMarkerPath);
+
   const requestedType = d.caseType === 'dev' ? 'dev' : 'work';
   const authDecision = authorizeCaseCreation({
     requestedType,
     description: d.description,
     sourceGroup,
     isMain,
+    devModeRequested,
   });
 
   const { caseType, autoPromoted } = authDecision;

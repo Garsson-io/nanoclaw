@@ -115,6 +115,56 @@ describe('authorizeCaseCreation', () => {
     expect(result.autoPromoted).toBe(true);
   });
 
+  // INVARIANT: Dev case from non-main group with devModeRequested → active (bypass approval)
+  it('dev case from non-main group with devModeRequested → active', () => {
+    const result = authorizeCaseCreation({
+      ...nonMainParams,
+      requestedType: 'dev',
+      description: 'improve the kaizen hook',
+      devModeRequested: true,
+    });
+    expect(result.caseType).toBe('dev');
+    expect(result.status).toBe('active');
+    expect(result.reason).toContain('Safe word');
+  });
+
+  // INVARIANT: Auto-promoted work→dev with devModeRequested → active
+  it('auto-promoted work→dev with devModeRequested from non-main → active', () => {
+    const result = authorizeCaseCreation({
+      ...nonMainParams,
+      requestedType: 'work',
+      description: 'fix the bug in router.ts',
+      devModeRequested: true,
+    });
+    expect(result.caseType).toBe('dev');
+    expect(result.status).toBe('active');
+    expect(result.autoPromoted).toBe(true);
+  });
+
+  // INVARIANT: devModeRequested has no effect on work cases (no promotion)
+  it('devModeRequested does not affect non-code work cases', () => {
+    const result = authorizeCaseCreation({
+      ...nonMainParams,
+      requestedType: 'work',
+      description: 'analyze customer data',
+      devModeRequested: true,
+    });
+    expect(result.caseType).toBe('work');
+    expect(result.status).toBe('active');
+  });
+
+  // INVARIANT: devModeRequested=false behaves same as omitted
+  it('devModeRequested=false does not bypass approval', () => {
+    const result = authorizeCaseCreation({
+      ...nonMainParams,
+      requestedType: 'dev',
+      description: 'improve the kaizen hook',
+      devModeRequested: false,
+    });
+    expect(result.caseType).toBe('dev');
+    expect(result.status).toBe('suggested');
+  });
+
   // INVARIANT: Non-code work descriptions stay as work even from main
   it('does not promote non-code work descriptions', () => {
     const result = authorizeCaseCreation({
