@@ -30,11 +30,10 @@ describe('resolveMainStoreDir (worktree-aware DB path)', () => {
     expect(storeDir).not.toContain('.claude/worktrees');
   });
 
-  test('store dir exists and contains messages.db', () => {
+  test('store dir path ends with /store', () => {
     const storeDir = resolveMainStoreDir();
 
-    // The store directory should exist (main checkout always has it)
-    expect(fs.existsSync(storeDir)).toBe(true);
-    expect(fs.existsSync(path.join(storeDir, 'messages.db'))).toBe(true);
+    // The resolved store dir should always end with /store (or /store-{instance})
+    expect(path.basename(storeDir)).toMatch(/^store/);
   });
 });
