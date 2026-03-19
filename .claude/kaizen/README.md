@@ -46,7 +46,9 @@ These are registered in `.claude/settings.json` and fire on Claude Code tool-use
 | `verify-before-stop.sh` | Stop | Gate | Yes (if fail) | Run tsc/vitest before agent finishes |
 | `check-cleanup-on-stop.sh` | Stop | Advisory | No | Warn about orphaned worktree state |
 | `pr-review-loop.sh` | PostToolUse(Bash) | State machine | No | Multi-round PR self-review with state tracking |
-| `kaizen-reflect.sh` | PostToolUse(Bash) | Advisory | No | Trigger kaizen reflection at workflow boundaries |
+| `kaizen-reflect.sh` | PostToolUse(Bash) | State machine | No | Trigger kaizen reflection; set `needs_pr_kaizen` state on PR create |
+| `enforce-pr-kaizen.sh` | PreToolUse(Bash) | Gate | Yes | Block non-kaizen commands until PR creation kaizen is complete |
+| `pr-kaizen-clear.sh` | PostToolUse(Bash) | State machine | No | Clear PR kaizen gate on `gh issue create` or `KAIZEN_NO_ACTION` |
 | `enforce-post-merge-stop.sh` | Stop | Gate | Yes | Block agent from finishing with pending post-merge workflow |
 | `post-merge-clear.sh` | PostToolUse(Bash,Skill) | State machine | No | Clear post-merge gate on /kaizen; promote awaiting_merge on merge confirmation |
 
@@ -159,6 +161,16 @@ Read-only mounts, mandatory worktree launcher, protected wrappers. Use when huma
 - **Keyed by:** PR URL (not branch — PRs can target different repos)
 - **Staleness:** Files older than 2 hours are ignored
 - **Isolation:** `state-utils.sh` filters by BRANCH field matching current git branch
+
+### PR creation kaizen state (kaizen #57)
+
+- **Location:** `/tmp/.pr-review-state/` (same directory, `pr-kaizen-` prefix)
+- **Format:** Plain key=value files
+- **Fields:** `PR_URL`, `STATUS` (needs_pr_kaizen), `BRANCH`
+- **Lifecycle:**
+  1. `gh pr create` → `kaizen-reflect.sh` writes `needs_pr_kaizen`
+  2. Agent files `gh issue create` or declares `KAIZEN_NO_ACTION` → `pr-kaizen-clear.sh` clears state
+  3. `enforce-pr-kaizen.sh` blocks non-kaizen PreToolUse(Bash) while `needs_pr_kaizen` exists
 
 ### Post-merge workflow state
 

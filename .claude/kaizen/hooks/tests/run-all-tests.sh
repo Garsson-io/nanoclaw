@@ -66,6 +66,8 @@ UNIT_TESTS=(
   "$SCRIPT_DIR/test-send-telegram-ipc.sh"
   "$SCRIPT_DIR/test-enforce-post-merge-stop.sh"
   "$SCRIPT_DIR/test-post-merge-clear.sh"
+  "$SCRIPT_DIR/test-enforce-pr-kaizen.sh"
+  "$SCRIPT_DIR/test-pr-kaizen-clear.sh"
 )
 
 # Bash harness tests

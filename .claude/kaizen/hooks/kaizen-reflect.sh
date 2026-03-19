@@ -47,6 +47,16 @@ BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 CHANGED=$(get_pr_changed_files "$CMD_LINE" "$IS_MERGE" 2>/dev/null | head -20)
 
 if [ "$IS_CREATE" = true ]; then
+  # L3 enforcement (kaizen #57): set state gate for PR creation kaizen
+  source "$(dirname "$0")/lib/state-utils.sh"
+  mkdir -p "$STATE_DIR" 2>/dev/null
+  chmod 700 "$STATE_DIR" 2>/dev/null
+  KAIZEN_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+  KAIZEN_STATE_FILE="$STATE_DIR/pr-kaizen-$(echo "$PR_URL" | sed 's|https://github\.com/||;s|/pull/|_|;s|/|_|g')"
+  printf 'PR_URL=%s\nSTATUS=%s\nBRANCH=%s\n' \
+    "$PR_URL" "needs_pr_kaizen" "$KAIZEN_BRANCH" > "$KAIZEN_STATE_FILE"
+  chmod 600 "$KAIZEN_STATE_FILE" 2>/dev/null
+
   cat <<'REFLECT'
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -73,22 +83,19 @@ Before moving on, reflect on the work that led to this PR:
    - What slowed you down? Missing docs? Unclear architecture?
    - Would a hook, tool, or architectural change prevent this?
 
-5. **⚡ MAKE IT ACTIONABLE — this is the most important step:**
+5. **⚡ MAKE IT ACTIONABLE — you are GATED until you do:**
    Reflection without action is decoration. For each improvement
    you identified above, you MUST do one of:
-   - **Create a dev case** via `case_suggest_dev` tool if the fix
-     requires code changes (hooks, MCP tools, architecture)
-   - **File a kaizen issue** via `create_github_issue` tool if the
-     fix needs design discussion or is out of scope right now
-   - **Fix it now** in this PR if it's small enough to include
-   - If none apply, explicitly state why no action is needed.
+   - **File a kaizen issue** via `create_github_issue` MCP tool
+   - **Create a dev case** via `case_suggest_dev` MCP tool
+   - **Fix it now** in this PR if small enough to include
+   - If none apply, run: echo "KAIZEN_NO_ACTION: <your reason>" >/dev/null
+     to explicitly declare no action needed.
    Do NOT just list ideas — every insight must become tracked work
-   or an explicit "no action needed" with a reason.
+   or an explicit no-action declaration.
 
-   # TODO(kaizen-L3): This action step is still Level 1 (instructions).
-   # Escalate to Level 3: after this reflection prompt, verify the agent
-   # actually called case_suggest_dev or create_github_issue. If it didn't
-   # and listed improvements, block or re-prompt. See Garsson-io/kaizen#57.
+   ⛔ You will be BLOCKED from non-kaizen commands until you file
+   at least one kaizen issue or explicitly declare no action needed.
 
 Ensure the PR description includes the Kaizen section:
   ## Kaizen
@@ -135,9 +142,7 @@ The PR has been merged. Reflect on the outcome:
    - **Create a dev case** via `case_suggest_dev` for code improvements
    - **File a kaizen issue** via `create_github_issue` for design work
    - Do NOT move to cleanup until actions are filed or explicitly skipped
-
-   # TODO(kaizen-L3): Verify agent actually created actionable items
-   # when reflection identified improvements. See Garsson-io/kaizen#57.
+   Note: case_mark_done enforces kaizen reflections (L3, kaizen #57).
 
 6. **Cleanup:**
    - Delete the merged branch (local + remote)
