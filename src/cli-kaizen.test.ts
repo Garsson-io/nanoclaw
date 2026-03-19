@@ -408,22 +408,23 @@ describe('handleCaseCreate', () => {
 });
 
 // INVARIANT: resolveMainStoreDir returns the main checkout's store dir,
-// not the worktree's, regardless of where git-common-dir points.
+// not the worktree's, using resolveProjectRoot() internally.
 // SUT: resolveMainStoreDir function
-// VERIFICATION: Given a .git common dir path, returns <main-checkout>/store.
+// VERIFICATION: Returns <main-checkout>/store (or store-{instance}).
 
 describe('resolveMainStoreDir', () => {
-  test('resolves store dir from git common dir path', () => {
-    const result = resolveMainStoreDir('/home/user/projects/nanoclaw/.git');
-    expect(result).toBe('/home/user/projects/nanoclaw/store');
+  test('resolves store dir under project root', () => {
+    const result = resolveMainStoreDir();
+    // Should end with /store (basename check, CI-portable)
+    expect(path.basename(result)).toBe('store');
   });
 
   test('handles instance suffix via NANOCLAW_INSTANCE env var', () => {
     const original = process.env.NANOCLAW_INSTANCE;
     process.env.NANOCLAW_INSTANCE = 'staging';
     try {
-      const result = resolveMainStoreDir('/home/user/projects/nanoclaw/.git');
-      expect(result).toBe('/home/user/projects/nanoclaw/store-staging');
+      const result = resolveMainStoreDir();
+      expect(path.basename(result)).toBe('store-staging');
     } finally {
       if (original === undefined) {
         delete process.env.NANOCLAW_INSTANCE;
