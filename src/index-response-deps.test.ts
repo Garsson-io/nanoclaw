@@ -105,6 +105,7 @@ vi.mock('./config.js', () => ({
   IPC_POLL_INTERVAL: 1000,
   COALESCE_MS: 0,
   MAX_DOWNLOAD_WAIT_MS: 60000,
+  DEV_SAFE_WORDS: ['תברווז'],
 }));
 vi.mock('./download-tracker.js', () => ({
   DownloadTracker: class MockDownloadTracker {
@@ -143,7 +144,11 @@ vi.mock('./group-folder.js', () => ({
   resolveGroupFolderPath: vi.fn((f: string) => `/tmp/groups/${f}`),
 }));
 
-import { makeResponseDeps, buildAckPrefix } from './index.js';
+import {
+  makeResponseDeps,
+  buildAckPrefix,
+  detectDevSafeWord,
+} from './index.js';
 import type { Channel } from './types.js';
 
 describe('buildAckPrefix', () => {
@@ -165,6 +170,48 @@ describe('buildAckPrefix', () => {
     const message = `${buildAckPrefix({ name: 'my-case' })}⏳ Still working...`;
     expect(message).toBe('[case: my-case] ⏳ Still working...');
     expect(message.split('\n')).toHaveLength(1);
+  });
+});
+
+describe('detectDevSafeWord', () => {
+  // INVARIANT: Safe word in message content must be detected and stripped
+  // SUT: detectDevSafeWord
+  // VERIFICATION: Returns found=true and content without the safe word
+
+  test('detects safe word in message', () => {
+    const result = detectDevSafeWord(
+      '@GarssonPrintsBot תברווז fix the glossary',
+    );
+    expect(result.found).toBe(true);
+    expect(result.strippedContent).toBe('@GarssonPrintsBot fix the glossary');
+  });
+
+  test('strips safe word from middle of message', () => {
+    const result = detectDevSafeWord('please תברווז start working on this');
+    expect(result.found).toBe(true);
+    expect(result.strippedContent).toBe('please start working on this');
+  });
+
+  test('returns found=false when no safe word present', () => {
+    const result = detectDevSafeWord(
+      '@GarssonPrintsBot turn this pdf into jpg',
+    );
+    expect(result.found).toBe(false);
+    expect(result.strippedContent).toBe(
+      '@GarssonPrintsBot turn this pdf into jpg',
+    );
+  });
+
+  test('handles safe word as only content', () => {
+    const result = detectDevSafeWord('תברווז');
+    expect(result.found).toBe(true);
+    expect(result.strippedContent).toBe('');
+  });
+
+  test('collapses extra whitespace after stripping', () => {
+    const result = detectDevSafeWord('fix  תברווז  the bug');
+    expect(result.found).toBe(true);
+    expect(result.strippedContent).not.toContain('  ');
   });
 });
 

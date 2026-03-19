@@ -94,6 +94,11 @@ export const TRIGGER_PATTERN = new RegExp(
   'i',
 );
 
+// Safe words: when detected in a trigger message, escalate to dev agent mode.
+// The safe word is stripped from the prompt before it reaches the agent.
+// "תברווז" = "duck it" — Nir's printing shop (habarvaz) pun.
+export const DEV_SAFE_WORDS: string[] = ['תברווז'];
+
 // Timezone for scheduled tasks (cron expressions, etc.)
 // Uses system timezone by default
 export const TIMEZONE =

@@ -3,6 +3,8 @@ import path from 'path';
 
 import {
   ASSISTANT_NAME,
+  DATA_DIR,
+  DEV_SAFE_WORDS,
   TELEGRAM_BOT_POOL,
   CREDENTIAL_PROXY_PORT,
   IDLE_TIMEOUT,
@@ -342,6 +344,26 @@ export function _setRegisteredGroups(
   registeredGroups = groups;
 }
 
+/**
+ * Detect dev safe word in message content.
+ * Returns { found, strippedContent } — the safe word is removed from content.
+ */
+export function detectDevSafeWord(content: string): {
+  found: boolean;
+  strippedContent: string;
+} {
+  for (const word of DEV_SAFE_WORDS) {
+    if (content.includes(word)) {
+      const stripped = content
+        .replace(word, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+      return { found: true, strippedContent: stripped };
+    }
+  }
+  return { found: false, strippedContent: content };
+}
+
 /** Build the prefix for progress/ack messages when a case is active. */
 export function buildAckPrefix(
   targetCase: { name: string } | null | undefined,
@@ -401,6 +423,37 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         shouldAutoTrigger(m.sender, m.content, allowlistCfg),
     );
     if (!hasTrigger) return true;
+  }
+
+  // --- Dev safe word detection ---
+  // Check if any message contains a safe word that escalates to dev mode.
+  // If found, strip it from message content and write a marker file for IPC.
+  let devModeRequested = false;
+  for (const msg of missedMessages) {
+    const result = detectDevSafeWord(msg.content);
+    if (result.found) {
+      devModeRequested = true;
+      msg.content = result.strippedContent;
+      logger.info(
+        { chatJid, sender: msg.sender_name || msg.sender },
+        'Dev safe word detected — escalating to dev mode',
+      );
+      break;
+    }
+  }
+
+  // Write/clean dev mode marker for IPC handler to read
+  const devModeMarkerPath = path.join(
+    DATA_DIR,
+    'ipc',
+    group.folder,
+    '.dev-mode',
+  );
+  if (devModeRequested) {
+    fs.mkdirSync(path.dirname(devModeMarkerPath), { recursive: true });
+    fs.writeFileSync(devModeMarkerPath, new Date().toISOString());
+  } else if (fs.existsSync(devModeMarkerPath)) {
+    fs.unlinkSync(devModeMarkerPath);
   }
 
   // --- Case routing ---
@@ -564,6 +617,24 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       logger.warn({ chatJid, err }, 'Failed to send processing ack'),
     );
 
+  // Notify main group when dev mode activated from a non-main group
+  if (devModeRequested && !isMainGroup) {
+    const mainJid = Object.entries(registeredGroups).find(
+      ([, g]) => g.isMain,
+    )?.[0];
+    if (mainJid) {
+      const lastMsg = missedMessages[missedMessages.length - 1];
+      const sender = lastMsg.sender_name || lastMsg.sender;
+      const preview = prompt.slice(0, 150);
+      channel
+        .sendMessage(
+          mainJid,
+          `🔧 Dev mode activated in ${group.name} by ${sender}\nWorking on: ${preview}`,
+        )
+        .catch(() => {});
+    }
+  }
+
   // Case-specific session key to isolate conversation context per case
   const sessionKey = targetCase ? `case:${targetCase.id}` : group.folder;
 
@@ -661,7 +732,17 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     },
     targetCase,
     sessionKey,
+    devModeRequested,
   );
+
+  // Clean up dev mode marker after container exits
+  if (devModeRequested && fs.existsSync(devModeMarkerPath)) {
+    try {
+      fs.unlinkSync(devModeMarkerPath);
+    } catch {
+      // Marker may already be cleaned up
+    }
+  }
 
   clearProgressTimers();
   await channel.setTyping?.(chatJid, false);
@@ -767,6 +848,7 @@ async function runAgent(
   onOutput?: (output: ContainerOutput) => Promise<void>,
   targetCase?: Case,
   sessionKey?: string,
+  devModeRequested?: boolean,
 ): Promise<{ status: 'success' | 'error'; errorDetail?: string }> {
   const isMain = group.isMain === true;
   const effectiveSessionKey = sessionKey || group.folder;
@@ -826,6 +908,7 @@ async function runAgent(
         caseName: targetCase?.name,
         caseType: targetCase?.type,
         caseWorkspacePath: targetCase?.workspace_path,
+        devModeRequested,
       },
       (proc, containerName) =>
         queue.registerProcess(chatJid, proc, containerName, group.folder),
