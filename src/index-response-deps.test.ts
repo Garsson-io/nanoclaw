@@ -105,7 +105,7 @@ vi.mock('./config.js', () => ({
   IPC_POLL_INTERVAL: 1000,
   COALESCE_MS: 0,
   MAX_DOWNLOAD_WAIT_MS: 60000,
-  DEV_SAFE_WORDS: ['תברווז'],
+  DEV_SAFE_WORDS: ['test-dev-word'],
 }));
 vi.mock('./download-tracker.js', () => ({
   DownloadTracker: class MockDownloadTracker {
@@ -180,14 +180,16 @@ describe('detectDevSafeWord', () => {
 
   test('detects safe word in message', () => {
     const result = detectDevSafeWord(
-      '@GarssonPrintsBot תברווז fix the glossary',
+      '@GarssonPrintsBot test-dev-word fix the glossary',
     );
     expect(result.found).toBe(true);
     expect(result.strippedContent).toBe('@GarssonPrintsBot fix the glossary');
   });
 
   test('strips safe word from middle of message', () => {
-    const result = detectDevSafeWord('please תברווז start working on this');
+    const result = detectDevSafeWord(
+      'please test-dev-word start working on this',
+    );
     expect(result.found).toBe(true);
     expect(result.strippedContent).toBe('please start working on this');
   });
@@ -203,13 +205,13 @@ describe('detectDevSafeWord', () => {
   });
 
   test('handles safe word as only content', () => {
-    const result = detectDevSafeWord('תברווז');
+    const result = detectDevSafeWord('test-dev-word');
     expect(result.found).toBe(true);
     expect(result.strippedContent).toBe('');
   });
 
   test('collapses extra whitespace after stripping', () => {
-    const result = detectDevSafeWord('fix  תברווז  the bug');
+    const result = detectDevSafeWord('fix  test-dev-word  the bug');
     expect(result.found).toBe(true);
     expect(result.strippedContent).not.toContain('  ');
   });
@@ -221,7 +223,7 @@ describe('detectDevSafeWord', () => {
   });
 
   test('detects global safe word even when group words provided', () => {
-    const result = detectDevSafeWord('תברווז fix it', ['other-word']);
+    const result = detectDevSafeWord('test-dev-word fix it', ['other-word']);
     expect(result.found).toBe(true);
     expect(result.strippedContent).toBe('fix it');
   });
