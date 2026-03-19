@@ -372,6 +372,38 @@ describe('handleCaseCreate', () => {
     errorSpy.mockRestore();
     exitSpy.mockRestore();
   });
+
+  test('requires both --branch-name and --worktree-path together (reverse)', async () => {
+    const deps = makeDeps();
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
+      throw new Error(`process.exit(${code})`);
+    });
+
+    await expect(
+      handleCaseCreate(
+        [
+          '--description',
+          'Test',
+          '--type',
+          'dev',
+          '--branch-name',
+          'case/test',
+        ],
+        deps,
+      ),
+    ).rejects.toThrow('process.exit(1)');
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        '--worktree-path and --branch-name must be used together',
+      ),
+    );
+    expect(deps.insert).not.toHaveBeenCalled();
+
+    errorSpy.mockRestore();
+    exitSpy.mockRestore();
+  });
 });
 
 // INVARIANT: resolveMainStoreDir returns the main checkout's store dir,
