@@ -44,8 +44,17 @@ Nir: @GarssonPrintsBot תברווז תתחיל לעבוד על הגלוסרי
 
 **Without the safe word:** Everything works exactly as today — work agent, sandboxed, no GitHub.
 
+**Configuration:**
+- Global safe words: `DEV_SAFE_WORDS` in `src/config.ts` (default: `["תברווז"]`)
+- Per-group safe words: `devSafeWords` array in `containerConfig` JSON column of `registered_groups` table
+- Both are checked — global words apply to all groups, group-specific words apply only to that group
+
+Example per-group config:
+```json
+{"additionalMounts": [...], "devSafeWords": ["תברווז"]}
+```
+
 **Out of scope:**
-- Per-group configurable safe words (future — hardcode for now)
 - Per-sender safe words
 - Revoking dev mode mid-session
 - UI for managing safe words
