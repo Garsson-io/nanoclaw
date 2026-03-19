@@ -149,4 +149,20 @@ echo "$INPUT" | bash "$HOOK" >/dev/null 2>&1
 assert_eq "exit code is 0" "0" "$?"
 git reset -q HEAD -- . 2>/dev/null
 
+echo ""
+echo "=== PR path ==="
+
+# Test 11: gh pr create does NOT fire mock/line checks
+echo "11. PR create does not fire commit-only checks"
+# Stage files so they exist, but PR path uses origin/main diff (which will be empty in test repo)
+OUTPUT=$(run_non_commit_hook "gh pr create --title test")
+assert_not_contains "no mock warning on PR" "mocks" "$OUTPUT"
+assert_not_contains "no line warning on PR" "lines" "$OUTPUT"
+
+# Test 12: gh pr create triggers (exits 0 even without origin/main)
+echo "12. PR create path exits 0 gracefully"
+INPUT=$(jq -n '{"tool_input":{"command":"gh pr create --title test"}}')
+echo "$INPUT" | bash "$HOOK" >/dev/null 2>&1
+assert_eq "PR create exits 0" "0" "$?"
+
 print_results

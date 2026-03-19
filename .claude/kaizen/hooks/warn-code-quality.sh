@@ -2,10 +2,11 @@
 # Part of kAIzen Agent Control Flow — see .claude/kaizen/README.md
 # warn-code-quality.sh — Advisory warnings for code quality (kaizen #89)
 #
-# Checks at commit time and PR creation for:
+# On git commit (fast, per-file checks):
 #   1. Test files with >3 vi.mock/jest.mock calls (testability signal)
 #   2. Source files over 500 lines (bloat signal)
-#   3. Duplicate code via jscpd (PR create/merge only — too slow for commits)
+# On gh pr create/merge (cross-file analysis):
+#   3. Duplicate code via jscpd across all changed files
 #
 # Runs as PreToolUse hook on Bash (git commit, gh pr create/merge).
 # Always exits 0 (advisory only — never blocks).
@@ -36,6 +37,9 @@ fi
 [ -z "$CHANGED_FILES" ] && exit 0
 
 WARNINGS=""
+
+# Checks 1 & 2: commit-time only (fast, per-file)
+if $IS_COMMIT; then
 
 # Check 1: Mock count in test files
 MOCK_THRESHOLD=3
@@ -72,7 +76,9 @@ if [ -n "$SOURCE_FILES" ]; then
   done <<< "$SOURCE_FILES"
 fi
 
-# Check 3: jscpd duplication (PR create/merge only — too slow for every commit)
+fi # end commit-only checks
+
+# Check 3: jscpd duplication (PR create/merge only — cross-file analysis)
 if $IS_PR && command -v npx >/dev/null 2>&1; then
   JSCPD_DIR=$(mktemp -d)
   ALL_SRC=$(echo "$CHANGED_FILES" | grep -E '\.(ts|js|tsx|jsx)$' | head -20 || true)
