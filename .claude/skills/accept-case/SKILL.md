@@ -158,6 +158,8 @@ Read the spec with the incidents in hand. Evaluate:
 
 The `/implement-spec` skill handles PRD updates after each phase. Your job here is to flag if the spec's current state would *block or mislead* implementation, not to preemptively rewrite it.
 
+**Check for documentation deliverables:** If the spec introduces new operational processes (scripts to run, cleanup policies, lifecycle management), verify that the spec explicitly lists documentation as a deliverable in "Needs Building." If it doesn't, flag this: "The spec introduces [process X] but doesn't include documentation/policy docs as a deliverable. The implementor should produce: operational docs (`docs/{name}.md`), CLAUDE.md policy section, and a skill if the process is interactive."
+
 Write the critique into the spec document itself (new section at the end). The critique is part of the artifact — future readers need to see it.
 
 ### Phase 5: Ask the admin

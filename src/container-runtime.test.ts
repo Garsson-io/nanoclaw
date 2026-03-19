@@ -27,6 +27,7 @@ import {
   stopContainer,
   ensureContainerRuntimeRunning,
   cleanupOrphans,
+  checkImageAdvisory,
 } from './container-runtime.js';
 import { logger } from './logger.js';
 
@@ -150,5 +151,82 @@ describe('cleanupOrphans', () => {
       { count: 2, names: ['nanoclaw-a-1', 'nanoclaw-b-2'] },
       'Stopped orphaned containers',
     );
+  });
+});
+
+// --- checkImageAdvisory ---
+
+describe('checkImageAdvisory', () => {
+  it('logs info when tagged images exist', () => {
+    // First call: docker images nanoclaw-agent (tags)
+    mockExecSync.mockReturnValueOnce('latest\nmain-current\nmain-previous\n');
+    // Second call: docker images --filter dangling=true
+    mockExecSync.mockReturnValueOnce('');
+
+    checkImageAdvisory();
+
+    expect(logger.info).toHaveBeenCalledWith(
+      { taggedCount: 3, tags: ['latest', 'main-current', 'main-previous'] },
+      'Docker images: 3 tagged nanoclaw-agent images',
+    );
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('warns when dangling images exceed threshold', () => {
+    mockExecSync.mockReturnValueOnce('latest\n');
+    mockExecSync.mockReturnValueOnce('sha1\nsha2\nsha3\nsha4\n');
+
+    checkImageAdvisory();
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      { danglingCount: 4 },
+      expect.stringContaining('4 dangling Docker images'),
+    );
+  });
+
+  it('warns when tagged image count exceeds soft limit', () => {
+    // 12 tagged images
+    const tags = Array.from({ length: 12 }, (_, i) => `tag-${i}`).join('\n');
+    mockExecSync.mockReturnValueOnce(tags + '\n');
+    mockExecSync.mockReturnValueOnce('');
+
+    checkImageAdvisory();
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      { taggedCount: 12 },
+      expect.stringContaining('exceeds recommended limit'),
+    );
+  });
+
+  it('silently skips when docker is not available', () => {
+    mockExecSync.mockImplementationOnce(() => {
+      throw new Error('docker not found');
+    });
+
+    checkImageAdvisory(); // should not throw
+
+    expect(logger.info).not.toHaveBeenCalled();
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('filters out <none> tags from count', () => {
+    mockExecSync.mockReturnValueOnce('latest\n<none>\n');
+    mockExecSync.mockReturnValueOnce('');
+
+    checkImageAdvisory();
+
+    expect(logger.info).toHaveBeenCalledWith(
+      { taggedCount: 1, tags: ['latest'] },
+      'Docker images: 1 tagged nanoclaw-agent images',
+    );
+  });
+
+  it('handles no tagged images without logging info', () => {
+    mockExecSync.mockReturnValueOnce('\n');
+    mockExecSync.mockReturnValueOnce('');
+
+    checkImageAdvisory();
+
+    expect(logger.info).not.toHaveBeenCalled();
   });
 });
