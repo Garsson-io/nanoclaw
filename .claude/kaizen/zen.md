@@ -110,6 +110,8 @@ The test ladder is the prototype horizon: L0 (no tests) through L9 (property-bas
 
 When you encounter a problem domain that feels infinite — something you'll always want to be better at — create the taxonomy first. What does good look like? Where are we now? What's the next rung? You don't need to see the top of the ladder. You just need to see the next step.
 
+**Active horizons:** See `docs/horizons/` for all horizon taxonomies. The first is [kaizen itself](horizon.md) (L0–L8).
+
 ### The escalation framework
 
 The core algorithm:

@@ -176,6 +176,8 @@ Improving how we improve:
 
 When the kaizen system itself fails (e.g., reflections happen but don't produce action, or improvements are identified but never implemented), that's a signal to apply kaizen to kaizen — recursive improvement.
 
+**Kaizen horizon taxonomy:** See [horizon.md](../../kaizen/horizon.md) for the L0–L8 taxonomy of autonomous kaizen. Current state: L3–L4, with L5 just beginning.
+
 ### Meta-reflection — MANDATORY in every kaizen reflection
 
 Every kaizen reflection must include a meta-reflection on the kaizen system itself. This is what makes the recursion real, not just aspirational.
