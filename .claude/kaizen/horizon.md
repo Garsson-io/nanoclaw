@@ -34,3 +34,13 @@
 ## What We Can't See Yet
 
 L7+ is fog. We know the direction (more autonomy, less human intervention) but not the mechanism. That's fine — the taxonomy tells us where to walk. When we reach L6, L7 will come into focus.
+
+## Relationship to Other Horizons
+
+- **Incident-Driven Kaizen feeds Autonomous Kaizen** — incident data drives work selection (L6) and prioritization
+- **Observability feeds Autonomous Kaizen** — autonomous selection requires data on what works and what doesn't
+- **Cost Governance constrains Autonomous Kaizen** — autonomous agents need budgets to prevent runaway
+- **Human-Agent Interface gates L7** — auto-merge requires stakeholder trust earned through HAI L1-L4
+- **Security constrains L7** — auto-merge requires confidence agents weren't manipulated
+- **Autonomous Kaizen drives improvement across all other horizons** — it's the engine that moves every other dimension forward
+- **Extensibility L6 converges with L8** — self-extension and self-modification are the same capability
