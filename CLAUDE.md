@@ -107,13 +107,22 @@ Container (agent-facing MCP tools)          Host (harness)
 - Domain model files (`cases.ts`, `case-auth.ts`) are the single source of truth for business logic. Both IPC handlers and backends depend on them.
 - Provider API files (`github-api.ts`) are pure REST clients. They know nothing about cases, sync, or IPC.
 
-### Case handling vs Kaizen
+### Cases and Kaizen — How They Relate
 
-Cases and kaizen are **strongly integrated but conceptually distinct**:
-- **Cases** = work management (routing, tracking, workspaces, customer data)
-- **Kaizen** = continuous improvement (reflections on completion → suggested dev cases)
-- **Integration point:** `case_mark_done` → kaizen reflections → `case_suggest_dev`
-- **Separate backends:** customer cases → per-customer CRM repo, kaizen → `Garsson-io/kaizen`
+There are two case types: **work** (customer tasks) and **dev** (tooling improvements / kaizen). Both use the same case system, same MCP tools, same lifecycle.
+
+**The kaizen loop:**
+- Work agents encounter friction → file improvement requests → these become **dev cases** (backed by `Garsson-io/kaizen`)
+- Dev agents also encounter friction → file improvement requests → also become **dev cases**
+- When any case is marked done, the agent reflects on impediments → `case_suggest_dev` → new dev case suggested
+
+**All case operations go through the case MCP tools** (`case_create`, `case_mark_done`, `case_suggest_dev`, etc.), never raw `gh` CLI. The backend adapter (`case-backend-github.ts`) handles GitHub sync transparently.
+
+**Separate CRM backends:** customer cases → per-customer CRM repo, dev/kaizen cases → `Garsson-io/kaizen`. The domain model (`cases.ts`) and backend adapter abstract this — agents don't know or care which repo backs their case.
+
+**Dev workflow skills** (`/pick-work` → `/accept-case` → `/implement-spec` → `/kaizen`) manage the kaizen lifecycle. Host-side skills use `cli-kaizen.ts` for backlog queries.
+
+**Architecture docs:** See [`docs/kaizen-ipc-architecture.md`](docs/kaizen-ipc-architecture.md) for the full architecture diagram and [`docs/kaizen-cases-unification-spec.md`](docs/kaizen-cases-unification-spec.md) for the unification spec.
 
 ## Key Files
 
@@ -263,7 +272,7 @@ The point of review is to catch gaps. A gap identified but not closed is not a r
 
 ## Kaizen Backlog
 
-Future work, process improvements, and cross-repo engineering proposals are tracked as GitHub Issues in [`Garsson-io/kaizen`](https://github.com/Garsson-io/kaizen). When a dev agent identifies an improvement that's out of scope for the current PR, file it there with the `kaizen` label. Include: what, why, when, how, reproduction steps, and verification criteria.
+Future work, process improvements, and cross-repo engineering proposals are tracked as GitHub Issues in [`Garsson-io/kaizen`](https://github.com/Garsson-io/kaizen). Dev agents file improvements via `case_suggest_dev` MCP tool (never raw `gh` CLI). Host-side skills query the backlog via `node dist/cli-kaizen.js list|view`. Include: what, why, when, how, reproduction steps, and verification criteria.
 
 ## Post-Merge: Deploy & Maintenance Policy
 
