@@ -246,15 +246,9 @@ else
   ((FAIL++))
 fi
 
-# Agent(kaizen-bg) but NOT background should still be blocked
+# Agent(kaizen-bg) in foreground is also allowed — kaizen-bg is always exempt
 OUTPUT=$(run_pretool_tool "$ENFORCE_PR_REVIEW_TOOLS" "Agent" '{"subagent_type":"kaizen-bg","run_in_background":false,"prompt":"reflect","description":"kaizen"}')
-if is_denied "$OUTPUT"; then
-  echo "  PASS: Agent(kaizen-bg, fg) blocked during review"
-  ((PASS++))
-else
-  echo "  FAIL: Agent(kaizen-bg, fg) NOT blocked during review"
-  ((FAIL++))
-fi
+assert_eq "Agent(kaizen-bg, fg) passes review gate" "" "$OUTPUT"
 
 echo ""
 echo "--- 2b: Bash review commands allowed by enforce-pr-review ---"

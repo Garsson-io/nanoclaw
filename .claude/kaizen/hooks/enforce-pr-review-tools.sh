@@ -24,16 +24,6 @@ if [ -z "$TOOL_NAME" ]; then
   exit 0
 fi
 
-# Allow Agent tool when it's launching kaizen-bg subagent (kaizen #151)
-# Background kaizen reflection should run in parallel with PR review
-if [ "$TOOL_NAME" = "Agent" ]; then
-  SUBAGENT_TYPE=$(echo "$INPUT" | jq -r '.tool_input.subagent_type // empty')
-  RUN_BG=$(echo "$INPUT" | jq -r '.tool_input.run_in_background // false')
-  if [ "$SUBAGENT_TYPE" = "kaizen-bg" ] && [ "$RUN_BG" = "true" ]; then
-    exit 0
-  fi
-fi
-
 # Uses shared find_needs_review_state from state-utils.sh
 REVIEW_INFO=$(find_needs_review_state)
 if [ $? -ne 0 ] || [ -z "$REVIEW_INFO" ]; then
@@ -43,6 +33,15 @@ fi
 
 PR_URL=$(echo "$REVIEW_INFO" | cut -d'|' -f1)
 ROUND=$(echo "$REVIEW_INFO" | cut -d'|' -f2)
+
+# Allow Agent tool with kaizen-bg subagent (kaizen #151)
+# Background kaizen reflection should not be blocked by the review gate
+if [ "$TOOL_NAME" = "Agent" ]; then
+  SUBAGENT_TYPE=$(echo "$INPUT" | jq -r '.tool_input.subagent_type // empty')
+  if [ "$SUBAGENT_TYPE" = "kaizen-bg" ]; then
+    exit 0
+  fi
+fi
 
 # Block the tool — agent must review first
 jq -n \

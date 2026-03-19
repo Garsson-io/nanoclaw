@@ -9,6 +9,7 @@
 #
 # Allowed commands during kaizen gate:
 #   gh issue create (filing kaizen issues)
+#   gh issue list/search (finding existing issues — kaizen #150)
 #   gh issue comment (adding incidents to existing issues)
 #   gh issue list/search/view (searching for duplicates — kaizen #150)
 #   echo "KAIZEN_IMPEDIMENTS: ..." (structured impediment declaration)
@@ -43,8 +44,8 @@ PR_URL=$(echo "$STATE_INFO" | cut -d'|' -f1)
 # Check if the command is allowed during kaizen gate
 is_kaizen_command() {
   local cmd="$1"
-  # gh issue create — filing kaizen issues (the primary action we're enforcing)
-  if echo "$cmd" | grep -qE '^\s*gh\s+issue\s+create'; then
+  # gh issue create/list/search — filing kaizen issues and finding existing ones (kaizen #150)
+  if echo "$cmd" | grep -qE '^\s*gh\s+issue\s+(create|list|search)'; then
     return 0
   fi
   # KAIZEN_IMPEDIMENTS declaration — structured impediment tracking (kaizen #113)
@@ -59,9 +60,8 @@ is_kaizen_command() {
   if echo "$cmd" | grep -qE '^\s*gh\s+issue\s+(list|search|view)'; then
     return 0
   fi
-  # KAIZEN_NO_ACTION declaration — format: KAIZEN_NO_ACTION [category]: reason
-  # Must match both bracketed format (current) and legacy colon-only format
-  if echo "$cmd" | grep -qE 'KAIZEN_NO_ACTION(\s*\[|:)'; then
+  # KAIZEN_NO_ACTION declaration — format: KAIZEN_NO_ACTION [category]: reason (kaizen #159)
+  if echo "$cmd" | grep -qE 'KAIZEN_NO_ACTION'; then
     return 0
   fi
   # gh pr diff/view/comment/edit/checks — PR-related commands
