@@ -81,10 +81,11 @@ fi # end commit-only checks
 # Check 3: jscpd duplication (PR create/merge only — cross-file analysis)
 if $IS_PR && command -v npx >/dev/null 2>&1; then
   JSCPD_DIR=$(mktemp -d)
-  ALL_SRC=$(echo "$CHANGED_FILES" | grep -E '\.(ts|js|tsx|jsx)$' | head -20 || true)
-  if [ -n "$ALL_SRC" ]; then
+  # All changed files (jscpd supports 150+ languages), exclude symlinks and known fragments
+  ALL_FILES=$(echo "$CHANGED_FILES" | while read -r f; do [ -f "$f" ] && [ ! -L "$f" ] && echo "$f"; done | grep -v 'settings-fragment' | head -30 || true)
+  if [ -n "$ALL_FILES" ]; then
     # shellcheck disable=SC2086
-    npx jscpd --reporters json --output "$JSCPD_DIR" --min-lines 10 --min-tokens 75 --silent $ALL_SRC 2>/dev/null || true
+    npx jscpd --reporters json --output "$JSCPD_DIR" --min-lines 10 --min-tokens 75 --silent $ALL_FILES 2>/dev/null || true
     if [ -f "$JSCPD_DIR/jscpd-report.json" ]; then
       CLONE_COUNT=$(jq -r '.statistics.total.clones // 0' "$JSCPD_DIR/jscpd-report.json" 2>/dev/null || echo "0")
       if [ "$CLONE_COUNT" -gt 0 ]; then
