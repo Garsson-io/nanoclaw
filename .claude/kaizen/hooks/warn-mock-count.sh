@@ -4,7 +4,7 @@
 # Warns when a test file has >3 vi.mock() calls, suggesting the code
 # under test has too many dependencies and should be refactored.
 #
-# Runs as PostToolUse hook on Write tool calls.
+# Runs as PostToolUse hook on Edit|Write tool calls.
 # Always exits 0 (advisory only — never blocks).
 # Upgrade to exit 1 (blocking) if warnings are repeatedly ignored.
 
