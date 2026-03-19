@@ -21,8 +21,7 @@ if [ "$GIT_COMMON_DIR" != ".git" ] && [ "$GIT_COMMON_DIR" != "" ]; then
     echo "Consider committing or discarding before ending session." >&2
   fi
 
-  # Check if branch has unmerged commits
-  AHEAD=$(git rev-list --count HEAD..origin/main 2>/dev/null || echo "0")
+  # Check if branch has unpushed commits
   UNPUSHED=$(git log --oneline origin/"$BRANCH"..HEAD 2>/dev/null | wc -l || echo "0")
   if [ "$UNPUSHED" -gt 0 ] 2>/dev/null; then
     echo "⚠️  Branch '$BRANCH' has $UNPUSHED unpushed commit(s)." >&2

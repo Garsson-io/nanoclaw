@@ -22,6 +22,7 @@
 
 source "$(dirname "$0")/lib/parse-command.sh"
 source "$(dirname "$0")/lib/state-utils.sh"
+source "$(dirname "$0")/lib/allowlist.sh"
 
 INPUT=$(cat)
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
@@ -41,53 +42,37 @@ fi
 
 PR_URL=$(echo "$STATE_INFO" | cut -d'|' -f1)
 
-# Check if the command is allowed during kaizen gate
+# Check if the command is allowed during kaizen gate.
+# Uses segment splitting (kaizen #172 bug fix) to prevent bypass via pipes/chains.
+# Before: `npm build && echo KAIZEN_IMPEDIMENTS:` passed the gate.
+# After: each segment is checked independently.
 is_kaizen_command() {
   local cmd="$1"
-  # gh issue create/list/search — filing kaizen issues and finding existing ones (kaizen #150)
-  if echo "$cmd" | grep -qE '^\s*gh\s+issue\s+(create|list|search)'; then
+  # gh issue create/list/search/comment/view — filing and searching kaizen issues (kaizen #150)
+  # Uses segment splitting to prevent bypass via pipes/chains
+  if echo "$cmd" | sed 's/[|;&]\{1,\}/\n/g' | sed 's/^[[:space:]]*//' | \
+    grep -qE '^gh[[:space:]]+issue[[:space:]]+(create|list|search|comment|view)'; then
     return 0
   fi
-  # KAIZEN_IMPEDIMENTS declaration — structured impediment tracking (kaizen #113)
-  if echo "$cmd" | grep -qE 'KAIZEN_IMPEDIMENTS:'; then
+  # KAIZEN_IMPEDIMENTS declaration — must be the start of a segment (kaizen #172)
+  if echo "$cmd" | sed 's/[|;&]\{1,\}/\n/g' | sed 's/^[[:space:]]*//' | \
+    grep -qE '(^echo.*KAIZEN_IMPEDIMENTS:|^KAIZEN_IMPEDIMENTS:|^cat)'; then
     return 0
   fi
-  # gh issue comment — adding incidents to existing issues
-  if echo "$cmd" | grep -qE '^\s*gh\s+issue\s+comment'; then
-    return 0
-  fi
-  # gh issue list/search/view — searching for duplicates during reflection (kaizen #150)
-  if echo "$cmd" | grep -qE '^\s*gh\s+issue\s+(list|search|view)'; then
-    return 0
-  fi
-  # KAIZEN_NO_ACTION declaration — format: KAIZEN_NO_ACTION [category]: reason (kaizen #159)
-  if echo "$cmd" | grep -qE 'KAIZEN_NO_ACTION'; then
+  # KAIZEN_NO_ACTION declaration — must be the start of a segment (kaizen #172)
+  if echo "$cmd" | sed 's/[|;&]\{1,\}/\n/g' | sed 's/^[[:space:]]*//' | \
+    grep -qE '(^echo.*KAIZEN_NO_ACTION|^KAIZEN_NO_ACTION)'; then
     return 0
   fi
   # gh pr diff/view/comment/edit/checks — PR-related commands
   if is_gh_pr_command "$cmd" "diff|view|comment|edit|checks"; then
     return 0
   fi
-  # gh api — read-only API calls (CI monitoring, PR status checks)
-  if echo "$cmd" | sed 's/[|;&]\{1,\}/\n/g' | sed 's/^[[:space:]]*//' | \
-    grep -qE '^gh[[:space:]]+api[[:space:]]'; then
+  # Shared readonly monitoring commands (gh api, gh run, git read-only, ls/cat/etc.)
+  # Extracted to lib/allowlist.sh (kaizen #172) to stay in sync with enforce-pr-review.sh
+  if is_readonly_monitoring_command "$cmd"; then
     return 0
   fi
-  # gh run view/list/watch — CI run monitoring
-  if echo "$cmd" | sed 's/[|;&]\{1,\}/\n/g' | sed 's/^[[:space:]]*//' | \
-    grep -qE '^gh[[:space:]]+run[[:space:]]+(view|list|watch)'; then
-    return 0
-  fi
-  # git read-only commands
-  if is_git_command "$cmd" "diff|log|show|status|branch|fetch"; then
-    return 0
-  fi
-  # Read-only filesystem commands
-  local first_word
-  first_word=$(echo "$cmd" | awk '{print $1}')
-  case "$first_word" in
-    ls|cat|stat|find|head|tail|wc|file) return 0 ;;
-  esac
   return 1
 }
 

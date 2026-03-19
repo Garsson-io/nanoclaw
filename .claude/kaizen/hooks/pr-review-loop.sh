@@ -64,10 +64,10 @@ else
 fi
 
 # Convert a PR URL to a safe state file path.
-# e.g. https://github.com/Garsson-io/nanoclaw/pull/33 → Garsson-io_nanoclaw_33
+# Uses shared pr_url_to_state_key from state-utils.sh (kaizen #172).
 pr_url_to_state_file() {
   local url="$1"
-  echo "$STATE_DIR/$(echo "$url" | sed 's|https://github\.com/||;s|/pull/|_|;s|/|_|g')"
+  echo "$STATE_DIR/$(pr_url_to_state_key "$url")"
 }
 
 # Find the most recent state file matching given statuses, scoped to the current branch.
@@ -211,7 +211,7 @@ EOF
 
   # Write post-merge workflow state to a dedicated state file
   MERGE_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
-  POST_MERGE_KEY=$(echo "$MERGE_PR_URL" | sed 's|https://github\.com/||;s|/pull/|_|;s|/|_|g')
+  POST_MERGE_KEY=$(pr_url_to_state_key "$MERGE_PR_URL")
   POST_MERGE_STATE="$STATE_DIR/post-merge-${POST_MERGE_KEY}"
 
   if $IS_AUTO; then

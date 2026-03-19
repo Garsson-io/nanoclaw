@@ -2,6 +2,9 @@
 # Shared test helpers for hook tests.
 # Source from test files: source "$(dirname "$0")/test-helpers.sh"
 
+# Source shared libraries so test helpers can use pr_url_to_state_key()
+source "$(dirname "$0")/../lib/state-utils.sh" 2>/dev/null || true
+
 PASS=0
 FAIL=0
 
@@ -198,7 +201,7 @@ create_state() {
   local status="${3:-needs_review}"
   local branch="${4:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)}"
   local filename
-  filename=$(echo "$pr_url" | sed 's|https://github\.com/||;s|/pull/|_|;s|/|_|g')
+  filename=$(pr_url_to_state_key "$pr_url")
   printf 'PR_URL=%s\nROUND=%s\nSTATUS=%s\nBRANCH=%s\n' \
     "$pr_url" "$round" "$status" "$branch" > "$STATE_DIR/$filename"
 }
@@ -210,7 +213,7 @@ create_post_merge_state() {
   local status="${2:-needs_post_merge}"
   local branch="${3:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)}"
   local filename
-  filename="post-merge-$(echo "$pr_url" | sed 's|https://github\.com/||;s|/pull/|_|;s|/|_|g')"
+  filename="post-merge-$(pr_url_to_state_key "$pr_url")"
   printf 'PR_URL=%s\nSTATUS=%s\nBRANCH=%s\n' \
     "$pr_url" "$status" "$branch" > "$STATE_DIR/$filename"
 }

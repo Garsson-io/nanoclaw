@@ -57,7 +57,7 @@ if [ "$IS_CREATE" = true ]; then
   mkdir -p "$STATE_DIR" 2>/dev/null
   chmod 700 "$STATE_DIR" 2>/dev/null
   KAIZEN_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
-  KAIZEN_STATE_FILE="$STATE_DIR/pr-kaizen-$(echo "$PR_URL" | sed 's|https://github\.com/||;s|/pull/|_|;s|/|_|g')"
+  KAIZEN_STATE_FILE="$STATE_DIR/pr-kaizen-$(pr_url_to_state_key "$PR_URL")"
   printf 'PR_URL=%s\nSTATUS=%s\nBRANCH=%s\n' \
     "$PR_URL" "needs_pr_kaizen" "$KAIZEN_BRANCH" > "$KAIZEN_STATE_FILE"
   chmod 600 "$KAIZEN_STATE_FILE" 2>/dev/null
@@ -120,7 +120,7 @@ if [ "$IS_MERGE" = true ]; then
   mkdir -p "$STATE_DIR" 2>/dev/null
   chmod 700 "$STATE_DIR" 2>/dev/null
   KAIZEN_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
-  KAIZEN_STATE_FILE="$STATE_DIR/pr-kaizen-$(echo "$PR_URL" | sed 's|https://github\.com/||;s|/pull/|_|;s|/|_|g')"
+  KAIZEN_STATE_FILE="$STATE_DIR/pr-kaizen-$(pr_url_to_state_key "$PR_URL")"
   printf 'PR_URL=%s\nSTATUS=%s\nBRANCH=%s\n' \
     "$PR_URL" "needs_pr_kaizen" "$KAIZEN_BRANCH" > "$KAIZEN_STATE_FILE"
   chmod 600 "$KAIZEN_STATE_FILE" 2>/dev/null

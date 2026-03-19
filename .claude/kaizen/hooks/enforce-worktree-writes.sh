@@ -17,6 +17,8 @@
 #
 # Runs as PreToolUse hook on Edit and Write tool calls.
 
+source "$(dirname "$0")/lib/allowlist.sh"
+
 INPUT=$(cat)
 FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
 
@@ -49,18 +51,9 @@ fi
 # Strip the main root prefix to get the relative path
 REL_PATH="${ABS_FILE_PATH#${MAIN_ROOT}/}"
 
-# Allow: worktree directories
-if echo "$REL_PATH" | grep -q "^\.claude/worktrees/"; then
-  exit 0
-fi
-
-# Allow: .claude/ config (memory, hooks, skills, settings)
-if echo "$REL_PATH" | grep -q "^\.claude/"; then
-  exit 0
-fi
-
-# Allow: runtime/data directories (not source code, no PR needed)
-if echo "$REL_PATH" | grep -qE "^(groups|data|store|logs)/"; then
+# Allow: runtime/config directories (not source code, no PR needed)
+# Uses shared allowlist (kaizen #172) to stay in sync with enforce-case-exists.sh
+if is_allowed_runtime_dir "$REL_PATH"; then
   exit 0
 fi
 

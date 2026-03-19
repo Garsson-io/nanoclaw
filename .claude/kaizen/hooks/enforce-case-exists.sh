@@ -11,6 +11,8 @@
 # handles that). Only blocks source files (same allowlist as
 # enforce-worktree-writes.sh).
 
+source "$(dirname "$0")/lib/allowlist.sh"
+
 INPUT=$(cat)
 FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
 
@@ -45,8 +47,8 @@ fi
 # Get relative path within worktree
 REL_PATH="${ABS_FILE_PATH#${WORKTREE_ROOT}/}"
 
-# Allow: non-source files (same allowlist as enforce-worktree-writes.sh)
-if echo "$REL_PATH" | grep -qE "^(\.claude/|groups/|data/|store/|logs/)"; then
+# Allow: non-source files — uses shared allowlist (kaizen #172)
+if is_allowed_runtime_dir "$REL_PATH"; then
   exit 0
 fi
 
