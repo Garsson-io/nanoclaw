@@ -180,12 +180,9 @@ MAX_ROUNDS=4
 
 # TRIGGER 4: gh pr merge — set up post-merge workflow gate
 if $IS_PR_MERGE; then
-  # Try to find state by PR URL from output, or fall back to most recent active
-  MERGE_PR_URL=$(echo "$STDOUT" | grep -oE 'https://github\.com/[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+/pull/[0-9]+' | head -1)
-  if [ -z "$MERGE_PR_URL" ]; then
-    # gh pr merge --auto may not print the URL; extract from command args
-    MERGE_PR_URL=$(echo "$CMD_LINE" | grep -oE 'https://github\.com/[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+/pull/[0-9]+' | head -1)
-  fi
+  # Reconstruct PR URL using full fallback chain (kaizen #111, #105):
+  # stdout → stderr → command URL → --repo + bare number → git remote + bare number
+  MERGE_PR_URL=$(reconstruct_pr_url "$CMD_LINE" "$STDOUT" "$STDERR" "merge")
   if [ -n "$MERGE_PR_URL" ]; then
     STATE_FILE=$(pr_url_to_state_file "$MERGE_PR_URL")
   else
@@ -198,6 +195,18 @@ if $IS_PR_MERGE; then
   IS_AUTO=false
   if echo "$CMD_LINE" | grep -qE '\-\-auto'; then
     IS_AUTO=true
+  fi
+
+  # Guard: skip state file creation if PR URL is empty (kaizen #111).
+  # Without a URL, the state filename is malformed ("post-merge-") and
+  # enforcement hooks block on unattributable state. Better to skip than corrupt.
+  if [ -z "$MERGE_PR_URL" ]; then
+    cat <<'EOF'
+
+⚠️ Could not determine PR URL from command output or arguments.
+Post-merge workflow gate was NOT set — run /kaizen manually after confirming the merge.
+EOF
+    exit 0
   fi
 
   # Write post-merge workflow state to a dedicated state file
@@ -253,10 +262,7 @@ fi
 
 # TRIGGER 1: gh pr create — start the review loop
 if $IS_PR_CREATE; then
-  PR_URL=$(echo "$STDOUT" | grep -oE 'https://github\.com/[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+/pull/[0-9]+' | head -1)
-  if [ -z "$PR_URL" ]; then
-    PR_URL=$(echo "$STDERR" | grep -oE 'https://github\.com/[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+/pull/[0-9]+' | head -1)
-  fi
+  PR_URL=$(reconstruct_pr_url "$CMD_LINE" "$STDOUT" "$STDERR" "create")
   if [ -z "$PR_URL" ]; then
     exit 0
   fi
