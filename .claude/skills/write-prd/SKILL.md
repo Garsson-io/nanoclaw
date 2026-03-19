@@ -44,6 +44,8 @@ When the spec introduces new operational processes (scripts to run, cleanup poli
 
 Mark these in Section 7 ("Needs Building") alongside the code deliverables. The implementor (`/implement-spec`) will produce them — the spec just ensures they're not forgotten. See `/implement-spec` section 4b for the full policy.
 
+**Issue-only PRDs:** When the full PRD lives in a GitHub issue rather than a `docs/*-spec.md` file, the issue body should explicitly note: "Implementation must produce `docs/{feature}.md` capturing what was built, operating policy, design decisions, and future vision." GitHub issues get closed and buried — the knowledge about what was built and where it's heading must live in the repo, not just in the issue. The repo doc is not the plan (that's the issue) — it's the lasting record of the outcome.
+
 ## Phase 1: Understand the Initiative
 
 Ask the user to describe what they want to build. Then ask yourself (and them) these questions to build context:

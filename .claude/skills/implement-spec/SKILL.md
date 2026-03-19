@@ -220,9 +220,17 @@ When your implementation introduces **new operational processes** — scripts op
 
 **What to produce:**
 
-1. **Operational documentation** (`docs/{feature-name}.md`): How it works, when to run it, what the policy is. Written for operators (both human and agent).
+1. **Operational documentation** (`docs/{feature-name}.md`): How it works, when to run it, what the policy is. Written for operators (both human and agent). This document captures **what we built and why** — not the implementation plan (that's in the PRD/issue), but the lasting description of the system as it exists now, plus the vision for where it's going.
 2. **CLAUDE.md section**: Brief policy summary that agents see in every conversation. Link to the full docs. Keep it to 5-10 lines — CLAUDE.md is expensive context.
 3. **Skill (if interactive)**: When the feature has a "run this when X happens" flow, create a skill that guides the user through it (e.g., `/docker-gc` for cleanup workflows).
+
+**Issue-only PRDs → repo docs:** When the PRD lives only in a GitHub issue (not a `docs/*-spec.md` file), the knowledge about what was built and the future vision must still land in the repo. GitHub issues are ephemeral — they get closed, buried, and disconnected from the code. The repo docs (`docs/{feature}.md`) are the lasting record. After implementation, the repo doc should contain:
+- **What we built** — the system as it exists now, with concrete details
+- **Operating policy** — when to run what, what the thresholds are
+- **Future vision** — deferred work, next steps, where this is heading
+- **Design decisions** — why we chose X over Y (from the PRD discussion)
+
+This is not duplicating the issue — it's transforming planning artifacts into lasting system documentation.
 
 **When to skip:** Pure library code, internal refactors, bug fixes, test additions — these don't need operational docs. The test is: does this change introduce a new **operational process** that someone needs to know about?
 
