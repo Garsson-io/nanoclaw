@@ -88,9 +88,21 @@ Before moving on, reflect on the work that led to this PR:
    - What slowed you down? Missing docs? Unclear architecture?
    - Would a hook, tool, or architectural change prevent this?
 
-5. **⚡ MAKE IT ACTIONABLE — you are GATED until you do:**
+5. **🔍 INCIDENTS ARE DATA — check before filing:**
+   Before filing a NEW kaizen issue, search existing open issues:
+     `gh issue list --repo Garsson-io/kaizen --state open --search "<keywords>"`
+   If a match exists, ADD AN INCIDENT COMMENT instead of filing a duplicate:
+     ## Incident #N (YYYY-MM-DD)
+     **PR/Context:** #NNN
+     **Impact:** [time wasted | blocked | wrong output | human notified]
+     **Details:** [what happened]
+   Incidents on existing issues are MORE VALUABLE than new issues —
+   they accumulate evidence that drives prioritization and level escalation.
+
+6. **⚡ MAKE IT ACTIONABLE — you are GATED until you do:**
    Reflection without action is decoration. For each improvement
    you identified above, you MUST do one of:
+   - **Add incident to existing issue** (if matching issue found)
    - **File a kaizen issue** via `create_github_issue` MCP tool
    - **Create a dev case** via `case_suggest_dev` MCP tool
    - **Fix it now** in this PR if small enough to include
@@ -157,9 +169,21 @@ The PR has been merged. Reflect on the outcome:
    - Should any learnings go into CLAUDE.md or docs/?
    - Is there a pattern here that other agents should know?
 
-5. **⚡ MAKE IT ACTIONABLE — you are GATED until you do:**
+5. **🔍 INCIDENTS ARE DATA — check before filing:**
+   Before filing a NEW kaizen issue, search existing open issues:
+     `gh issue list --repo Garsson-io/kaizen --state open --search "<keywords>"`
+   If a match exists, ADD AN INCIDENT COMMENT instead of filing a duplicate:
+     ## Incident #N (YYYY-MM-DD)
+     **PR/Context:** #NNN
+     **Impact:** [time wasted | blocked | wrong output | human notified]
+     **Details:** [what happened]
+   Incidents on existing issues are MORE VALUABLE than new issues —
+   they accumulate evidence that drives prioritization and level escalation.
+
+6. **⚡ MAKE IT ACTIONABLE — you are GATED until you do:**
    Reflection without action is decoration. For each improvement
    you identified above, you MUST do one of:
+   - **Add incident to existing issue** (if matching issue found)
    - **File a kaizen issue** via `gh issue create --repo Garsson-io/kaizen`
    - **Create a dev case** via `case_suggest_dev` MCP tool
    - **Fix it now** if small enough to include in a follow-up
