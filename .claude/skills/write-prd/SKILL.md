@@ -35,6 +35,17 @@ This distinction matters because:
 2. A GitHub issue (the tracking anchor for all future implementation)
 3. A docs-only PR (reviewable, versionable)
 
+**Documentation deliverables (noted in the spec, produced during implementation):**
+
+When the spec introduces new operational processes (scripts to run, cleanup policies, lifecycle management), the spec should explicitly call out the documentation deliverables that the implementor must produce:
+- **Operational docs** (`docs/{name}.md`): how it works, when to run, what the policy is
+- **CLAUDE.md section**: brief policy summary for agent context (5-10 lines, link to full docs)
+- **Skill** (if interactive): when the feature has a "run this when X happens" flow
+
+Mark these in Section 7 ("Needs Building") alongside the code deliverables. The implementor (`/implement-spec`) will produce them — the spec just ensures they're not forgotten. See `/implement-spec` section 4b for the full policy.
+
+**Issue-only PRDs:** When the full PRD lives in a GitHub issue rather than a `docs/*-spec.md` file, the issue body should explicitly note: "Implementation must produce `docs/{feature}.md` capturing what was built, operating policy, design decisions, and future vision." GitHub issues get closed and buried — the knowledge about what was built and where it's heading must live in the repo, not just in the issue. The repo doc is not the plan (that's the issue) — it's the lasting record of the outcome.
+
 ## Phase 1: Understand the Initiative
 
 Ask the user to describe what they want to build. Then ask yourself (and them) these questions to build context:

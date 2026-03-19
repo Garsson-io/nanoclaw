@@ -101,6 +101,64 @@ export function ensureContainerRuntimeRunning(): void {
   }
 }
 
+/**
+ * Advisory check: warn if Docker image count exceeds the soft cap.
+ * The soft cap is based on active case count + 1 stable work container,
+ * with 2 slots (current + previous) each.
+ *
+ * Also warns about dangling images (orphaned by builds without rotation).
+ */
+export function checkImageAdvisory(): void {
+  try {
+    // Count tagged nanoclaw-agent images
+    const tagOutput = execSync(
+      `${CONTAINER_RUNTIME_BIN} images nanoclaw-agent --format '{{.Tag}}'`,
+      { stdio: ['pipe', 'pipe', 'pipe'], encoding: 'utf-8' },
+    );
+    const tags = tagOutput
+      .trim()
+      .split('\n')
+      .filter((t) => t && t !== '<none>');
+    const taggedCount = tags.length;
+
+    // Count dangling images
+    const danglingOutput = execSync(
+      `${CONTAINER_RUNTIME_BIN} images --filter "dangling=true" --format '{{.ID}}'`,
+      { stdio: ['pipe', 'pipe', 'pipe'], encoding: 'utf-8' },
+    );
+    const danglingCount = danglingOutput
+      .trim()
+      .split('\n')
+      .filter(Boolean).length;
+
+    if (danglingCount > 3) {
+      logger.warn(
+        { danglingCount },
+        `${danglingCount} dangling Docker images detected. Run ./container/gc.sh --force to clean up.`,
+      );
+    }
+
+    if (taggedCount > 0) {
+      logger.info(
+        { taggedCount, tags },
+        `Docker images: ${taggedCount} tagged nanoclaw-agent images`,
+      );
+    }
+
+    // Soft cap advisory: warn if we have many branch slots
+    // We consider > 10 tagged images as a heuristic threshold
+    // (a more precise check would query the case DB, but we keep this lightweight)
+    if (taggedCount > 10) {
+      logger.warn(
+        { taggedCount },
+        `${taggedCount} tagged images exceeds recommended limit. Run ./container/gc.sh to review.`,
+      );
+    }
+  } catch {
+    // Docker not available or query failed — skip advisory silently
+  }
+}
+
 /** Kill orphaned NanoClaw containers from previous runs. */
 export function cleanupOrphans(): void {
   try {

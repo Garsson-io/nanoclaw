@@ -30,6 +30,7 @@ import {
   writeTasksSnapshot,
 } from './container-runner.js';
 import {
+  checkImageAdvisory,
   cleanupOrphans,
   ensureContainerRuntimeRunning,
   PROXY_BIND_HOST,
@@ -1125,6 +1126,7 @@ function recoverPendingMessages(): void {
 function ensureContainerSystemRunning(): void {
   ensureContainerRuntimeRunning();
   cleanupOrphans();
+  checkImageAdvisory();
   cleanupStaleUploads();
 }
 
