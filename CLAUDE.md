@@ -429,6 +429,10 @@ gh pr merge <url> --repo Garsson-io/nanoclaw --squash --delete-branch --auto
 # Step 2: Actively monitor CI (do NOT use `gh run watch` — it blocks with no visibility)
 # Poll job-level status every 15-30s:
 gh run view <run-id> --repo Garsson-io/nanoclaw --json jobs --jq '.jobs[] | "\(.name): \(.status) \(.conclusion)"'
+# IMPORTANT: Interleave PR state checks — auto-merge fires as soon as checks pass.
+# Check PR state every 2-3 CI polls to detect completion promptly:
+gh pr view <url> --repo Garsson-io/nanoclaw --json state --jq .state
+# If state is "MERGED", skip to step 4. Do NOT keep polling CI after merge completes.
 # When a job completes, note its duration. When the last job is running, check step-level progress:
 gh run view <run-id> --repo Garsson-io/nanoclaw --json jobs --jq '.jobs[] | select(.status=="in_progress") | .steps[] | "\(.name): \(.status) \(.conclusion)"'
 # If Docker build > 2min, check logs for cache misses. If all layers CACHED but still slow, it's I/O (image export).
