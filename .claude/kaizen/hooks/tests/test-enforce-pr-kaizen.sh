@@ -263,5 +263,50 @@ assert_eq "KAIZEN_NO_ACTION [category] allowed" "" "$OUTPUT"
 OUTPUT=$(run_pretool_hook 'echo "KAIZEN_NO_ACTION [test-only]: added missing test"')
 assert_eq "KAIZEN_NO_ACTION [test-only] allowed" "" "$OUTPUT"
 
+echo ""
+echo "=== Segment-splitting prevents false positives (kaizen #172) ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: Kaizen keywords buried inside non-kaizen commands (not at segment
+# start) should be blocked. Segment splitting prevents matching keywords that
+# appear as arguments to non-kaizen commands (e.g., inside grep patterns).
+#
+# Note: Segment splitting checks if ANY segment starts with a kaizen pattern.
+# This is consistent with is_gh_pr_command and is_git_command behavior.
+# So `npm build && echo KAIZEN_IMPEDIMENTS: []` passes because the second
+# segment starts with `echo KAIZEN_IMPEDIMENTS:` — a valid kaizen command.
+
+# Keyword appears as a grep argument, not a command — blocked
+OUTPUT=$(run_pretool_hook "npm run build | grep KAIZEN_NO_ACTION")
+if is_denied "$OUTPUT"; then
+  echo "  PASS: npm | grep KAIZEN_NO_ACTION blocked (keyword is argument, not command)"
+  ((PASS++))
+else
+  echo "  FAIL: npm | grep KAIZEN_NO_ACTION NOT blocked"
+  ((FAIL++))
+fi
+
+# Keyword appears inside a string argument to another command — blocked
+OUTPUT=$(run_pretool_hook "curl -d 'KAIZEN_IMPEDIMENTS: []' http://example.com")
+if is_denied "$OUTPUT"; then
+  echo "  PASS: KAIZEN_IMPEDIMENTS in curl argument blocked"
+  ((PASS++))
+else
+  echo "  FAIL: KAIZEN_IMPEDIMENTS in curl argument NOT blocked"
+  ((FAIL++))
+fi
+
+# Legitimate kaizen commands chained together should pass
+OUTPUT=$(run_pretool_hook "echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
+[]
+IMPEDIMENTS")
+assert_eq "echo KAIZEN_IMPEDIMENTS && cat allowed" "" "$OUTPUT"
+
+# Legitimate: echo with KAIZEN_NO_ACTION at segment start
+OUTPUT=$(run_pretool_hook "echo 'KAIZEN_NO_ACTION [docs-only]: updated README'")
+assert_eq "echo KAIZEN_NO_ACTION at segment start allowed" "" "$OUTPUT"
+
 teardown
 print_results

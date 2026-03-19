@@ -22,6 +22,7 @@
 
 source "$(dirname "$0")/lib/parse-command.sh"
 source "$(dirname "$0")/lib/state-utils.sh"
+source "$(dirname "$0")/lib/allowlist.sh"
 
 INPUT=$(cat)
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
@@ -41,28 +42,11 @@ is_review_command() {
   if is_gh_pr_command "$cmd" "diff|view|comment|edit"; then
     return 0
   fi
-  # gh api — read-only API calls (CI monitoring, PR status checks)
-  if echo "$cmd" | sed 's/[|;&]\{1,\}/\n/g' | sed 's/^[[:space:]]*//' | \
-    grep -qE '^gh[[:space:]]+api[[:space:]]'; then
+  # Shared readonly monitoring commands (gh api, gh run, git read-only, ls/cat/etc.)
+  # Extracted to lib/allowlist.sh (kaizen #172) to stay in sync with enforce-pr-kaizen.sh
+  if is_readonly_monitoring_command "$cmd"; then
     return 0
   fi
-  # gh run view/list/watch — CI run monitoring
-  if echo "$cmd" | sed 's/[|;&]\{1,\}/\n/g' | sed 's/^[[:space:]]*//' | \
-    grep -qE '^gh[[:space:]]+run[[:space:]]+(view|list|watch)'; then
-    return 0
-  fi
-  # git diff/log/show/status/branch/fetch — read-only review commands
-  # fetch is needed for merge-from-main during review (branch protection sync)
-  if is_git_command "$cmd" "diff|log|show|status|branch|fetch"; then
-    return 0
-  fi
-  # Read-only filesystem commands — useful for debugging hooks and reviewing code (kaizen #85, Fix C)
-  # These can't "do work" (build, deploy, edit), so they don't violate the review gate.
-  local first_word
-  first_word=$(echo "$cmd" | awk '{print $1}')
-  case "$first_word" in
-    ls|cat|stat|find|head|tail|wc|file) return 0 ;;
-  esac
   return 1
 }
 

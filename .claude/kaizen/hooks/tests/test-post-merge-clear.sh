@@ -193,5 +193,53 @@ else
   ((FAIL++))
 fi
 
+echo ""
+echo "=== MERGED detection specificity (kaizen #172) ==="
+
+# INVARIANT: Only actual MERGED state triggers promotion, not incidental
+# occurrences of the word "MERGED" in other text.
+
+setup
+create_post_merge_state "https://github.com/Garsson-io/nanoclaw/pull/42" "awaiting_merge"
+
+# False positive: text contains "MERGED" as a substring
+OUTPUT=$(run_bash_hook "gh pr view https://github.com/Garsson-io/nanoclaw/pull/42 --json body" "This PR was NOT MERGED yet, it needs review")
+CURRENT_STATUS=$(grep -h 'STATUS=' "$STATE_DIR"/post-merge-* 2>/dev/null | head -1 | cut -d= -f2-)
+if [ "$CURRENT_STATUS" = "awaiting_merge" ]; then
+  echo "  PASS: text containing 'NOT MERGED yet' does not promote"
+  ((PASS++))
+else
+  echo "  FAIL: text containing 'NOT MERGED yet' incorrectly promoted"
+  ((FAIL++))
+fi
+
+setup
+create_post_merge_state "https://github.com/Garsson-io/nanoclaw/pull/42" "awaiting_merge"
+
+# True positive: raw jq output "MERGED" on its own line
+OUTPUT=$(run_bash_hook "gh pr view https://github.com/Garsson-io/nanoclaw/pull/42 --json state --jq .state" "MERGED")
+CURRENT_STATUS=$(grep -h 'STATUS=' "$STATE_DIR"/post-merge-* 2>/dev/null | head -1 | cut -d= -f2-)
+if [ "$CURRENT_STATUS" = "needs_post_merge" ]; then
+  echo "  PASS: standalone 'MERGED' promotes correctly"
+  ((PASS++))
+else
+  echo "  FAIL: standalone 'MERGED' did not promote (status=$CURRENT_STATUS)"
+  ((FAIL++))
+fi
+
+setup
+create_post_merge_state "https://github.com/Garsson-io/nanoclaw/pull/42" "awaiting_merge"
+
+# True positive: JSON format with state field
+OUTPUT=$(run_bash_hook "gh pr view https://github.com/Garsson-io/nanoclaw/pull/42 --json state" '{"state":"MERGED"}')
+CURRENT_STATUS=$(grep -h 'STATUS=' "$STATE_DIR"/post-merge-* 2>/dev/null | head -1 | cut -d= -f2-)
+if [ "$CURRENT_STATUS" = "needs_post_merge" ]; then
+  echo "  PASS: JSON state:MERGED promotes correctly"
+  ((PASS++))
+else
+  echo "  FAIL: JSON state:MERGED did not promote (status=$CURRENT_STATUS)"
+  ((FAIL++))
+fi
+
 teardown
 print_results

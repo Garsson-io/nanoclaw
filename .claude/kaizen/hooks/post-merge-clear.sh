@@ -54,7 +54,10 @@ if [ "$TOOL_NAME" = "Bash" ]; then
   # Detect gh pr view that shows MERGED state — this is the confirmation
   # that an --auto merge actually completed
   if is_gh_pr_command "$CMD_LINE" "view"; then
-    if echo "$STDOUT" | grep -qE '"?MERGED"?'; then
+    # Tightened MERGED detection (kaizen #172): match only as a standalone value,
+    # not as a substring of other text. Handles both raw "MERGED" (from --jq .state)
+    # and JSON "state":"MERGED" formats.
+    if echo "$STDOUT" | grep -qE '(^MERGED$|"state"[[:space:]]*:[[:space:]]*"MERGED"|^"MERGED"$)'; then
       # Check if we have an awaiting_merge state to promote
       STATE_INFO=$(find_state_with_status "awaiting_merge")
       if [ $? -eq 0 ] && [ -n "$STATE_INFO" ]; then
@@ -63,7 +66,7 @@ if [ "$TOOL_NAME" = "Bash" ]; then
         clear_state_with_status "awaiting_merge"
         # Write the actual post-merge state now that merge is confirmed
         MERGE_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
-        STATE_FILE="$STATE_DIR/post-merge-$(echo "$PR_URL" | sed 's|https://github\.com/||;s|/pull/|_|;s|/|_|g')"
+        STATE_FILE="$STATE_DIR/post-merge-$(pr_url_to_state_key "$PR_URL")"
         printf 'PR_URL=%s\nSTATUS=%s\nBRANCH=%s\n' "$PR_URL" "needs_post_merge" "$MERGE_BRANCH" > "$STATE_FILE"
         chmod 600 "$STATE_FILE" 2>/dev/null
 
