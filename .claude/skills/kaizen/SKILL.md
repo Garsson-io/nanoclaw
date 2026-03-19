@@ -178,7 +178,7 @@ When the kaizen system itself fails (e.g., reflections happen but don't produce 
 
 **Kaizen horizon taxonomy:** See [horizon.md](../../kaizen/horizon.md) for the L0–L8 taxonomy of autonomous kaizen. Current state: L3–L4, with L5 just beginning.
 
-### Meta-reflection — MANDATORY in every kaizen reflection
+### Meta-reflection — MANDATORY and ACTIONABLE in every kaizen reflection
 
 Every kaizen reflection must include a meta-reflection on the kaizen system itself. This is what makes the recursion real, not just aspirational.
 
@@ -189,6 +189,15 @@ Every kaizen reflection must include a meta-reflection on the kaizen system itse
 - **Did the escalation framework fit?** Was the level classification obvious, or did you struggle with it? Does a new category of fix need a new level?
 
 If the answer to any of these is "no" or "I'm not sure," **file a kaizen issue about the skill or process itself.** The kaizen system is just code and prompts — it should improve as aggressively as the codebase does.
+
+**Actionability rule:** Every meta-reflection finding MUST have a disposition — either a filed issue (with `ref: "#NNN"`) or an explicit waiver (with reason). An observation without a disposition is decoration, not kaizen. Include meta-reflection findings in your `KAIZEN_IMPEDIMENTS` declaration with `"type": "meta"`:
+
+```json
+{"finding": "accept-case was heavyweight for spec'd issues", "type": "meta", "disposition": "filed", "ref": "#161"}
+{"finding": "foundation-first approach validated", "type": "positive", "disposition": "no-action", "reason": "Already natural pattern"}
+```
+
+Positive findings (`type: "positive"`) may use `disposition: "no-action"` when the pattern is already working and needs no reinforcement. But if a positive finding is surprising or non-obvious, consider filing it as a reference for future agents.
 
 ## Current Enforcement Inventory
 
