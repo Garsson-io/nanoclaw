@@ -17,6 +17,8 @@
 
 set -euo pipefail
 
+CLAUDE_WT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Arg parsing — separated for testability (see test-claude-wt.sh)
 parse_claude_wt_args() {
   SKIP_PERMISSIONS=true
@@ -74,8 +76,8 @@ parse_claude_wt_args "$@"
 # Auto-prune stale worktrees and branches before creating a new one.
 # This is the automatic trigger for cleanup — every new session starts clean.
 # Runs in background so it doesn't delay startup if cleanup takes time.
-if [ -x "$SCRIPT_DIR/worktree-du.sh" ]; then
-  "$SCRIPT_DIR/worktree-du.sh" cleanup 2>/dev/null &
+if [ -x "$CLAUDE_WT_DIR/worktree-du.sh" ]; then
+  "$CLAUDE_WT_DIR/worktree-du.sh" cleanup 2>/dev/null &
   CLEANUP_PID=$!
   # Give it a moment — if it finishes fast, great; if not, let it run in background
   sleep 0.5
