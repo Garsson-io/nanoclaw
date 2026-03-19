@@ -30,7 +30,7 @@ These are not in scope for this spec but were found and should be filed separate
 A trusted user includes a **safe word** in their message. The system detects it *before* spawning the container and escalates to dev mode:
 
 ```
-Nir: @GarssonPrintsBot תברווז תתחיל לעבוד על הגלוסרי
+Nir: @GarssonPrintsBot {SAFE_WORD} תתחיל לעבוד על הגלוסרי
                        ^^^^^^
                        safe word detected → dev mode
 ```
@@ -45,13 +45,13 @@ Nir: @GarssonPrintsBot תברווז תתחיל לעבוד על הגלוסרי
 **Without the safe word:** Everything works exactly as today — work agent, sandboxed, no GitHub.
 
 **Configuration:**
-- Global safe words: `DEV_SAFE_WORDS` in `src/config.ts` (default: `["תברווז"]`)
+- Global safe words: `DEV_SAFE_WORDS` array in `src/config.ts`
 - Per-group safe words: `devSafeWords` array in `containerConfig` JSON column of `registered_groups` table
 - Both are checked — global words apply to all groups, group-specific words apply only to that group
 
 Example per-group config:
 ```json
-{"additionalMounts": [...], "devSafeWords": ["תברווז"]}
+{"additionalMounts": [...], "devSafeWords": ["your-word-here"]}
 ```
 
 **Out of scope:**
@@ -73,7 +73,7 @@ Example per-group config:
 ## 4. Architecture — Where the Safe Word Is Detected
 
 ```
-User message: "@GarssonPrintsBot תברווז fix the glossary"
+User message: "@GarssonPrintsBot {SAFE_WORD} fix the glossary"
                                   ↓
 ┌─────────────────────────────────────────────────────┐
 │ Message Loop (src/index.ts)                         │
@@ -114,8 +114,8 @@ User message: "@GarssonPrintsBot תברווז fix the glossary"
 ### Happy path: Dev work from non-main group
 
 ```
-1. Nir sends: "@GarssonPrintsBot תברווז תתחיל לעבוד על הגלוסרי"
-2. Message loop detects "תברווז" in message content
+1. Nir sends: "@GarssonPrintsBot {SAFE_WORD} תתחיל לעבוד על הגלוסרי"
+2. Message loop detects "{SAFE_WORD}" in message content
 3. devModeRequested = true
 4. Safe word stripped from prompt: "תתחיל לעבוד על הגלוסרי"
 5. Container spawns with:
@@ -142,7 +142,7 @@ User message: "@GarssonPrintsBot תברווז fix the glossary"
 ### Edge case: Safe word in non-trigger message
 
 ```
-1. Nir sends: "תברווז something" (no @trigger prefix)
+1. Nir sends: "{SAFE_WORD} something" (no @trigger prefix)
 2. Message loop: trigger check fails first → message ignored
 3. Safe word detection never runs
 4. Correct behavior — safe word without trigger has no effect
@@ -152,7 +152,7 @@ User message: "@GarssonPrintsBot תברווז fix the glossary"
 
 ```
 1. There's already an active work case in the prints group
-2. Nir sends: "@GarssonPrintsBot תברווז pick kaizen #89"
+2. Nir sends: "@GarssonPrintsBot {SAFE_WORD} pick kaizen #89"
 3. Safe word detected → devModeRequested = true
 4. Case routing: may route to existing case or create new
 5. If routed to existing work case: container still gets GitHub token
@@ -186,7 +186,7 @@ No new persistent state. The safe word is a per-message signal:
 
 | Component | What | Why it doesn't exist yet |
 |-----------|------|-------------------------|
-| Safe word detection | Scan message for "תברווז", set flag, strip from prompt | New feature |
+| Safe word detection | Scan message for "{SAFE_WORD}", set flag, strip from prompt | New feature |
 | Dev mode flag threading | Pass `devModeRequested` through `runAgent()` → `runContainerAgent()` → IPC context | Plumbing — no current mechanism to pass pre-spawn decisions to post-spawn case creation |
 | `container-runner.ts` change | Pass GitHub token when `devModeRequested`, not just when `caseType === 'dev'` | Currently only checks existing case type |
 | `case-auth.ts` change | Accept `devModeRequested` param, return `active` status | Currently only checks `isMain` |
@@ -228,7 +228,7 @@ The safe word gives the container dev *capabilities* (GitHub token). If the agen
 This is a small feature. One PR, ~5 files:
 
 ```
-1. src/config.ts — Add DEV_SAFE_WORDS constant (["תברווז"])
+1. src/config.ts — Add DEV_SAFE_WORDS constant (["{SAFE_WORD}"])
 2. src/index.ts — Detect safe word in message, set flag, strip from prompt
 3. src/container-runner.ts — Pass GitHub token + NANOCLAW_DEV_MODE when devModeRequested
 4. src/case-auth.ts — Accept devModeRequested param, bypass approval gate

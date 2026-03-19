@@ -18,7 +18,7 @@ Every piece of work is a **case**. Cases provide isolated containers, sessions, 
 - With 2+ active cases, Haiku routes incoming messages to the right case.
 - Replies are prefixed `[case: name]` in Telegram.
 - **All dev work MUST be in a case with its own worktree.** Never modify code in main checkout. Enforced by `enforce-case-exists.sh` (L2 hook — blocks source edits in worktrees without a case).
-- **Dev safe word escalation:** Non-main groups normally spawn work agents. Including a safe word (e.g., "תברווז") in the trigger message escalates to dev mode — the container gets GitHub token, and dev cases bypass the approval gate. Configure per-group via `devSafeWords` in the group's `containerConfig`, or globally via `DEV_SAFE_WORDS` in `src/config.ts`. See `docs/safe-word-dev-escalation-spec.md`.
+- **Dev safe word escalation:** Non-main groups normally spawn work agents. Including a configured safe word in the trigger message escalates to dev mode — the container gets GitHub token, and dev cases bypass the approval gate. Configure per-group via `devSafeWords` in the group's `containerConfig` (in `registered_groups` table), or globally via `DEV_SAFE_WORDS` in `src/config.ts`. See `docs/safe-word-dev-escalation-spec.md`.
 - Case naming: `YYMMDD-HHMM-kebab-description` (e.g., `260315-1430-fix-auth`)
 - **Kaizen case naming:** `YYMMDD-HHMM-kNN-kebab-description` (e.g., `260318-2107-k21-fix-newline-prefix`). The `kNN` embeds the kaizen issue number, making it visible in branch names and `git worktree list`.
 
