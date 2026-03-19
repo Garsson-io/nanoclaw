@@ -225,5 +225,43 @@ create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
 OUTPUT=$(run_pretool_hook "gh issue comment 125 --repo Garsson-io/kaizen --body 'Incident #2'")
 assert_eq "gh issue comment allowed" "" "$OUTPUT"
 
+echo ""
+echo "=== Kaizen gate active: gh issue list/search allowed (kaizen #150) ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: gh issue list and search are allowed during kaizen gate
+# (needed to find existing issues before filing new ones or adding incidents)
+OUTPUT=$(run_pretool_hook "gh issue list --repo Garsson-io/kaizen --state open --limit 10")
+assert_eq "gh issue list allowed" "" "$OUTPUT"
+
+OUTPUT=$(run_pretool_hook "gh issue search --repo Garsson-io/kaizen 'hook allowlist'")
+assert_eq "gh issue search allowed" "" "$OUTPUT"
+
+# But gh issue close should still be blocked (destructive)
+OUTPUT=$(run_pretool_hook "gh issue close 42 --repo Garsson-io/kaizen")
+if is_denied "$OUTPUT"; then
+  echo "  PASS: gh issue close denied during kaizen gate"
+  ((PASS++))
+else
+  echo "  FAIL: gh issue close NOT denied"
+  ((FAIL++))
+fi
+
+echo ""
+echo "=== Kaizen gate active: KAIZEN_NO_ACTION [category] format allowed (kaizen #159) ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: KAIZEN_NO_ACTION with bracket category format passes PreToolUse gate
+# Bug: old grep checked for 'KAIZEN_NO_ACTION:' which doesn't match 'KAIZEN_NO_ACTION [docs-only]:'
+OUTPUT=$(run_pretool_hook 'echo "KAIZEN_NO_ACTION [docs-only]: updated README formatting"')
+assert_eq "KAIZEN_NO_ACTION [category] allowed" "" "$OUTPUT"
+
+OUTPUT=$(run_pretool_hook 'echo "KAIZEN_NO_ACTION [test-only]: added missing test"')
+assert_eq "KAIZEN_NO_ACTION [test-only] allowed" "" "$OUTPUT"
+
 teardown
 print_results
