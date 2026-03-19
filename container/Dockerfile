@@ -88,7 +88,9 @@ RUN mkdir -p /workspace/group /workspace/global /workspace/extra /workspace/ipc/
 # GitHub credentials are passed as env vars for dev cases only (see container-runner.ts).
 # Follow-up messages arrive via IPC files in /workspace/ipc/input/
 COPY entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
+COPY dev-entrypoint.sh /app/dev-entrypoint.sh
+COPY dev-agent-bootstrap.sh /app/dev-agent-bootstrap.sh
+RUN chmod +x /app/entrypoint.sh /app/dev-entrypoint.sh /app/dev-agent-bootstrap.sh
 
 # Set ownership to node user (non-root) for writable directories
 RUN chown -R node:node /workspace && chmod 777 /home/node
