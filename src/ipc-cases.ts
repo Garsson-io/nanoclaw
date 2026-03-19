@@ -20,6 +20,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { authorizeCaseCreation } from './case-auth.js';
+import { deactivateDevSession } from './dev-session-orchestrator.js';
 import { getCaseSyncService } from './case-backend.js';
 import { DATA_DIR } from './config.js';
 import { sanitizeRequestId } from './ipc-sanitize.js';
@@ -140,6 +141,17 @@ export async function processCaseIpc(
             conclusion: (data.conclusion as string) || null,
             last_message: (data.conclusion as string) || caseItem.last_message,
           });
+          // Deactivate dev session if one is running for this case
+          if (caseItem.type === 'dev') {
+            deactivateDevSession(data.caseId, 'case-done', deps).catch(
+              (err) => {
+                logger.error(
+                  { caseId: data.caseId, err },
+                  'Failed to deactivate dev session on case done',
+                );
+              },
+            );
+          }
           logger.info(
             { caseId: data.caseId, sourceGroup },
             'Case marked done via IPC',
@@ -157,6 +169,19 @@ export async function processCaseIpc(
             blocked_on: (data.blocked_on as string) || 'user',
             last_activity_at: new Date().toISOString(),
           });
+          // Deactivate dev session if one is running for this case
+          if (caseItem.type === 'dev') {
+            deactivateDevSession(
+              data.caseId,
+              `blocked: ${(data.blocked_on as string) || 'unknown'}`,
+              deps,
+            ).catch((err) => {
+              logger.error(
+                { caseId: data.caseId, err },
+                'Failed to deactivate dev session on case blocked',
+              );
+            });
+          }
           logger.info(
             { caseId: data.caseId, sourceGroup },
             'Case marked blocked via IPC',

@@ -19,6 +19,7 @@ import {
   getRegisteredChannelNames,
 } from './channels/registry.js';
 import { initBotPool, sendPoolMessage } from './channels/telegram.js';
+import { tryRouteToDevSession } from './dev-session-router.js';
 import { sendResponse, SendResponseDeps } from './send-response.js';
 import {
   ContainerOutput,
@@ -1009,6 +1010,18 @@ async function startMessageLoop(): Promise<void> {
                 shouldAutoTrigger(m.sender, m.content, allowlistCfg),
             );
             if (!hasTrigger) continue;
+          }
+
+          // Route @DevAda messages to the active dev session (if any).
+          // If routed, skip normal container processing for those messages.
+          const devBotRouted = groupMessages.some((m) =>
+            tryRouteToDevSession(m.content, chatJid, m.sender_name || m.sender),
+          );
+          if (devBotRouted) {
+            lastAgentTimestamp[chatJid] =
+              groupMessages[groupMessages.length - 1].timestamp;
+            saveState();
+            continue;
           }
 
           // Pull all messages since lastAgentTimestamp so non-trigger
