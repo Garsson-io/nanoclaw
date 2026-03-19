@@ -109,6 +109,8 @@ Before looking at the spec's proposed solution, ask: what's the smallest change 
 
 Often the best low-hanging fruit isn't in the spec at all. It emerges from looking at the incidents with fresh eyes.
 
+**Diagnostic tests as low-hanging fruit:** A failing test that reproduces the reported problem is often the strongest evidence AND the clearest definition of done. If you can express the expected behavior as a test during evaluation, do so — it proves the problem exists, defines when it's fixed, and may reveal the actual bug surface is different than reported (see kaizen #120 where TDD revealed a second bug invisible during code reading).
+
 ### Scope Reduction Discipline — MANDATORY gate
 
 When your evaluation proposes doing less than the full solution — "start with L1, escalate later", "implement the simple version first", "defer the hook to a follow-up" — you are making a promise about future work. **Promises without mechanisms are just scope cuts.**
