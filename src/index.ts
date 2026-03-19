@@ -21,6 +21,7 @@ import {
 import { initBotPool, sendPoolMessage } from './channels/telegram.js';
 import { activateDevSession } from './dev-session-orchestrator.js';
 import { detectDevSafeWord } from './dev-safe-word.js';
+import { resolveDispatch } from './message-dispatch.js';
 import { tryRouteToDevSession } from './dev-session-router.js';
 import { sendResponse, SendResponseDeps } from './send-response.js';
 import {
@@ -394,41 +395,71 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     ASSISTANT_NAME,
   );
 
-  if (missedMessages.length === 0) return true;
+  // --- Dispatch decision (tested in message-dispatch.test.ts) ---
+  const dispatch = await resolveDispatch(
+    {
+      chatJid,
+      group,
+      isMainGroup,
+      messages: missedMessages,
+      triggerPattern: TRIGGER_PATTERN,
+      assistantName: ASSISTANT_NAME,
+      timezone: TIMEZONE,
+    },
+    {
+      loadSenderAllowlist,
+      isTriggerAllowed,
+      shouldAutoTrigger,
+      detectDevSafeWord,
+      getActiveCases,
+      getRoutableCases,
+      getSuggestedCases,
+      getCaseById,
+      formatMessages,
+      routeMessage,
+    },
+  );
 
-  // For non-main groups, check if trigger is required and present
-  if (!isMainGroup && group.requiresTrigger !== false) {
-    const allowlistCfg = loadSenderAllowlist();
-    const hasTrigger = missedMessages.some(
-      (m) =>
-        // Standard trigger: @Andy prefix from an allowed sender
-        (TRIGGER_PATTERN.test(m.content.trim()) &&
-          (m.is_from_me ||
-            isTriggerAllowed(chatJid, m.sender, allowlistCfg))) ||
-        // Auto-trigger: leads/trusted senders activate without prefix
-        // (filtered to skip trivial ack messages like "ok", "thanks", emoji)
-        shouldAutoTrigger(m.sender, m.content, allowlistCfg),
-    );
-    if (!hasTrigger) return true;
-  }
+  if (dispatch.type === 'skip') return true;
 
-  // --- Dev safe word detection ---
-  // Check if any message contains a safe word that escalates to dev mode.
-  // If found, strip it from message content and write a marker file for IPC.
-  const groupSafeWords = group.containerConfig?.devSafeWords;
-  let devModeRequested = false;
-  for (const msg of missedMessages) {
-    const result = detectDevSafeWord(msg.content, groupSafeWords);
-    if (result.found) {
-      devModeRequested = true;
-      msg.content = result.strippedContent;
-      logger.info(
-        { chatJid, sender: msg.sender_name || msg.sender },
-        'Dev safe word detected — escalating to dev mode',
-      );
-      break;
+  // Handle status command — send case status and return
+  if (dispatch.type === 'status_command') {
+    const statusLines = dispatch.activeCases.map((c) => formatCaseStatus(c));
+    let statusText = `Active cases:\n\n${statusLines.join('\n\n')}`;
+    if (dispatch.suggestedCases.length > 0) {
+      statusText += `\n\nSuggested dev cases:\n${dispatch.suggestedCases.map((s) => `  - ${s.name}: ${s.description.slice(0, 100)}`).join('\n')}`;
     }
+    await channel.sendMessage(chatJid, statusText);
+    lastAgentTimestamp[chatJid] = dispatch.lastTimestamp;
+    saveState();
+    return true;
   }
+
+  // Handle direct answer from router — send and return
+  if (dispatch.type === 'direct_answer') {
+    const formatted = formatOutbound(dispatch.text);
+    if (formatted) {
+      await sendResponse(
+        chatJid,
+        formatted,
+        group.folder,
+        ASSISTANT_NAME,
+        makeResponseDeps(channel),
+      );
+    }
+    lastAgentTimestamp[chatJid] = dispatch.lastTimestamp;
+    saveState();
+    logger.info('Router provided direct answer');
+    return true;
+  }
+
+  // Extract decision variables for the execution phase
+  const targetCase =
+    dispatch.type === 'dev_session' ? dispatch.targetCase : dispatch.targetCase;
+  const prompt = dispatch.prompt;
+  const devModeRequested =
+    dispatch.type === 'dev_session' ||
+    (dispatch.type === 'run_container' && dispatch.devMode);
 
   // Write/clean dev mode marker for IPC handler to read
   const devModeMarkerPath = path.join(
@@ -444,126 +475,10 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     fs.unlinkSync(devModeMarkerPath);
   }
 
-  // --- Case routing ---
-  const activeCases = getActiveCases(chatJid);
-  let targetCase: Case | undefined;
-
-  if (activeCases.length > 0) {
-    const lastMsg = missedMessages[missedMessages.length - 1].content.trim();
-
-    // Status command — show all cases and return
-    if (/^(status|cases|tasks)\b/i.test(lastMsg)) {
-      const statusLines = activeCases.map((c) => formatCaseStatus(c));
-      const suggested = getSuggestedCases(chatJid);
-      let statusText = `Active cases:\n\n${statusLines.join('\n\n')}`;
-      if (suggested.length > 0) {
-        statusText += `\n\nSuggested dev cases:\n${suggested.map((s) => `  - ${s.name}: ${s.description.slice(0, 100)}`).join('\n')}`;
-      }
-      await channel.sendMessage(chatJid, statusText);
-      lastAgentTimestamp[chatJid] =
-        missedMessages[missedMessages.length - 1].timestamp;
-      saveState();
-      return true;
-    }
-
-    // Route message to a case
-    const routableCases = getRoutableCases(chatJid);
-
-    if (routableCases.length >= 2) {
-      const lastMsgText = missedMessages[missedMessages.length - 1].content;
-      const senderName =
-        missedMessages[missedMessages.length - 1].sender_name ||
-        missedMessages[missedMessages.length - 1].sender;
-
-      try {
-        // Use the container-based router for multi-case routing
-        const routerRequest: RouterRequest = {
-          type: 'route',
-          requestId: `route-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          messageText: lastMsgText,
-          senderName,
-          groupFolder: group.folder,
-          cases: routableCases.map((c) => ({
-            id: c.id,
-            name: c.name,
-            type: c.type,
-            status: c.status,
-            description: c.description,
-            lastMessage: c.last_message,
-            lastActivityAt: c.last_activity_at,
-          })),
-        };
-
-        const routerResponse = await routeMessage(routerRequest);
-
-        if (routerResponse.decision === 'direct_answer') {
-          // Router can answer directly — send to channel, no case container needed
-          if (routerResponse.directAnswer) {
-            const formatted = formatOutbound(routerResponse.directAnswer);
-            if (formatted) {
-              await sendResponse(
-                chatJid,
-                formatted,
-                group.folder,
-                ASSISTANT_NAME,
-                makeResponseDeps(channel),
-              );
-            }
-          }
-          lastAgentTimestamp[chatJid] =
-            missedMessages[missedMessages.length - 1].timestamp;
-          saveState();
-          logger.info(
-            {
-              requestId: routerRequest.requestId,
-              confidence: routerResponse.confidence,
-            },
-            'Router provided direct answer',
-          );
-          return true;
-        } else if (
-          routerResponse.decision === 'route_to_case' &&
-          routerResponse.caseId
-        ) {
-          targetCase = getCaseById(routerResponse.caseId) || undefined;
-          logger.info(
-            {
-              caseId: routerResponse.caseId,
-              caseName: routerResponse.caseName,
-              confidence: routerResponse.confidence,
-            },
-            'Message routed to case via router',
-          );
-        } else {
-          // suggest_new — let the agent process without case context
-          logger.info(
-            {
-              confidence: routerResponse.confidence,
-              reason: routerResponse.reason,
-            },
-            'Router suggests new case or no case context',
-          );
-        }
-      } catch (routerErr) {
-        // Router failed — spawn without case context, let agent decide
-        logger.warn(
-          { err: routerErr },
-          'Container router failed, spawning without case context',
-        );
-        // targetCase remains undefined — agent processes without case isolation
-      }
-    } else if (routableCases.length === 1) {
-      targetCase = routableCases[0];
-    }
-  }
-
-  const prompt = formatMessages(missedMessages, TIMEZONE);
-
   // Advance cursor so the piping path in startMessageLoop won't re-fetch
   // these messages. Save the old cursor so we can roll back on error.
   const previousCursor = lastAgentTimestamp[chatJid] || '';
-  lastAgentTimestamp[chatJid] =
-    missedMessages[missedMessages.length - 1].timestamp;
+  lastAgentTimestamp[chatJid] = dispatch.lastTimestamp;
   saveState();
 
   logger.info(
