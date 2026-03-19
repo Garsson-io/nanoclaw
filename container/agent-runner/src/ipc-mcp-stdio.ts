@@ -671,6 +671,12 @@ Case types:
       .describe(
         'Customer organization or business name, if mentioned in the conversation.',
       ),
+    github_issue: z
+      .number()
+      .optional()
+      .describe(
+        'Existing GitHub issue number to link this case to (e.g., a kaizen issue). If omitted for dev cases, a new issue is auto-created.',
+      ),
     gap_type: z
       .string()
       .optional()
@@ -698,6 +704,7 @@ Case types:
       groupFolder,
       requestId,
       timestamp: new Date().toISOString(),
+      ...(args.github_issue ? { githubIssue: args.github_issue } : {}),
       ...(args.gap_type ? { gapType: args.gap_type } : {}),
       ...(args.signals ? { signals: args.signals } : {}),
     };
