@@ -113,9 +113,13 @@ export function startAgent(
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  // Copy pre-compiled agent-runner dist/ (no runtime tsc — kaizen #123)
+  // Mount pre-compiled agent-runner dist/ if available (no runtime tsc — kaizen #123).
+  // If dist/ doesn't exist (e.g., CI hasn't built yet), skip the mount and use the
+  // image's built-in dist/ from the Dockerfile.
   const distDir = path.join(PROJECT_ROOT, 'container/agent-runner/dist');
-  if (fs.existsSync(distDir)) {
+  const hasHostDist =
+    fs.existsSync(distDir) && fs.readdirSync(distDir).length > 0;
+  if (hasHostDist) {
     fs.cpSync(distDir, agentRunnerDistDir, { recursive: true });
   }
 
@@ -123,6 +127,10 @@ export function startAgent(
     os.platform() === 'linux'
       ? ['--add-host=host.docker.internal:host-gateway']
       : [];
+
+  const distMount = hasHostDist
+    ? ['-v', `${agentRunnerDistDir}:/app/dist`]
+    : [];
 
   const proc = spawn(
     'docker',
@@ -153,8 +161,7 @@ export function startAgent(
       `${claudeDir}:/home/node/.claude`,
       '-v',
       `${globalDir}:/workspace/global:ro`,
-      '-v',
-      `${agentRunnerDistDir}:/app/dist`,
+      ...distMount,
       CONTAINER_IMAGE,
     ],
     { stdio: ['pipe', 'pipe', 'pipe'] },
