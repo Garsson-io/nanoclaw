@@ -275,6 +275,15 @@ describe('buildDevSessionContainerArgs', () => {
 
     expect(ipcDir).toBe('/tmp/nanoclaw-test-data/ipc/main');
   });
+
+  it('overrides entrypoint to dev-entrypoint.sh', () => {
+    const config = makeTestConfig();
+    const { args } = buildDevSessionContainerArgs(config, 'test-container');
+
+    const entrypointIdx = args.indexOf('--entrypoint');
+    expect(entrypointIdx).toBeGreaterThan(-1);
+    expect(args[entrypointIdx + 1]).toBe('/app/dev-entrypoint.sh');
+  });
 });
 
 // INVARIANT: Dev session input includes all fields needed by the agent-runner.

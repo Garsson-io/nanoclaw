@@ -246,7 +246,8 @@ export function buildDevSessionContainerArgs(
     }
   }
 
-  // Container image
+  // Container image + dev entrypoint override
+  args.push('--entrypoint', '/app/dev-entrypoint.sh');
   args.push(CONTAINER_IMAGE);
 
   return { args, ipcDir: groupIpcDir };

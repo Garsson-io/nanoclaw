@@ -1,0 +1,32 @@
+#!/bin/bash
+# Dev Agent Entrypoint
+# Extended version of entrypoint.sh that runs the dev bootstrap before the agent.
+# Used for session-based dev agents that clone repos inside the container.
+set -e
+
+# Add skill executables to PATH (each skill dir may contain CLI tools)
+for skill_dir in /home/node/.claude/skills/*/; do
+  [ -d "$skill_dir" ] && export PATH="$skill_dir:$PATH"
+done
+
+# If GITHUB_TOKEN is set (dev cases), configure git to use it for HTTPS auth
+if [ -n "$GITHUB_TOKEN" ]; then
+  git config --global credential.helper \
+    '!f() { echo username=x-access-token; echo "password=$GITHUB_TOKEN"; }; f'
+  git config --global user.email "nanoclaw-dev@garsson.io"
+  git config --global user.name "NanoClaw Dev Agent"
+fi
+
+# Run dev bootstrap (clone repos, register shutdown hook)
+if [ -f /app/dev-agent-bootstrap.sh ]; then
+  source /app/dev-agent-bootstrap.sh
+fi
+
+# Compile agent-runner TypeScript to /tmp/dist (read-only after build)
+cd /app && npx tsc --outDir /tmp/dist 2>&1 >&2
+ln -s /app/node_modules /tmp/dist/node_modules
+chmod -R a-w /tmp/dist
+
+# Read container input (prompt, group info) from stdin, then run the agent
+cat > /tmp/input.json
+node /tmp/dist/index.js < /tmp/input.json
