@@ -6,7 +6,7 @@
  * Usage:
  *   node dist/cli-kaizen.js list [--state open|closed|all] [--labels L1,L2] [--limit N]
  *   node dist/cli-kaizen.js view <number>
- *   node dist/cli-kaizen.js case-create --description "..." --type dev [--github-issue N] [--name "..."]
+ *   node dist/cli-kaizen.js case-create --description "..." --type dev [--github-issue N] [--name "..."] [--branch-name B --worktree-path P]
  */
 
 import fs from 'fs';
@@ -26,6 +26,7 @@ import {
   generateCaseName,
   getActiveCasesByGithubIssue,
   insertCase,
+  resolveExistingWorktree,
 } from './cases.js';
 import type { Case, CaseType } from './cases.js';
 import { STORE_DIR } from './config.js';
@@ -45,6 +46,7 @@ export interface CaseCreateDeps {
   generateId: () => string;
   generateName: (description: string, shortName?: string) => string;
   createWorkspace: typeof createCaseWorkspace;
+  resolveWorktree: typeof resolveExistingWorktree;
   insert: typeof insertCase;
   getActiveByIssue: typeof getActiveCasesByGithubIssue;
 }
@@ -54,6 +56,7 @@ const defaultDeps: CaseCreateDeps = {
   generateId: generateCaseId,
   generateName: generateCaseName,
   createWorkspace: createCaseWorkspace,
+  resolveWorktree: resolveExistingWorktree,
   insert: insertCase,
   getActiveByIssue: getActiveCasesByGithubIssue,
 };
@@ -66,6 +69,8 @@ export async function handleCaseCreate(
   const typeRaw = getFlag(args, '--type');
   const nameOverride = getFlag(args, '--name');
   const githubIssueRaw = getFlag(args, '--github-issue');
+  const branchName = getFlag(args, '--branch-name');
+  const worktreePath = getFlag(args, '--worktree-path');
   const allowDuplicate = args.includes('--allow-duplicate');
 
   if (!description) {
@@ -101,7 +106,12 @@ export async function handleCaseCreate(
   const name = nameOverride || deps.generateName(description);
   const now = new Date().toISOString();
 
-  const workspace = deps.createWorkspace(name, caseType, id);
+  // Try to reuse an existing worktree if both --branch-name and --worktree-path are provided
+  const resolved =
+    branchName && worktreePath
+      ? deps.resolveWorktree(worktreePath, branchName)
+      : null;
+  const workspace = resolved || deps.createWorkspace(name, caseType, id);
 
   const newCase: Case = {
     id,
@@ -167,7 +177,7 @@ async function main(): Promise<void> {
     );
     console.error('  node dist/cli-kaizen.js view <number>');
     console.error(
-      '  node dist/cli-kaizen.js case-create --description "..." --type dev [--github-issue N] [--name "..."]',
+      '  node dist/cli-kaizen.js case-create --description "..." --type dev [--github-issue N] [--name "..."] [--branch-name B --worktree-path P]',
     );
     process.exit(1);
   }
