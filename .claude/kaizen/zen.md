@@ -55,6 +55,13 @@ Especially if everyone agrees it's important.
 When in doubt, escalate the level, not the volume.
 Louder instructions are still just instructions.
 
+The horizon you can name, you can climb.
+The horizon you can't name climbs you.
+
+The tower has three floors and a mirror on the ceiling.
+Improve along known dimensions. Discover unknown dimensions. Review whether your dimensions are complete.
+There is no fourth floor. The mirror is enough.
+
 The goal is not to be done. The goal is to be better at not being done.
 ```
 
@@ -110,7 +117,25 @@ The test ladder is the prototype horizon: L0 (no tests) through L9 (property-bas
 
 When you encounter a problem domain that feels infinite — something you'll always want to be better at — create the taxonomy first. What does good look like? Where are we now? What's the next rung? You don't need to see the top of the ladder. You just need to see the next step.
 
-**Active horizons:** See `docs/horizons/` for all horizon taxonomies. The first is [kaizen itself](horizon.md) (L0–L8).
+**Active horizons:** See [`docs/horizons/README.md`](../../docs/horizons/README.md) for all horizon taxonomies, organized by category (process, quality, operational, trust, platform).
+
+### The horizon discovery tower
+
+Horizons are powerful — once named, the system can improve along them. But who names them?
+
+For the first year, the answer was: Aviad. He'd notice a pattern (hooks keep breaking, reflections produce no action, tests prove mocks work) and realize it revealed an unnamed dimension of quality. He'd prompt Claude to think about that dimension, which would produce a taxonomy, which would get inserted into the reflection prompts, which would let agents self-improve along that axis. But the discovery step was always human.
+
+The tower formalizes this into three levels:
+
+**Level A — Move along known horizons.** Every reflection asks: "which horizon does this friction touch? Where are we? Should we move up?" This is the workhorse. It's what makes horizons useful day-to-day.
+
+**Level B — Discover new horizons.** Every reflection also asks: "does this friction reveal a dimension we're not tracking?" If yes, file a horizon-discovery issue. This is the replacement for the human bottleneck. Most reflections will answer "no" — the existing horizons cover most friction. But occasionally the answer is "yes," and that's worth more than a hundred Level A improvements.
+
+**Level C — Review the horizon set.** Periodically (every ~10 cases), step back and ask: "are there clusters of issues that don't map to any horizon? Is any horizon stale? Should two merge?" This catches what Level B misses through proximity bias — when you're deep in implementation, you don't notice that the last 5 issues all touch a dimension that doesn't have a name.
+
+**Why there's no Level D:** Level C reviews Level B. Level B reviews Level A. Level C can also review itself ("is our periodic review catching gaps?"). The recursion terminates because all three levels produce the same artifacts: horizon documents and kaizen issues. A hypothetical Level D would ask the same questions as Level C, just less frequently — that's a scheduling parameter, not a new level. The tower has three floors and a mirror on the ceiling. The mirror is enough.
+
+The set of horizons is finite and largely enumerable from established software engineering maturity models (DORA, SRE, OWASP SAMM, CMMI, FinOps). But the set is not static — Level B and Level C ensure it evolves as the system encounters novel friction that existing horizons don't cover.
 
 ### The escalation framework
 

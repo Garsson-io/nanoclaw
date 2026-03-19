@@ -539,7 +539,9 @@ async function handleCaseCreate(
 
   // Authorized case — create immediately
   let githubIssue = d.githubIssue ?? null;
-  let issueUrl: string | null = null;
+  let issueUrl: string | null = githubIssue
+    ? `https://github.com/${DEV_CASE_ISSUE_REPO.owner}/${DEV_CASE_ISSUE_REPO.repo}/issues/${githubIssue}`
+    : null;
   if (caseType === 'dev' && !githubIssue) {
     const issueBody = d.context
       ? `## TL;DR\n\n${d.description}\n\n---\n\n## Details\n\n${d.context}\n\n---\n\n*Auto-created by dev case \`${name}\`*`
