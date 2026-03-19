@@ -99,20 +99,32 @@ Before moving on, reflect on the work that led to this PR:
    Incidents on existing issues are MORE VALUABLE than new issues —
    they accumulate evidence that drives prioritization and level escalation.
 
-6. **⚡ MAKE IT ACTIONABLE — you are GATED until you do:**
-   Reflection without action is decoration. For each improvement
-   you identified above, you MUST do one of:
-   - **Add incident to existing issue** (if matching issue found)
-   - **File a kaizen issue** via `create_github_issue` MCP tool
-   - **Create a dev case** via `case_suggest_dev` MCP tool
-   - **Fix it now** in this PR if small enough to include
-   - If none apply, run: echo "KAIZEN_NO_ACTION: <your reason>" >/dev/null
-     to explicitly declare no action needed.
-   Do NOT just list ideas — every insight must become tracked work
-   or an explicit no-action declaration.
+6. **⚡ STRUCTURED IMPEDIMENTS — you are GATED until ALL are addressed:**
+   Reflection without action is decoration. For EVERY impediment you
+   identified above, you MUST choose a disposition. First, do any filing
+   or incident-commenting needed, then submit a single JSON declaration:
 
-   ⛔ You will be BLOCKED from non-kaizen commands until you file
-   at least one kaizen issue or explicitly declare no action needed.
+   ```bash
+   echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
+   [
+     {"impediment": "description", "disposition": "filed", "ref": "#NNN"},
+     {"impediment": "description", "disposition": "incident", "ref": "#NNN"},
+     {"impediment": "description", "disposition": "fixed-in-pr"},
+     {"impediment": "description", "disposition": "waived", "reason": "why"}
+   ]
+   IMPEDIMENTS
+   ```
+
+   Valid dispositions:
+   - **filed** — new kaizen issue created (requires "ref": "#NNN")
+   - **incident** — comment added to existing issue (requires "ref": "#NNN")
+   - **fixed-in-pr** — already fixed in this PR
+   - **waived** — not worth filing (requires "reason": "why")
+
+   If you genuinely found NO impediments: `echo 'KAIZEN_IMPEDIMENTS: []'`
+
+   ⛔ You will be BLOCKED from non-kaizen commands until you submit
+   a valid KAIZEN_IMPEDIMENTS declaration covering ALL impediments.
 
 Ensure the PR description includes the Kaizen section:
   ## Kaizen
@@ -120,7 +132,7 @@ Ensure the PR description includes the Kaizen section:
   - **Fix level:** L[1/2/3]
   - **Repeat failure?** [yes/no]
   - **Escalation needed?** [yes/no]
-  - **Action taken:** [dev case / kaizen issue / fixed in PR / no action needed]
+  - **Impediments:** [structured list from reflection]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 REFLECT
 fi
@@ -180,22 +192,34 @@ The PR has been merged. Reflect on the outcome:
    Incidents on existing issues are MORE VALUABLE than new issues —
    they accumulate evidence that drives prioritization and level escalation.
 
-6. **⚡ MAKE IT ACTIONABLE — you are GATED until you do:**
-   Reflection without action is decoration. For each improvement
-   you identified above, you MUST do one of:
-   - **Add incident to existing issue** (if matching issue found)
-   - **File a kaizen issue** via `gh issue create --repo Garsson-io/kaizen`
-   - **Create a dev case** via `case_suggest_dev` MCP tool
-   - **Fix it now** if small enough to include in a follow-up
-   - If none apply, run: echo "KAIZEN_NO_ACTION: <your reason>" >/dev/null
-     to explicitly declare no action needed.
-   Do NOT just list ideas — every insight must become tracked work
-   or an explicit no-action declaration.
+6. **⚡ STRUCTURED IMPEDIMENTS — you are GATED until ALL are addressed:**
+   Reflection without action is decoration. For EVERY impediment you
+   identified above, you MUST choose a disposition. First, do any filing
+   or incident-commenting needed, then submit a single JSON declaration:
 
-   ⛔ You will be BLOCKED from non-kaizen commands until you file
-   at least one kaizen issue or explicitly declare no action needed.
+   ```bash
+   echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
+   [
+     {"impediment": "description", "disposition": "filed", "ref": "#NNN"},
+     {"impediment": "description", "disposition": "incident", "ref": "#NNN"},
+     {"impediment": "description", "disposition": "fixed-in-pr"},
+     {"impediment": "description", "disposition": "waived", "reason": "why"}
+   ]
+   IMPEDIMENTS
+   ```
 
-6. **Cleanup:**
+   Valid dispositions:
+   - **filed** — new kaizen issue created (requires "ref": "#NNN")
+   - **incident** — comment added to existing issue (requires "ref": "#NNN")
+   - **fixed-in-pr** — already fixed in this PR
+   - **waived** — not worth filing (requires "reason": "why")
+
+   If you genuinely found NO impediments: `echo 'KAIZEN_IMPEDIMENTS: []'`
+
+   ⛔ You will be BLOCKED from non-kaizen commands until you submit
+   a valid KAIZEN_IMPEDIMENTS declaration covering ALL impediments.
+
+7. **Cleanup:**
    - Delete the merged branch (local + remote)
    - Remove the worktree if applicable
    - Update any related kaizen issues

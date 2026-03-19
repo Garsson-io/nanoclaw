@@ -9,8 +9,10 @@
 #
 # Allowed commands during kaizen gate:
 #   gh issue create (filing kaizen issues)
-#   echo "KAIZEN_NO_ACTION: ..." (explicit no-action declaration)
-#   gh pr view, gh pr diff, gh pr edit, gh pr comment (PR-related)
+#   gh issue comment (adding incidents to existing issues)
+#   echo "KAIZEN_IMPEDIMENTS: ..." (structured impediment declaration)
+#   echo "KAIZEN_NO_ACTION: ..." (legacy — still accepted for compatibility)
+#   gh pr view, gh pr diff, gh pr edit, gh pr comment, gh pr checks (PR-related)
 #   gh api (read-only API calls — CI monitoring, PR status)
 #   gh run view, gh run list, gh run watch (CI monitoring)
 #   git diff, git log, git show, git status, git branch, git fetch
@@ -44,12 +46,20 @@ is_kaizen_command() {
   if echo "$cmd" | grep -qE '^\s*gh\s+issue\s+create'; then
     return 0
   fi
-  # KAIZEN_NO_ACTION declaration — explicit opt-out
+  # KAIZEN_IMPEDIMENTS declaration — structured impediment tracking (kaizen #113)
+  if echo "$cmd" | grep -qE 'KAIZEN_IMPEDIMENTS:'; then
+    return 0
+  fi
+  # gh issue comment — adding incidents to existing issues
+  if echo "$cmd" | grep -qE '^\s*gh\s+issue\s+comment'; then
+    return 0
+  fi
+  # KAIZEN_NO_ACTION declaration — legacy, still accepted for compatibility
   if echo "$cmd" | grep -qE 'KAIZEN_NO_ACTION:'; then
     return 0
   fi
-  # gh pr diff/view/comment/edit — PR-related commands
-  if is_gh_pr_command "$cmd" "diff|view|comment|edit"; then
+  # gh pr diff/view/comment/edit/checks — PR-related commands
+  if is_gh_pr_command "$cmd" "diff|view|comment|edit|checks"; then
     return 0
   fi
   # gh api — read-only API calls (CI monitoring, PR status checks)
@@ -81,18 +91,26 @@ fi
 
 # Block the command — agent must complete kaizen reflection first
 jq -n \
-  --arg reason "BLOCKED: PR creation kaizen reflection required.
+  --arg reason "BLOCKED: Kaizen reflection required — ALL impediments must be addressed.
 
-You just created a PR and must reflect on the development process before proceeding.
+You must reflect on the development process before proceeding.
   PR: $PR_URL
 
-To clear this gate, do ONE of:
-1. File a kaizen issue: use the create_github_issue MCP tool
-2. Create a dev case: use the case_suggest_dev MCP tool
-3. Declare no action needed: echo \"KAIZEN_NO_ACTION: <reason>\" >/dev/null
+To clear this gate, submit a KAIZEN_IMPEDIMENTS JSON declaration:
 
-Allowed commands during kaizen reflection:
-  gh issue create, gh pr diff/view/comment/edit
+  echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
+  [
+    {\"impediment\": \"description\", \"disposition\": \"filed\", \"ref\": \"#NNN\"},
+    {\"impediment\": \"description\", \"disposition\": \"incident\", \"ref\": \"#NNN\"},
+    {\"impediment\": \"description\", \"disposition\": \"fixed-in-pr\"},
+    {\"impediment\": \"description\", \"disposition\": \"waived\", \"reason\": \"why\"}
+  ]
+  IMPEDIMENTS
+
+If no impediments found: echo 'KAIZEN_IMPEDIMENTS: []'
+
+Allowed commands during reflection:
+  gh issue create/comment, gh pr diff/view/comment/edit
   gh api, gh run view/list/watch
   git diff, git log, git show, git status, git branch" \
   '{
