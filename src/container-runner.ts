@@ -49,6 +49,8 @@ export interface ContainerInput {
   caseName?: string;
   caseType?: 'dev' | 'work';
   caseWorkspacePath?: string;
+  /** When true, the container gets dev capabilities (GitHub token) even without a pre-existing dev case. */
+  devModeRequested?: boolean;
 }
 
 export interface ContainerOutput {
@@ -251,7 +253,12 @@ function buildVolumeMounts(
 export function buildContainerArgs(
   mounts: VolumeMount[],
   containerName: string,
-  caseInput?: { caseId?: string; caseName?: string; caseType?: string },
+  caseInput?: {
+    caseId?: string;
+    caseName?: string;
+    caseType?: string;
+    devModeRequested?: boolean;
+  },
 ): string[] {
   const args: string[] = ['run', '-i', '--rm', '--name', containerName];
 
@@ -267,9 +274,18 @@ export function buildContainerArgs(
 
   // Dev cases get GitHub access so they can push branches and open PRs.
   // Work cases remain sandboxed with no GitHub credentials.
-  if (caseInput?.caseType === 'dev' && process.env.GITHUB_TOKEN) {
+  // devModeRequested: safe word detected — grant dev capabilities pre-emptively.
+  if (
+    (caseInput?.caseType === 'dev' || caseInput?.devModeRequested) &&
+    process.env.GITHUB_TOKEN
+  ) {
     args.push('-e', `GITHUB_TOKEN=${process.env.GITHUB_TOKEN}`);
     args.push('-e', `GH_TOKEN=${process.env.GITHUB_TOKEN}`);
+  }
+
+  // Signal dev mode to the container so IPC handlers can authorize dev cases
+  if (caseInput?.devModeRequested) {
+    args.push('-e', 'NANOCLAW_DEV_MODE=1');
   }
 
   // Route Anthropic API traffic through the credential proxy (never exposes API keys).
@@ -337,6 +353,7 @@ export async function runContainerAgent(
     caseId: input.caseId,
     caseName: input.caseName,
     caseType: input.caseType,
+    devModeRequested: input.devModeRequested,
   });
 
   logger.debug(

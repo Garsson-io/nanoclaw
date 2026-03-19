@@ -300,6 +300,41 @@ describe('GitHub token injection for dev cases', () => {
     expect(envVars).not.toHaveProperty('GITHUB_TOKEN');
     expect(envVars).not.toHaveProperty('GH_TOKEN');
   });
+
+  // INVARIANT: devModeRequested injects GitHub credentials even for non-dev cases
+  it('injects GITHUB_TOKEN when devModeRequested is true', () => {
+    process.env.GITHUB_TOKEN = 'ghp_test_token_123';
+
+    const args = buildContainerArgs([], 'test-container', {
+      devModeRequested: true,
+    });
+    const envVars = getEnvVars(args);
+
+    expect(envVars['GITHUB_TOKEN']).toBe('ghp_test_token_123');
+    expect(envVars['GH_TOKEN']).toBe('ghp_test_token_123');
+  });
+
+  // INVARIANT: devModeRequested sets NANOCLAW_DEV_MODE=1 env var
+  it('sets NANOCLAW_DEV_MODE=1 when devModeRequested', () => {
+    process.env.GITHUB_TOKEN = 'ghp_test_token_123';
+
+    const args = buildContainerArgs([], 'test-container', {
+      devModeRequested: true,
+    });
+    const envVars = getEnvVars(args);
+
+    expect(envVars['NANOCLAW_DEV_MODE']).toBe('1');
+  });
+
+  // INVARIANT: NANOCLAW_DEV_MODE is NOT set for normal work cases
+  it('does not set NANOCLAW_DEV_MODE for normal cases', () => {
+    const args = buildContainerArgs([], 'test-container', {
+      caseType: 'work',
+    });
+    const envVars = getEnvVars(args);
+
+    expect(envVars).not.toHaveProperty('NANOCLAW_DEV_MODE');
+  });
 });
 
 // INVARIANT: When ~/.gmail-mcp exists, containers get it mounted at /home/node/.gmail-mcp
