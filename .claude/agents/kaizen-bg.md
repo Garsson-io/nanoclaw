@@ -68,7 +68,19 @@ For each impediment:
   Required labels: `kaizen` + level (`level-1`/`level-2`/`level-3`) + area (`area/hooks`, `area/skills`, `area/cases`, `area/deploy`, `area/testing`, `area/container`, `area/worktree`). Add `horizon/{name}` if it maps to a known horizon.
 - **Trivial / not worth filing** → Note the reason
 
-### 5. Report results
+### 5. Post-cycle escalation — ultrathink
+
+After identifying operational impediments, run these escalating questions to surface structural insights the default reflection misses. Each builds on the previous:
+
+1. **What's the lesson?** Generalize from the specific friction. Not "test was flaky" but "tests depending on external state need isolation guarantees."
+2. **What's the general version?** Does this apply beyond this session or subsystem? Name the class of problem.
+3. **What should change in the system?** Which skill, hook, process, or architecture should be different?
+4. **What should change in how the system improves itself?** Is the reflection mechanism catching this type of friction?
+5. **What concept or boundary is MISSING that would have prevented errors?** Name something that doesn't exist yet but should.
+
+If any of these produce a structural or meta-structural insight, file it as a `type: "meta"` finding. These have compound value — they prevent entire categories of future friction, not just individual recurrences.
+
+### 6. Report results
 When done, output a structured summary that the main agent can use to clear the kaizen gate:
 
 ```
@@ -81,7 +93,7 @@ KAIZEN_BG_RESULTS:
 
 The main agent will use this to construct the KAIZEN_IMPEDIMENTS declaration and clear the gate.
 
-### 6. Verifiable meta-questions (aggregate health check)
+### 7. Verifiable meta-questions (aggregate health check)
 
 Before reporting results, run these aggregate queries and include the answers in your output. These turn vague introspection into data:
 
@@ -124,7 +136,7 @@ The kaizen system currently has zero recorded incidents across all issues, makin
    - Friction you directly observed in the PR diff (e.g., workaround code, retry logic, error handling for a known issue)
    - A pattern you notice across recent PRs that maps to an existing issue
    - Time wasted on something that a tool/hook/check should have caught
-3. If you genuinely cannot find friction in the current PR, look at the **aggregate health data** from step 6 — unlabeled issues, stale epics, and missing horizons are all valid incidents against meta-level kaizen issues (#235, #237).
+3. If you genuinely cannot find friction in the current PR, look at the **aggregate health data** from step 7 — unlabeled issues, stale epics, and missing horizons are all valid incidents against meta-level kaizen issues (#235, #237).
 4. Record the incident using the standard format:
    ```bash
    gh issue comment {N} --repo Garsson-io/kaizen --body "## Incident ($(date +%Y-%m-%d))

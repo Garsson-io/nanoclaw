@@ -205,6 +205,30 @@ Starting concrete and zooming out produces actionable output. Starting abstract 
 
 Positive findings (`type: "positive"`) may use `disposition: "no-action"` when the pattern is already working and needs no reinforcement. But if a positive finding is surprising or non-obvious, consider filing it as a reference for future agents.
 
+### Post-cycle ultrathink — escalating reflection (MANDATORY)
+
+The meta-reflection ladder above is scoped to the kaizen system. This section applies to **all work** — it surfaces structural insights that the default impediment-focused reflection misses.
+
+**The default reflection finds friction. The escalating questions find what the system is missing.**
+
+After listing your operational impediments, run this escalation sequence. Each question builds on the previous:
+
+1. **What's the lesson?** Generalize from the specific friction you encountered. Not "the test was flaky" but "tests that depend on external state need isolation guarantees."
+2. **What's the general version?** Does this lesson apply beyond this session? Beyond this subsystem? Name the class of problem.
+3. **What should change in the system?** Which skill, hook, process, or architecture should be different? Be specific about the mechanism.
+4. **What should change in how the system improves itself?** Is the reflection mechanism catching this type of friction? If not, what's missing?
+5. **What concept or boundary is MISSING that would have prevented errors?** Name a thing that doesn't exist yet but should — a classification, a gate, a definition, a contract.
+
+| Level | Question | Finds | Example |
+|-------|----------|-------|---------|
+| Operational | "What went wrong?" | Friction, bugs, overlap | practices/policies overlap |
+| Structural | "What's the lesson?" | Missing concepts, undefined boundaries | no boundary definition for X |
+| Meta-structural | "What's the general version?" | Missing process steps, skill gaps | no classification gate for Y |
+
+**Why this matters:** The standard impediment list reliably surfaces operational friction — what slowed you down. But it doesn't surface what the system is *missing*: undefined boundaries, absent classification gates, concepts that should exist but don't. These structural and meta-structural findings have compound value because they prevent entire categories of future friction, not just individual recurrences.
+
+**Actionability:** Structural and meta-structural findings from this escalation should be filed as `type: "meta"` findings in your KAIZEN_IMPEDIMENTS declaration. They require a disposition (`filed` or `waived`) — `no-action` is not allowed for meta-findings because structural gaps are always worth recording.
+
 ## Current Enforcement Inventory
 
 | Mechanism | Level | Location | What it enforces |

@@ -84,6 +84,12 @@ Launch a background kaizen-bg subagent to handle reflection while you continue w
     Recording an incident on an existing issue is MORE VALUABLE than filing new.
     New issues MUST have labels: kaizen + level-N + area/{subsystem}.
     See docs/issue-taxonomy.md for the full policy.
+  - Run post-cycle ultrathink escalation (see kaizen SKILL.md):
+    1. What's the lesson? (generalize from friction)
+    2. What's the general version? (beyond this session?)
+    3. What should change in the system?
+    4. What should change in how the system improves itself?
+    5. What concept/boundary is MISSING?
 
 The kaizen-bg subagent will search for duplicate issues, file incidents, and
 create new kaizen issues as needed. It will report results back to you.
@@ -153,6 +159,12 @@ with post-merge steps (deploy verification, main sync, case closure).
     Recording an incident on an existing issue is MORE VALUABLE than filing new.
     New issues MUST have labels: kaizen + level-N + area/{subsystem}.
     See docs/issue-taxonomy.md for the full policy.
+  - Run post-cycle ultrathink escalation (see kaizen SKILL.md):
+    1. What's the lesson? (generalize from friction)
+    2. What's the general version? (beyond this session?)
+    3. What should change in the system?
+    4. What should change in how the system improves itself?
+    5. What concept/boundary is MISSING?
 
 The kaizen-bg subagent will search for duplicate issues, file incidents, and
 create new kaizen issues as needed. It will report results back to you.
