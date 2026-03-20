@@ -290,6 +290,13 @@ VERIFICATION: [how the test proves the invariant holds]
 - Testing the wrong artifact (e.g., `/app/dist/` when runtime uses `/tmp/dist/`)
 - "All 275 tests pass" when none cover the actual change
 - Verifying implementation details (`cpSync was called`) instead of outcomes (`agent has the tool`)
+- Hardcoding values that the SUT computes (e.g., `PROJECT_ROOT="$REPO_ROOT"` bypasses testing path resolution)
+
+**Meta tests — MANDATORY for infrastructure scripts:**
+Scripts that resolve paths, detect environments, or set up state used by all subsequent logic MUST have tests that verify the resolution/detection itself — not tests that hardcode the resolved value and only test downstream logic. If a test bypasses the setup that the real script performs, it can't catch bugs in that setup. Examples:
+- Path resolution: test that the output is absolute, points to the right directory, works from subdirectories and worktrees
+- Environment detection: test that detection works in the actual environments it will run in (main checkout, worktree, background process)
+- State initialization: test that initialization produces valid state, not just that functions work given pre-initialized state
 
 ### Runtime Artifact Verification
 
