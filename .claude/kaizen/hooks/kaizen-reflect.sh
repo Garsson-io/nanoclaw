@@ -106,6 +106,11 @@ If the subagent found no impediments: \`echo 'KAIZEN_IMPEDIMENTS: []'\`
 ⛔ You are GATED until you submit a valid KAIZEN_IMPEDIMENTS declaration.
 Allowed commands: gh issue/pr, gh api, gh run, git read-only, ls/cat.
 
+⚠️ **Waiver quality is enforced (kaizen #280).** Waivers with blocklisted
+reasons ("low frequency", "overengineering", "edge case", etc.) are REJECTED.
+Meta-findings waived must include "impact_minutes": N. If impact >= 5, file instead.
+When in doubt, file — it takes 2 minutes; implementation is a separate decision.
+
 For trivial changes (typo, formatting, docs-only), you may also use:
   \`echo 'KAIZEN_NO_ACTION [docs-only]: updated README formatting'\`
 Valid categories: docs-only, formatting, typo, config-only, test-only, trivial-refactor
@@ -174,6 +179,11 @@ If the subagent found no impediments: \`echo 'KAIZEN_IMPEDIMENTS: []'\`
 
 ⛔ You are GATED until you submit a valid KAIZEN_IMPEDIMENTS declaration.
 Allowed commands: gh issue/pr, gh api, gh run, git read-only, ls/cat.
+
+⚠️ **Waiver quality is enforced (kaizen #280).** Waivers with blocklisted
+reasons ("low frequency", "overengineering", "edge case", etc.) are REJECTED.
+Meta-findings waived must include "impact_minutes": N. If impact >= 5, file instead.
+When in doubt, file — it takes 2 minutes; implementation is a separate decision.
 
 For trivial changes (typo, formatting, docs-only), you may also use:
   \`echo 'KAIZEN_NO_ACTION [docs-only]: updated README formatting'\`

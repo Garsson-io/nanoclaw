@@ -9,7 +9,7 @@
 #   1. Bash: echo "KAIZEN_IMPEDIMENTS: [...]" (structured impediment declaration)
 #   2. Bash: echo "KAIZEN_NO_ACTION [category]: <reason>" (restricted — kaizen #140)
 #
-# Validation (kaizen #113, #162, #213):
+# Validation (kaizen #113, #162, #213, #280):
 #   - JSON must be a valid array
 #   - Each entry must have "impediment" or "finding" (non-empty string) and "disposition"
 #   - disposition "filed" or "incident" requires "ref" field
@@ -18,6 +18,12 @@
 #   - type "positive" findings: also allows "no-action" (with reason)
 #   - no type / other: standard dispositions (filed|incident|fixed-in-pr|waived)
 #   - Empty array [] requires a "reason" string after it (kaizen #140)
+#
+# Waiver quality enforcement (kaizen #280, #258, #198):
+#   - Waiver reasons are checked against a blocklist of known-bad rationalizations
+#   - Meta-findings (type "meta") waived must include "impact_minutes" estimate
+#   - Meta-findings with impact_minutes >= 5 cannot be waived (must file instead)
+#   - All waivers are logged to audit/waiver.log
 #
 # Advisory nudge (kaizen #205):
 #   - When ALL findings are waived/no-action, prints advisory before clearing
@@ -51,6 +57,62 @@ log_no_action() {
   # Append to audit log
   printf '%s | branch=%s | category=%s | pr=%s | reason=%s\n' \
     "$timestamp" "$branch" "$category" "$pr_url" "$reason" >> "$AUDIT_LOG" 2>/dev/null || true
+}
+
+# Waiver audit log (kaizen #280)
+WAIVER_LOG="${HOOK_DIR}/../audit/waiver.log"
+
+log_waiver() {
+  local desc="$1"
+  local reason="$2"
+  local finding_type="${3:-impediment}"
+  local pr_url="${4:-unknown}"
+  local branch
+  branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+  local timestamp
+  timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+  mkdir -p "$(dirname "$WAIVER_LOG")" 2>/dev/null
+  printf '%s | branch=%s | type=%s | pr=%s | desc=%s | reason=%s\n' \
+    "$timestamp" "$branch" "$finding_type" "$pr_url" "$desc" "$reason" >> "$WAIVER_LOG" 2>/dev/null || true
+}
+
+# Waiver reason blocklist (kaizen #280, #258)
+# These rationalizations sound reasonable but are category errors:
+# - "Low frequency" ignores impact-per-occurrence
+# - "Overengineering" confuses filing with implementing
+# - "Self-correcting" assumes future agents will do better without evidence
+WAIVER_BLOCKLIST_PATTERNS=(
+  "low frequency"
+  "rare enough"
+  "rarely happens"
+  "infrequent"
+  "overengineering"
+  "over-engineering"
+  "not worth"
+  "too much work"
+  "too much effort"
+  "self-correct"
+  "self correct"
+  "acceptable tradeoff"
+  "acceptable trade-off"
+  "minor enough"
+  "not important enough"
+  "won.t happen again"
+  "unlikely to recur"
+  "edge case"
+)
+
+check_waiver_blocklist() {
+  local reason_lower
+  reason_lower=$(echo "$1" | tr '[:upper:]' '[:lower:]')
+  for pattern in "${WAIVER_BLOCKLIST_PATTERNS[@]}"; do
+    if echo "$reason_lower" | grep -qi "$pattern"; then
+      echo "$pattern"
+      return 0
+    fi
+  done
+  return 1
 }
 
 INPUT=$(cat)
@@ -208,6 +270,46 @@ EOF
 
     if [ -n "$VALIDATION" ]; then
       printf '\nKAIZEN_IMPEDIMENTS: Validation failed:\n%s\n\nFix the issues and resubmit.\n' "$VALIDATION"
+      exit 0
+    fi
+
+    # Waiver quality enforcement (kaizen #280, #258, #198)
+    # Check each waived finding for blocklisted reasons and meta-finding impact
+    WAIVER_ERRORS=""
+    WAIVER_COUNT=0
+    while IFS='|' read -r w_desc w_type w_reason w_impact; do
+      [ -z "$w_desc" ] && continue
+      WAIVER_COUNT=$((WAIVER_COUNT + 1))
+
+      # Check blocklist
+      MATCHED_PATTERN=$(check_waiver_blocklist "$w_reason")
+      if [ $? -eq 0 ]; then
+        WAIVER_ERRORS="${WAIVER_ERRORS}waiver for \"${w_desc}\" uses blocklisted rationalization \"${MATCHED_PATTERN}\". Filing an issue is not implementing a fix — if the observation is true, file it. Reconsider: is this actually not worth a 2-minute issue?\n"
+      fi
+
+      # Meta-findings require impact_minutes (kaizen #280)
+      if [ "$w_type" = "meta" ]; then
+        if [ -z "$w_impact" ] || [ "$w_impact" = "null" ]; then
+          WAIVER_ERRORS="${WAIVER_ERRORS}meta-finding \"${w_desc}\" waived without impact_minutes. Add \"impact_minutes\": N (estimated minutes of agent/human time wasted per occurrence). If impact >= 5, file instead of waiving.\n"
+        elif [ "$w_impact" -ge 5 ] 2>/dev/null; then
+          WAIVER_ERRORS="${WAIVER_ERRORS}meta-finding \"${w_desc}\" has impact_minutes=${w_impact} (>= 5 min/occurrence) — too high to waive. File it: \`gh issue create --repo Garsson-io/kaizen ...\`\n"
+        fi
+      fi
+
+      # Log all waivers to audit trail
+      log_waiver "$w_desc" "$w_reason" "$w_type" "$GATE_PR_URL"
+    done < <(echo "$JSON" | jq -r '
+      [.[] | select(.disposition == "waived")] |
+      .[] | [
+        ((.impediment // .finding) // ""),
+        (.type // ""),
+        (.reason // ""),
+        (.impact_minutes // "null" | tostring)
+      ] | join("|")
+    ' 2>/dev/null)
+
+    if [ -n "$WAIVER_ERRORS" ]; then
+      printf '\nKAIZEN_IMPEDIMENTS: Waiver quality check failed (kaizen #280):\n%b\nKnown anti-patterns:\n- "Low frequency" ignores impact-per-occurrence. A 15-min blocker that happens once a week is worth filing.\n- "Overengineering" confuses filing with implementing. Filing takes 2 min; implementation is a separate decision.\n- "Self-correcting" assumes future agents improve without evidence. They don'"'"'t — that'"'"'s why this check exists.\n\nFix the issues and resubmit. To file: \`gh issue create --repo Garsson-io/kaizen --title "[LN] description" --label kaizen,level-N,area/...\`\n' "$WAIVER_ERRORS"
       exit 0
     fi
 

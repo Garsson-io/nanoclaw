@@ -216,6 +216,32 @@ Starting concrete and zooming out produces actionable output. Starting abstract 
 
 Positive findings (`type: "positive"`) may use `disposition: "no-action"` when the pattern is already working and needs no reinforcement. But if a positive finding is surprising or non-obvious, consider filing it as a reference for future agents.
 
+### Waiver quality enforcement (kaizen #280, #258, #198)
+
+**Known anti-pattern: the "overengineering" waiver.** "This would require code changes, which is overengineering" is a category error. Filing an issue is not implementing the fix. The issue records the insight; implementation priority is a separate decision. If the observation is true, file it. Period.
+
+**The `pr-kaizen-clear.sh` hook enforces waiver quality at L2.** Waivers with these rationalization patterns are BLOCKED:
+- "low frequency" / "rarely happens" / "infrequent" — ignores impact-per-occurrence
+- "overengineering" / "over-engineering" — confuses filing with implementing
+- "self-correcting" / "self-correct" — assumes future agents improve without evidence
+- "not worth" / "too much work" / "too much effort" — filing takes 2 minutes
+- "acceptable tradeoff" — sounds like judgment but is usually avoidance
+- "unlikely to recur" / "won't happen again" — optimism without mechanism
+- "edge case" — edge cases compound; if it happened once, it's real
+
+**Meta-findings require impact assessment.** When waiving a meta-finding (`type: "meta"`), you MUST include `"impact_minutes": N` estimating agent/human time wasted per occurrence. If impact >= 5 minutes, the waiver is blocked — you must file instead.
+
+**Correct waiver example:**
+```json
+{"finding": "test output was noisy", "type": "meta", "disposition": "waived", "reason": "cosmetic — no time lost, just visual clutter during test runs", "impact_minutes": 1}
+```
+
+**Incorrect waiver (will be blocked):**
+```json
+{"finding": "hook state files accumulate", "type": "meta", "disposition": "waived", "reason": "low frequency, only happens in long sessions"}
+```
+This is blocked because "low frequency" is on the blocklist AND meta-findings need `impact_minutes`.
+
 ### Post-cycle ultrathink — escalating structural questions (kaizen #260)
 
 After completing the meta-reflection ladder above, spend one more cycle asking questions that surface **structural** insights the default reflection misses. These questions escalate from session-specific to system-wide:
