@@ -183,8 +183,8 @@ EOF
         "missing \"impediment\" field"
       elif .disposition == "" then
         "missing \"disposition\" for: \(.impediment)"
-      elif .type == "meta" and (.disposition | IN("filed", "waived") | not) then
-        "meta-finding \"\(.impediment)\" has disposition \"\(.disposition)\" — meta-findings must be \"filed\" (with ref) or \"waived\" (with reason). If it is truly not actionable, use \"waived\" and explain why."
+      elif .type == "meta" and (.disposition | IN("filed", "fixed-in-pr", "waived") | not) then
+        "meta-finding \"\(.impediment)\" has disposition \"\(.disposition)\" — meta-findings must be \"filed\" (with ref), \"fixed-in-pr\", or \"waived\" (with reason). If it is truly not actionable, use \"waived\" and explain why."
       elif .type == "positive" and (.disposition | IN("filed", "incident", "fixed-in-pr", "waived", "no-action") | not) then
         "invalid disposition \"\(.disposition)\" for: \(.impediment) (must be filed|incident|fixed-in-pr|waived|no-action)"
       elif (.type != "meta" and .type != "positive") and (.disposition | IN("filed", "incident", "fixed-in-pr", "waived") | not) then
