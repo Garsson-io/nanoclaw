@@ -92,6 +92,42 @@ For each missing tool/check/enforcement:
 - Are there clusters of issues that don't fit any existing horizon?
 - Is there an unnamed dimension where incidents keep recurring?
 
+### Phase 2.5: Meta-Finding Aggregation (kaizen #245)
+
+Scan recent PR bodies for `KAIZEN_IMPEDIMENTS` declarations and aggregate patterns across sessions. This is what makes the recursion real — individual reflections produce findings; aggregation produces insight.
+
+**Data collection:**
+```bash
+# Get recent merged PRs with kaizen impediments
+gh pr list --repo Garsson-io/nanoclaw --state merged --limit 20 --json number,title,body,mergedAt \
+  --jq '.[] | select(.body | test("KAIZEN_IMPEDIMENTS")) | {number, title, mergedAt, body}'
+```
+
+**Extract and classify findings from each PR body:**
+- Parse the `KAIZEN_IMPEDIMENTS` JSON block from each PR
+- Separate by `type`: `"meta"` (system improvements), `"positive"` (what worked), standard (work impediments)
+- Group by `disposition`: `"filed"` (with issue ref), `"waived"` (with reason), `"fixed-in-pr"`, `"incident"`
+
+**Aggregate and report:**
+
+| Question | What to look for |
+|----------|-----------------|
+| Which skills were praised? | `type: "positive"` findings — what's working well |
+| Which skills were criticized? | `type: "meta"` findings with `disposition: "filed"` — what needs fixing |
+| What friction keeps recurring? | Same impediment appearing across 2+ PRs despite fixes |
+| Are waivers masking real issues? | `disposition: "waived"` on the same category across multiple PRs |
+
+**Output format:**
+```
+Meta-finding pattern               | Occurrences | Status
+-----------------------------------|-------------|--------
+Stale issue recommendations        |     3/10    | Filed as #243
+Reflection questions too abstract  |     2/10    | Filed as #246
+Accept-case heavyweight for specs  |     4/10    | Open — needs attention
+```
+
+If a pattern appears in 3+ of the last 10 PRs, it should be flagged as a **systemic friction** that warrants its own kaizen issue if not already filed.
+
 ### Phase 3: Analyze Concentration
 
 For each existing horizon, count:
@@ -142,7 +178,18 @@ Issues that are:
 - High incident count relative to fix effort
 - L1 to L2 escalations where the L1 already failed
 
-Format each as a ready-to-file kaizen issue with: title, body (what/why/how), labels.
+**MANDATORY: Verify each recommendation against git log before declaring it low-hanging fruit.** The issue tracker is a lagging indicator — code is the truth. For each candidate:
+
+```bash
+# Check if recent commits reference this issue
+git log --oneline --all --grep="kaizen #NNN" --since="2 weeks ago" | head -5
+# Check if any merged PRs reference it
+gh pr list --repo Garsson-io/nanoclaw --state merged --search "kaizen #NNN" --limit 3
+```
+
+If matches found, flag the issue as: **"Possibly already addressed — verify before starting. Recent: [commit/PR references]"** and move it to a separate "needs verification" list rather than recommending it as ready work.
+
+Format each verified issue as a ready-to-file kaizen issue with: title, body (what/why/how), labels.
 
 #### List 2: Feature PRD Candidates
 
@@ -168,11 +215,12 @@ Format each as: title, one-paragraph summary, what it enables (downstream value)
 Present the full analysis in a structured format:
 
 1. **Executive summary** — 3-5 sentences on the biggest findings
-2. **Concentration map** — where problems cluster
-3. **Critical gaps table** — testing and tooling gaps ranked by severity
-4. **Unnamed dimensions** — what's climbing you that you haven't named
-5. **Recommended priority** — immediate / next sprint / foundational
-6. **Three actionable lists** — low-hanging fruit, feature PRDs, meta PRDs
+2. **Meta-finding patterns** — recurring friction across recent reflections (Phase 2.5)
+3. **Concentration map** — where problems cluster
+4. **Critical gaps table** — testing and tooling gaps ranked by severity
+5. **Unnamed dimensions** — what's climbing you that you haven't named
+6. **Recommended priority** — immediate / next sprint / foundational
+7. **Three actionable lists** — low-hanging fruit (verified against git log), feature PRDs, meta PRDs
 
 Ask the admin:
 - Do these findings match your intuition? What's surprising?
