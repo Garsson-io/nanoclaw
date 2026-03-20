@@ -30,18 +30,20 @@ The vision: a batch runner that operates like a disciplined team lead. It picks 
 
 ## You Are Here
 
-**L2 with L3 basics.** `scripts/overnight-dent.sh` loops `claude-wt -p` with a guidance prompt. Has batch IDs, per-run tagging, output parsing (PRs/issues/cases), structured summaries, cumulative cross-run context. Safety: consecutive failure detection, fast-fail escalating cooldown, graceful SIGTERM/SIGINT shutdown. Not yet implemented: total budget enforcement, admin notifications, strategic planning.
+**L3: Governed + Observable.** Trampoline/runner split: `overnight-dent.sh` (bash trampoline with `git pull` self-update between runs) delegates to `overnight-dent-run.ts` (TypeScript runner with `--output-format stream-json` real-time observability). Features: batch IDs, per-run tagging, output parsing, stream-json milestone display, heartbeat during silence, `OVERNIGHT_STOP:` loop control (agent can stop the batch), cross-run state in `state.json`, cumulative context. Safety: consecutive failure detection, fast-fail escalating cooldown, graceful SIGTERM/SIGINT shutdown. Not yet implemented: total budget enforcement, admin notifications, strategic planning.
 
 ## What Exists
 
 | Component | Level | Location |
 |-----------|-------|----------|
-| `overnight-dent.sh` | L1 | `scripts/overnight-dent.sh` |
+| `overnight-dent.sh` | L3 (trampoline) | `scripts/overnight-dent.sh` |
+| `overnight-dent-run.sh` | L3 (wrapper) | `scripts/overnight-dent-run.sh` |
+| `overnight-dent-run.ts` | L3 (runner) | `scripts/overnight-dent-run.ts` |
 | `claude-wt.sh` | Foundation | `scripts/claude-wt.sh` |
 | `/make-a-dent` skill | Foundation | `.claude/skills/make-a-dent/SKILL.md` |
 | `/gap-analysis` skill | Foundation (L5 prereq) | `.claude/skills/gap-analysis/SKILL.md` |
 | `--max-budget-usd` flag | L1 cost cap | Claude CLI |
-| `--output-format json` | L2 enabler | Claude CLI |
+| `--output-format stream-json` | L3 enabler | Claude CLI |
 | IPC messaging | L4 enabler | `docs/ipc-messaging.md` |
 | Cost governance horizon | Related | `docs/horizons/cost-governance.md` |
 
