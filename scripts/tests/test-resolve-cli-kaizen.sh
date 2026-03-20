@@ -14,38 +14,7 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RESOLVER="$SCRIPT_DIR/../lib/resolve-cli-kaizen.sh"
 
-PASS=0
-FAIL=0
-
-assert_eq() {
-  local test_name="$1"
-  local expected="$2"
-  local actual="$3"
-  if [ "$expected" = "$actual" ]; then
-    echo "  PASS: $test_name"
-    ((PASS++))
-  else
-    echo "  FAIL: $test_name"
-    echo "    expected: '$expected'"
-    echo "    actual:   '$actual'"
-    ((FAIL++))
-  fi
-}
-
-assert_contains() {
-  local test_name="$1"
-  local needle="$2"
-  local haystack="$3"
-  if echo "$haystack" | grep -q "$needle"; then
-    echo "  PASS: $test_name"
-    ((PASS++))
-  else
-    echo "  FAIL: $test_name"
-    echo "    expected to contain: '$needle'"
-    echo "    actual: '$haystack'"
-    ((FAIL++))
-  fi
-}
+source "$SCRIPT_DIR/lib/test-utils.sh"
 
 # Create a temp dir for each test
 TMPDIR_BASE=$(mktemp -d)
@@ -168,8 +137,7 @@ rm -f "$STDERR_FILE"
 # cli-kaizen with no args prints usage (may go to stdout or stderr)
 HELP_COMBINED="$HELP_OUTPUT $HELP_STDERR"
 assert_contains "produces output" "cli-kaizen" "$HELP_COMBINED"
-# Fail on script-level errors in stderr
-SCRIPT_ERROR_PATTERN='syntax error|bad substitution|unbound variable|command not found|arithmetic|not a valid identifier|unexpected token'
+# Fail on script-level errors in stderr (uses SCRIPT_ERROR_PATTERN from test-utils.sh)
 if echo "$HELP_STDERR" | grep -qiE "$SCRIPT_ERROR_PATTERN"; then
   echo "  FAIL: cli-kaizen produced script errors on stderr"
   echo "    stderr: $HELP_STDERR"
@@ -179,10 +147,4 @@ else
   ((PASS++))
 fi
 
-echo ""
-echo "================================"
-echo "Results: $PASS passed, $FAIL failed"
-if [ "$FAIL" -gt 0 ]; then
-  exit 1
-fi
-echo "All tests passed."
+print_results
