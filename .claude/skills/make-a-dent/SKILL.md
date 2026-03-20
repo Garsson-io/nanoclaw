@@ -17,6 +17,29 @@ description: Autonomous deep-dive into a kaizen domain — find the root cause c
 
 ## The Algorithm
 
+### Phase 0: WIP Deconfliction (before choosing a target domain)
+
+Before selecting which domain to attack, map what other agents are doing. Make-a-dent works on entire categories — choosing a domain that overlaps with active work wastes effort and creates merge conflicts.
+
+**Gather the WIP landscape:**
+```bash
+# Active worktrees — branch names reveal domains in progress
+git worktree list
+# Active cases — linked issues show which kaizen work is claimed
+npx tsx src/cli-kaizen.ts case-list --status active,backlog,blocked
+# Open PRs — titles and branches show what's being shipped
+gh pr list --repo Garsson-io/nanoclaw --state open --json number,title,headRefName
+```
+
+**Build an occupied/available domain map:**
+From worktrees, cases, and PRs, identify which broad domains have active work. Map each piece of WIP to a domain (deployment, hooks, worktree mgmt, testing, skills, CI, cases, etc.). Example:
+```
+OCCUPIED: deployment (case k90), hooks infra (case hook-lang-boundaries), worktree mgmt (PR #189, #15)
+AVAILABLE: CI quality, kaizen skills, testing infra, case routing, security, observability
+```
+
+**Choose your target from AVAILABLE domains only.** The compound impact of a make-a-dent session is highest when it's orthogonal to all other active work — no merge conflicts, no invalidated assumptions, no scope overlap.
+
 ### Phase 1: Map the Territory (Research, no code changes)
 
 Launch **parallel research agents** to build a complete picture of the target domain:
@@ -98,4 +121,6 @@ After shipping, update the kaizen backlog:
 
 4. **Ship autonomously.** This skill is for when the user trusts you to make good judgement calls. Don't ask for permission on each step — just do the right thing and explain in the PR.
 
-5. **Leave the system better.** The skill itself is part of the fix — it codifies the workflow so the next deep dive is faster.
+5. **Be complementary, not competitive.** Check what other agents are working on (Phase 0) and pick an orthogonal domain. The best dent is one that improves the system without creating merge conflicts or duplicating another agent's context-loading.
+
+6. **Leave the system better.** The skill itself is part of the fix — it codifies the workflow so the next deep dive is faster.

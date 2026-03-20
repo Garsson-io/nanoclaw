@@ -116,6 +116,8 @@ These policies were learned from past mistakes. Follow them strictly.
 
 Future work tracked as GitHub Issues in [`Garsson-io/kaizen`](https://github.com/Garsson-io/kaizen). Dev agents file via `case_suggest_dev` MCP tool. Host-side skills use `npx tsx src/cli-kaizen.ts list|view|case-create`.
 
+**Issue taxonomy:** See [`docs/issue-taxonomy.md`](docs/issue-taxonomy.md) for labeling requirements, epic lifecycle policy, and incident recording format. Every issue MUST have: `kaizen` + level (`level-1`/`level-2`/`level-3`) + area (`area/hooks`, `area/skills`, etc.). Epics are directions that stay open; specs are deliverables that close when shipped.
+
 ## Merging PRs & Post-Merge Deploy
 
 **Read [`docs/merging-prs.md`](docs/merging-prs.md)** for the full merge procedure, CI monitoring, troubleshooting, and post-merge auto-deploy.

@@ -29,11 +29,21 @@ This distinction matters because:
 **You won't accumulate many horizons.** A horizon is a fundamental quality dimension — testing, security, observability, developer ergonomics, autonomous operations. If you're creating dozens, you're tracking features, not horizons.
 
 **What you produce:**
-1. A spec document:
-   - **Feature or feature-within-horizon:** `docs/{name}-spec.md` (the single source of truth)
-   - **Horizon:** The taxonomy lives with the domain it covers (e.g., `.claude/kaizen/horizon.md` for the kaizen horizon), with a symlink from `docs/horizons/{name}.md`. Check `docs/horizons/` for existing horizons before creating a new one.
-2. A GitHub issue (the tracking anchor for all future implementation)
-3. A docs-only PR (reviewable, versionable)
+
+**Default: Issue-only PRD** — Most PRDs should live directly in the GitHub issue body. This is simpler, more discoverable, and avoids the overhead of a docs-only PR. The issue IS the spec.
+
+**Exception: File+PR PRD** — Use a `docs/*-spec.md` file + docs-only PR only for large, multi-stakeholder initiatives where:
+- Multiple agents will implement different phases
+- The spec exceeds ~200 lines and needs its own review cycle
+- The spec contains diagrams or tables that benefit from rendered markdown
+
+**Output by type:**
+1. **Issue-only (default):** GitHub issue with structured body (the spec lives in the issue)
+2. **File+PR (large initiatives):**
+   - Spec document: `docs/{name}-spec.md` (feature) or domain-appropriate location (horizon)
+   - GitHub issue (tracking anchor, links to spec)
+   - Docs-only PR (reviewable, versionable)
+3. **Horizon:** The taxonomy lives with the domain it covers (e.g., `.claude/kaizen/horizon.md`), with a symlink from `docs/horizons/{name}.md`. Check `docs/horizons/` for existing horizons before creating a new one.
 
 **Documentation deliverables (noted in the spec, produced during implementation):**
 
@@ -229,7 +239,9 @@ If a system is at Level 3 of a 10-level taxonomy:
 
 ## Phase 4: Create the GitHub Issue
 
-The issue is the epic anchor. Keep it short — the spec document has the details.
+**For issue-only PRDs (default):** The issue body IS the spec — use the full document structure from Phase 3. The issue is both the tracking anchor and the single source of truth.
+
+**For file+PR PRDs (large initiatives):** The issue is the epic anchor. Keep it short — the spec document has the details.
 
 ```bash
 gh issue create --repo {repo} --title "{Initiative Name}" --body "$(cat <<'EOF'
@@ -255,9 +267,11 @@ EOF
 )"
 ```
 
-## Phase 5: Create the Docs-Only PR
+## Phase 5: Create the Docs-Only PR (file+PR PRDs only)
 
-The PR contains ONLY the spec document. No code changes.
+**Skip this phase for issue-only PRDs** — the issue created in Phase 4 is the complete deliverable.
+
+For file+PR PRDs, the PR contains ONLY the spec document. No code changes.
 
 ```bash
 # Create branch
