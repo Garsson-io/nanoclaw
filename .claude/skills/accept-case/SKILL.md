@@ -61,6 +61,24 @@ gh issue comment {N} --repo Garsson-io/kaizen --body "Claimed for evaluation by 
 
 This labeling is defense-in-depth on top of the L3 enforcement in `ipc-cases.ts` (which blocks duplicate case creation for the same kaizen issue). The label makes the claim visible to other agents checking `gh issue list` before they even reach the code-level check.
 
+### Phase 0.5: Check for existing spec
+
+Before doing deep analysis, check if a detailed spec already exists for this issue:
+
+```bash
+# Check for linked spec documents
+gh issue view {N} --repo Garsson-io/kaizen --json body --jq '.body' | grep -oE 'docs/[a-z0-9-]+-spec\.md'
+# Check issue body length (>100 lines suggests a detailed spec)
+gh issue view {N} --repo Garsson-io/kaizen --json body --jq '.body' | wc -l
+```
+
+**If a detailed spec exists (>100 lines or links to a `docs/*-spec.md`):**
+- Skip Phases 1-2 (incident gathering and observability assessment) — the spec author already did this work
+- Jump to Phase 3 (find low-hanging fruit) with the spec as context
+- Phase 4 (critique the spec) and Phase 5 (ask the admin) still apply
+
+This prevents redundant analysis when someone already invested in understanding the problem. The spec is your starting point — verify it's still accurate (Phase 4) rather than re-deriving it.
+
 ### Phase 1: Gather the incidents
 
 Don't work in the abstract. Find what actually happened.

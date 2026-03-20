@@ -244,7 +244,7 @@ EOF
 🎉 PR merged: $MERGE_PR_URL
 
 Now complete the post-merge workflow:
-1. **Kaizen reflection (REQUIRED)** — Run \`/kaizen\` NOW. Reflect on impediments, what you'd do differently, and what the system should learn. This is not optional — skipping kaizen reflection after merge is a recurring failure pattern.
+1. **Kaizen reflection (REQUIRED)** — Run \`/kaizen\` NOW. Reflect on impediments and submit structured KAIZEN_IMPEDIMENTS. This is not optional — skipping kaizen reflection after merge is a recurring failure pattern.
 2. **Post-merge action needed** — classify per CLAUDE.md "Post-Merge: Deploy & Maintenance Policy":
    - CLAUDE.md/docs only → no action, active on next conversation
    - src/ changes → needs \`npm run build\` + service restart (~10s downtime)

@@ -41,6 +41,14 @@ gh issue list --repo Garsson-io/kaizen --state open --label "status:backlog" --j
 npx tsx src/cli-kaizen.ts case-list --status active,backlog,blocked
 ```
 
+**Active worktrees (detect implicit WIP — other agents may be working without labeled issues):**
+```bash
+git worktree list
+# Cross-reference branch names: case/* and fix/* branches indicate active work
+# Extract kaizen issue numbers from branch names (e.g., k90, k226) to identify which issues are in-flight
+# NEVER assume a worktree is stale — other Claude instances may be actively using it
+```
+
 **Open PRs (may indicate partial work):**
 ```bash
 gh pr list --repo Garsson-io/nanoclaw --state open --json number,title,headRefName,labels
@@ -52,18 +60,34 @@ gh pr list --repo Garsson-io/nanoclaw --state open --json number,title,headRefNa
 gh issue list --repo Garsson-io/kaizen --state closed --limit 10 --json number,title,labels,closedAt
 ```
 
-### Step 2: Filter out unavailable issues
+### Step 2: Filter out unavailable issues and identify active domains
 
 Remove from consideration:
 - Issues with `status:active`, `status:backlog`, or `status:blocked` labels (another agent is working on them)
 - Issues linked to active cases (from the database cross-reference)
 - Issues that have open PRs already addressing them
 
+**Map active domains from WIP (complementarity check):**
+From the worktrees, cases, and open PRs, identify which *areas* are being worked on — not just which issues. For example, if there's a worktree on `case/260320-auto-deploy`, the entire **deployment** domain is occupied. If there's a PR for hook language boundaries, the **hooks infrastructure** domain has active work.
+
+Build a short "occupied domains" list:
+```
+OCCUPIED: deployment (case k90), hooks infra (case hook-language-boundaries), worktree mgmt (PR #189, #15)
+AVAILABLE: CI quality, kaizen skills, testing infra, case routing, security, observability
+```
+
+Prefer issues in AVAILABLE domains. Issues in OCCUPIED domains are not just collision risks — even if they don't overlap on the specific issue, working in the same area creates merge conflicts, invalidated assumptions, and duplicated context-loading.
+
 If an issue is partially addressed (PR exists but not merged), note this — it may be "pick up where someone left off" rather than "start fresh."
 
 ### Step 3: Score and rank
 
 For each remaining issue, consider these factors. **Use your judgment — this is reasoning, not arithmetic.**
+
+**Complementarity (avoid occupied domains):**
+- Issues in AVAILABLE domains get a strong boost — no collision risk, no merge conflicts, no duplicated context-loading.
+- Issues in OCCUPIED domains get a strong penalty. Even if the specific issue doesn't overlap, working in the same domain as another agent creates friction: merge conflicts, invalidated assumptions, competing scope decisions.
+- Exception: if the occupied work is nearly complete (PR in review, case nearly done), the domain penalty is reduced.
 
 **Epic momentum (boost related work):**
 - Look at the last 5-10 closed issues. Identify topic clusters.
@@ -147,7 +171,8 @@ When the user selects an issue:
 - **Ignoring the filter step.** Presenting an issue that another agent is actively working on wastes everyone's time.
 - **Over-indexing on one factor.** "This is L3 so it must be top priority" — maybe, but if it has no incidents and blocks nothing, it can wait.
 - **Presenting more than 5.** Analysis paralysis. The top 3-5 is enough. If the user wants to see more, they'll ask.
-- **Skipping the cross-reference.** Checking GitHub labels is not enough — also check the cases database. Labels can be stale; the database is authoritative for active cases.
+- **Skipping the cross-reference.** Checking GitHub labels is not enough — also check the cases database AND worktrees. Labels can be stale; the database is authoritative for active cases; worktrees reveal implicit WIP from other agents.
+- **Ignoring domain-level collisions.** "Issue #X isn't claimed" doesn't mean the domain is free. If another agent has 3 worktrees in the hooks area, picking a hooks issue creates friction even if the specific issue isn't claimed.
 
 ## Integration
 
