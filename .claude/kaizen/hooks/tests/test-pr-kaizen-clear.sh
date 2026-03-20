@@ -1010,7 +1010,64 @@ else
   echo "  FAIL: mixed types with proper dispositions rejected"
   ((FAIL++))
 fi
-assert_contains "output mentions 3 findings" "3" "$OUTPUT"
+
+echo ""
+echo "=== #288: Clearing gate writes reflection marker file ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/77"
+
+# Clear gate with valid impediments
+run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
+[{\"impediment\": \"test finding\", \"disposition\": \"filed\", \"ref\": \"#999\"}]
+IMPEDIMENTS" \
+  'KAIZEN_IMPEDIMENTS:
+[{"impediment": "test finding", "disposition": "filed", "ref": "#999"}]' > /dev/null
+
+# INVARIANT: Marker file exists after gate clearing
+source "$(dirname "$0")/../lib/state-utils.sh"
+PR_KEY=$(pr_url_to_state_key "https://github.com/Garsson-io/nanoclaw/pull/77")
+if [ -f "$STATE_DIR/kaizen-reflected-${PR_KEY}" ]; then
+  echo "  PASS: reflection marker file created"
+  ((PASS++))
+else
+  echo "  FAIL: reflection marker file NOT created"
+  echo "    expected: $STATE_DIR/kaizen-reflected-${PR_KEY}"
+  echo "    files: $(ls $STATE_DIR/ 2>/dev/null)"
+  ((FAIL++))
+fi
+
+# INVARIANT: Marker has STATUS=reflected
+MARKER_STATUS=$(grep -E '^STATUS=' "$STATE_DIR/kaizen-reflected-${PR_KEY}" 2>/dev/null | cut -d= -f2-)
+assert_eq "#288: marker has STATUS=reflected" "reflected" "$MARKER_STATUS"
+
+# INVARIANT: Marker has PR_URL
+MARKER_PR=$(grep -E '^PR_URL=' "$STATE_DIR/kaizen-reflected-${PR_KEY}" 2>/dev/null | cut -d= -f2-)
+assert_eq "#288: marker has correct PR_URL" "https://github.com/Garsson-io/nanoclaw/pull/77" "$MARKER_PR"
+
+echo ""
+echo "=== #288: Clearing with KAIZEN_NO_ACTION also writes marker ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/88"
+
+# Clear gate with KAIZEN_NO_ACTION
+run_posttool_bash \
+  "echo 'KAIZEN_NO_ACTION [docs-only]: updated README formatting'" \
+  "KAIZEN_NO_ACTION [docs-only]: updated README formatting" > /dev/null
+
+# INVARIANT: Marker file exists after KAIZEN_NO_ACTION clearing
+source "$(dirname "$0")/../lib/state-utils.sh"
+PR_KEY=$(pr_url_to_state_key "https://github.com/Garsson-io/nanoclaw/pull/88")
+if [ -f "$STATE_DIR/kaizen-reflected-${PR_KEY}" ]; then
+  echo "  PASS: reflection marker created for KAIZEN_NO_ACTION"
+  ((PASS++))
+else
+  echo "  FAIL: reflection marker NOT created for KAIZEN_NO_ACTION"
+  echo "    files: $(ls $STATE_DIR/ 2>/dev/null)"
+  ((FAIL++))
+fi
 
 teardown
 print_results

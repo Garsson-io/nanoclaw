@@ -189,5 +189,189 @@ else
   ((FAIL++))
 fi
 
+
+echo ""
+echo "=== #288: Reflected PR skips gate on subsequent create trigger ==="
+
+setup
+
+# First: simulate a full reflection cycle (create + clear)
+run_pr_create "https://github.com/Garsson-io/nanoclaw/pull/99" > /dev/null
+
+# Verify state file was created
+if has_kaizen_state; then
+  echo "  PASS: initial state file created"
+  ((PASS++))
+else
+  echo "  FAIL: initial state file NOT created"
+  ((FAIL++))
+fi
+
+# Simulate clearing: write the reflected marker (as pr-kaizen-clear.sh would)
+source "$(dirname "$0")/../lib/state-utils.sh"
+PR_KEY=$(pr_url_to_state_key "https://github.com/Garsson-io/nanoclaw/pull/99")
+printf 'PR_URL=%s\nSTATUS=reflected\nBRANCH=%s\n' \
+  "https://github.com/Garsson-io/nanoclaw/pull/99" \
+  "$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)" \
+  > "$STATE_DIR/kaizen-reflected-${PR_KEY}"
+# Remove the needs_pr_kaizen state to simulate clearing
+rm -f "$STATE_DIR"/pr-kaizen-*
+
+# Now trigger pr create again for the SAME PR
+OUTPUT=$(run_pr_create "https://github.com/Garsson-io/nanoclaw/pull/99")
+
+# INVARIANT: No output and no state file — gate was skipped
+assert_eq "#288: reflected PR produces no output" "" "$OUTPUT"
+
+# Verify no new state file was created
+NEW_STATE=$(find "$STATE_DIR" -name "pr-kaizen-Garsson-io*" 2>/dev/null | wc -l | tr -d ' ')
+assert_eq "#288: no new state file for reflected PR" "0" "$NEW_STATE"
+
+echo ""
+echo "=== #288: Reflected PR skips gate on merge trigger ==="
+
+setup
+
+# Write reflected marker for PR 99
+source "$(dirname "$0")/../lib/state-utils.sh"
+PR_KEY=$(pr_url_to_state_key "https://github.com/Garsson-io/nanoclaw/pull/99")
+printf 'PR_URL=%s\nSTATUS=reflected\nBRANCH=%s\n' \
+  "https://github.com/Garsson-io/nanoclaw/pull/99" \
+  "$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)" \
+  > "$STATE_DIR/kaizen-reflected-${PR_KEY}"
+
+# Trigger merge for the same PR — should skip
+OUTPUT=$(run_pr_merge "https://github.com/Garsson-io/nanoclaw/pull/99")
+
+assert_eq "#288: reflected PR merge produces no output" "" "$OUTPUT"
+
+echo ""
+echo "=== #288: Different PR still gets gate after another PR was reflected ==="
+
+setup
+
+# Write reflected marker for PR 99
+source "$(dirname "$0")/../lib/state-utils.sh"
+PR_KEY=$(pr_url_to_state_key "https://github.com/Garsson-io/nanoclaw/pull/99")
+printf 'PR_URL=%s\nSTATUS=reflected\nBRANCH=%s\n' \
+  "https://github.com/Garsson-io/nanoclaw/pull/99" \
+  "$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)" \
+  > "$STATE_DIR/kaizen-reflected-${PR_KEY}"
+
+# Trigger create for a DIFFERENT PR — should still get gate
+OUTPUT=$(run_pr_create "https://github.com/Garsson-io/nanoclaw/pull/100")
+
+assert_contains "#288: different PR still gets gate" "KAIZEN REFLECTION" "$OUTPUT"
+
+
+echo ""
+echo "=== #283: Auto-close kaizen issues on merge ==="
+
+setup
+
+# Create a mock gh that:
+# 1. Returns a PR body with kaizen issue references
+# 2. Returns OPEN for issue state queries
+# 3. Logs issue close calls to a file
+AUTOCLOSE_LOG=$(mktemp)
+AUTOCLOSE_MOCK=$(mktemp -d)
+cat > "$AUTOCLOSE_MOCK/gh" << MOCK_SCRIPT
+#!/bin/bash
+if echo "\$@" | grep -q "pr view.*--json body"; then
+  echo "Closes https://github.com/Garsson-io/kaizen/issues/123 and Garsson-io/kaizen#456"
+  exit 0
+elif echo "\$@" | grep -q "pr view.*--json title"; then
+  echo "test PR title"
+  exit 0
+elif echo "\$@" | grep -q "pr view.*--json state"; then
+  echo "MERGED"
+  exit 0
+elif echo "\$@" | grep -q "issue view.*--json state"; then
+  echo "OPEN"
+  exit 0
+elif echo "\$@" | grep -q "issue close"; then
+  echo "close \$@" >> "$AUTOCLOSE_LOG"
+  exit 0
+fi
+echo "OPEN"
+exit 0
+MOCK_SCRIPT
+chmod +x "$AUTOCLOSE_MOCK/gh"
+
+# Run merge with the mock
+INPUT=$(jq -n \
+  --arg cmd "gh pr merge https://github.com/Garsson-io/nanoclaw/pull/50 --squash --delete-branch --auto" \
+  --arg out "✓ Pull request merged" '{
+  tool_name: "Bash",
+  tool_input: { command: $cmd },
+  tool_response: { stdout: $out, stderr: "", exit_code: 0 }
+}')
+OUTPUT=$(echo "$INPUT" | PATH="$AUTOCLOSE_MOCK:$PATH" bash "$HOOK" 2>/dev/null)
+
+# INVARIANT: Auto-close called for both referenced issues
+if grep -q "123" "$AUTOCLOSE_LOG" 2>/dev/null; then
+  echo "  PASS: issue #123 close attempted"
+  ((PASS++))
+else
+  echo "  FAIL: issue #123 close NOT attempted"
+  echo "    log: $(cat $AUTOCLOSE_LOG 2>/dev/null)"
+  ((FAIL++))
+fi
+
+if grep -q "456" "$AUTOCLOSE_LOG" 2>/dev/null; then
+  echo "  PASS: issue #456 close attempted"
+  ((PASS++))
+else
+  echo "  FAIL: issue #456 close NOT attempted"
+  echo "    log: $(cat $AUTOCLOSE_LOG 2>/dev/null)"
+  ((FAIL++))
+fi
+
+rm -f "$AUTOCLOSE_LOG"
+rm -rf "$AUTOCLOSE_MOCK"
+
+echo ""
+echo "=== #283: No kaizen issues in PR body — no close attempts ==="
+
+setup
+
+AUTOCLOSE_LOG=$(mktemp)
+AUTOCLOSE_MOCK=$(mktemp -d)
+cat > "$AUTOCLOSE_MOCK/gh" << MOCK_SCRIPT
+#!/bin/bash
+if echo "\$@" | grep -q "pr view.*--json body"; then
+  echo "Simple bug fix, no kaizen references"
+  exit 0
+elif echo "\$@" | grep -q "pr view.*--json title"; then
+  echo "test PR"
+  exit 0
+elif echo "\$@" | grep -q "pr view.*--json state"; then
+  echo "MERGED"
+  exit 0
+elif echo "\$@" | grep -q "issue close"; then
+  echo "close \$@" >> "$AUTOCLOSE_LOG"
+  exit 0
+fi
+echo "OPEN"
+exit 0
+MOCK_SCRIPT
+chmod +x "$AUTOCLOSE_MOCK/gh"
+
+INPUT=$(jq -n \
+  --arg cmd "gh pr merge https://github.com/Garsson-io/nanoclaw/pull/51 --squash --delete-branch --auto" \
+  --arg out "✓ Pull request merged" '{
+  tool_name: "Bash",
+  tool_input: { command: $cmd },
+  tool_response: { stdout: $out, stderr: "", exit_code: 0 }
+}')
+echo "$INPUT" | PATH="$AUTOCLOSE_MOCK:$PATH" bash "$HOOK" 2>/dev/null > /dev/null
+
+# INVARIANT: No close calls when no kaizen references
+CLOSE_COUNT=$(wc -l < "$AUTOCLOSE_LOG" 2>/dev/null || echo 0)
+assert_eq "#283: no close calls without kaizen refs" "0" "$CLOSE_COUNT"
+
+rm -f "$AUTOCLOSE_LOG"
+rm -rf "$AUTOCLOSE_MOCK"
+
 teardown
 print_results

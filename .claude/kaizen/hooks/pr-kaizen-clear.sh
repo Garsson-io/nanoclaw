@@ -412,6 +412,17 @@ ADVISORY
   fi
 
   clear_state_with_status "needs_pr_kaizen"
+
+  # Write reflection-completed marker so the gate won't re-fire for this PR (kaizen #288).
+  # The marker is keyed by PR URL so multiple PRs in one session each get their own gate.
+  if [ -n "$GATE_PR_URL" ]; then
+    local pr_key
+    pr_key=$(pr_url_to_state_key "$GATE_PR_URL")
+    mkdir -p "$STATE_DIR" 2>/dev/null
+    printf 'PR_URL=%s\nSTATUS=reflected\nBRANCH=%s\n' \
+      "$GATE_PR_URL" "$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)" \
+      > "$STATE_DIR/kaizen-reflected-${pr_key}"
+  fi
   cat <<EOF
 
 PR kaizen gate cleared ($CLEAR_REASON). You may proceed with other work.

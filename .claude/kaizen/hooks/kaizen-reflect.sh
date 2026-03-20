@@ -58,7 +58,15 @@ if [ "$IS_CREATE" = true ]; then
   mkdir -p "$STATE_DIR" 2>/dev/null
   chmod 700 "$STATE_DIR" 2>/dev/null
   KAIZEN_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
-  KAIZEN_STATE_FILE="$STATE_DIR/pr-kaizen-$(pr_url_to_state_key "$PR_URL")"
+
+  # Skip gate if reflection was already submitted for this PR (kaizen #288).
+  # Prevents repeated reflection prompts during post-PR cleanup commands.
+  KAIZEN_PR_KEY=$(pr_url_to_state_key "$PR_URL")
+  if [ -f "$STATE_DIR/kaizen-reflected-${KAIZEN_PR_KEY}" ]; then
+    exit 0
+  fi
+
+  KAIZEN_STATE_FILE="$STATE_DIR/pr-kaizen-${KAIZEN_PR_KEY}"
   printf 'PR_URL=%s\nSTATUS=%s\nBRANCH=%s\n' \
     "$PR_URL" "needs_pr_kaizen" "$KAIZEN_BRANCH" > "$KAIZEN_STATE_FILE"
   chmod 600 "$KAIZEN_STATE_FILE" 2>/dev/null
@@ -130,7 +138,15 @@ if [ "$IS_MERGE" = true ]; then
   mkdir -p "$STATE_DIR" 2>/dev/null
   chmod 700 "$STATE_DIR" 2>/dev/null
   KAIZEN_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
-  KAIZEN_STATE_FILE="$STATE_DIR/pr-kaizen-$(pr_url_to_state_key "$PR_URL")"
+
+  # Skip gate if reflection was already submitted for this PR (kaizen #288).
+  # Prevents repeated reflection prompts during post-merge cleanup commands.
+  KAIZEN_PR_KEY=$(pr_url_to_state_key "$PR_URL")
+  if [ -f "$STATE_DIR/kaizen-reflected-${KAIZEN_PR_KEY}" ]; then
+    exit 0
+  fi
+
+  KAIZEN_STATE_FILE="$STATE_DIR/pr-kaizen-${KAIZEN_PR_KEY}"
   printf 'PR_URL=%s\nSTATUS=%s\nBRANCH=%s\n' \
     "$PR_URL" "needs_pr_kaizen" "$KAIZEN_BRANCH" > "$KAIZEN_STATE_FILE"
   chmod 600 "$KAIZEN_STATE_FILE" 2>/dev/null
@@ -210,6 +226,22 @@ REFLECT
   NOTIFY_TEXT="$(printf '✅ PR merged: %s\n%s\nBranch: %s\n\nCheck CLAUDE.md post-merge procedure for deploy steps.' \
     "$PR_TITLE" "$PR_URL" "$BRANCH")"
   send_telegram_ipc "$NOTIFY_TEXT" >/dev/null 2>&1 || true
+
+  # Auto-close referenced kaizen issues on merge (kaizen #283).
+  # Parse PR body + commit messages for Garsson-io/kaizen#NNN references.
+  if [ -n "$PR_NUM" ] && [ -n "$REPO" ]; then
+    PR_BODY=$(gh pr view "$PR_NUM" --repo "$REPO" --json body --jq '.body' 2>/dev/null || true)
+    # Extract unique kaizen issue numbers from PR body
+    # Patterns: Garsson-io/kaizen#NNN, kaizen/issues/NNN, Closes ...kaizen#NNN
+    KAIZEN_ISSUES=$(echo "$PR_BODY" | grep -oE '(Garsson-io/kaizen#|kaizen/issues/)[0-9]+' | grep -oE '[0-9]+' | sort -u)
+    for ISSUE_NUM in $KAIZEN_ISSUES; do
+      # Only close if the issue is actually open
+      ISSUE_STATE=$(gh issue view "$ISSUE_NUM" --repo Garsson-io/kaizen --json state --jq '.state' 2>/dev/null || true)
+      if [ "$ISSUE_STATE" = "OPEN" ]; then
+        gh issue close "$ISSUE_NUM" --repo Garsson-io/kaizen           --comment "Auto-closed: implementing PR merged ($PR_URL)" 2>/dev/null || true
+      fi
+    done
+  fi
 fi
 
 exit 0
