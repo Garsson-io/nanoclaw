@@ -282,7 +282,7 @@ analyze_worktrees() {
       [ -n "$case_row" ] && case_str="$case_row"
     fi
 
-    printf "  %-42s %7s  %-18s %-22b %-28b %s\n" \
+    printf "  %-42s %7s  %-18s %-22b %-28b %b\n" \
       "$name" "$size_str" "$branch_short" "$lock_str" "$state_parts" "$case_str"
   done
 
