@@ -709,6 +709,57 @@ else
 fi
 
 echo ""
+echo "=== Meta-finding with fixed-in-pr accepted (#231) ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: type "meta" with "fixed-in-pr" is valid (improvement made in this PR)
+META_FIXED_JSON='[
+  {"impediment": "settings fragment drifted", "type": "meta", "disposition": "fixed-in-pr"}
+]'
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
+$META_FIXED_JSON
+IMPEDIMENTS" \
+  "KAIZEN_IMPEDIMENTS:
+$META_FIXED_JSON")
+
+if ! has_pr_kaizen_state; then
+  echo "  PASS: meta-finding with fixed-in-pr cleared gate"
+  ((PASS++))
+else
+  echo "  FAIL: meta-finding with fixed-in-pr did NOT clear gate"
+  ((FAIL++))
+fi
+
+echo ""
+echo "=== Meta-finding with incident rejected (#231) ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: type "meta" with "incident" is rejected (doesn't make semantic sense)
+META_INCIDENT_JSON='[
+  {"impediment": "noticed a pattern", "type": "meta", "disposition": "incident", "ref": "#100"}
+]'
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
+$META_INCIDENT_JSON
+IMPEDIMENTS" \
+  "KAIZEN_IMPEDIMENTS:
+$META_INCIDENT_JSON")
+
+if has_pr_kaizen_state; then
+  echo "  PASS: meta-finding with incident rejected"
+  ((PASS++))
+else
+  echo "  FAIL: meta-finding with incident incorrectly accepted"
+  ((FAIL++))
+fi
+assert_contains "error mentions meta-finding" "meta-finding" "$OUTPUT"
+
+echo ""
 echo "=== Positive finding with no-action+reason accepted (#213) ==="
 
 setup
