@@ -207,6 +207,10 @@ Every kaizen reflection must include meta-reflection on the kaizen system itself
 
 Starting concrete and zooming out produces actionable output. Starting abstract produces abstract output. If any step surfaces an improvement, **file a kaizen issue about the skill or process itself.** The kaizen system is just code and prompts — it should improve as aggressively as the codebase does.
 
+**Additional cross-checks (after the ladder):**
+- **Were all accept-case preventions dispositioned?** If `/accept-case` identified preventions or root causes, list each one and its status: implemented in this PR, filed as issue #N, or not addressed. If any are "not addressed," file them now — a prevention identified but not tracked is a prevention lost.
+- **What prompt change would have made this session better?** Look at your mistakes, wrong turns, and suboptimal outputs. For each one, name the specific skill, the current wording gap, and the proposed improvement. The goal is self-improving prompts — every session should make the next one better.
+
 **Actionability rule:** Every meta-reflection finding MUST have a disposition — either a filed issue (with `ref: "#NNN"`) or an explicit waiver (with reason). An observation without a disposition is decoration, not kaizen. Include meta-reflection findings in your `KAIZEN_IMPEDIMENTS` declaration with `"type": "meta"`:
 
 ```json

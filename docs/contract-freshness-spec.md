@@ -286,3 +286,15 @@ Added after PR #120 (Zod config validation) triggered the same dirty-tree patter
 ### What happened since
 - PR #120 (Zod validation, unrelated) triggered the exact same dirty-tree friction with both `contract.json` and `coverage/`. The spec was merged 2026-03-18 but no implementation followed — the same pain continues.
 - **Recommendation:** Skip further spec work. Implement A1 + B5 + add `coverage/` to `.gitignore`. Total: ~30 minutes.
+
+## 10. Resolution (2026-03-18)
+
+All sub-problems resolved across three PRs:
+
+| Sub-problem | Solution | PR |
+|-------------|----------|-----|
+| A: Test side effect | Tests call `generateContract()` in-memory — no file writes | #124 |
+| B5: Spurious timestamp diffs | Removed `generatedAt` from contract.json — nothing consumed it | #133 |
+| B1a: Manual regen burden | Conditional pre-commit hook auto-regens when surface files change | #133 |
+
+**Kaizen observation:** The spec-to-implementation ratio was ~10:1 (120-line spec for 3 one-line fixes). For low-uncertainty problems like this, a shorter "problem + proposed fix" format would have been more efficient.

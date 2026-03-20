@@ -20,6 +20,7 @@ import {
 } from './channels/registry.js';
 import { initBotPool, sendPoolMessage } from './channels/telegram.js';
 import { activateDevSession } from './dev-session-orchestrator.js';
+import { classifyError } from './error-classify.js';
 import { detectDevSafeWord } from './dev-safe-word.js';
 import { resolveDispatch } from './message-dispatch.js';
 import { tryRouteToDevSession } from './dev-session-router.js';
@@ -726,52 +727,20 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   if (agentResult.status === 'error' || hadError) {
     // Send mechanistic error notification — no LLM needed, pre-canned messages.
     // Users must never be left in silence wondering if the system is broken.
-    const errDetail = (agentResult.errorDetail || '').toLowerCase();
-    let errorMsg: string;
-
-    if (
-      errDetail.includes('rate limit') ||
-      errDetail.includes('rate_limit') ||
-      errDetail.includes('429')
-    ) {
-      errorMsg =
-        '⚠️ API rate limit reached. Your message was received — will retry automatically.';
-    } else if (
-      errDetail.includes('budget') ||
-      errDetail.includes('billing') ||
-      errDetail.includes('insufficient') ||
-      errDetail.includes('credit') ||
-      errDetail.includes('payment') ||
-      errDetail.includes('quota')
-    ) {
-      errorMsg =
-        '⚠️ API budget/billing issue — unable to process requests. Aviad has been notified.';
-    } else if (
-      errDetail.includes('401') ||
-      errDetail.includes('403') ||
-      errDetail.includes('unauthorized') ||
-      errDetail.includes('forbidden') ||
-      errDetail.includes('authentication') ||
-      errDetail.includes('invalid.*key')
-    ) {
-      errorMsg =
-        '⚠️ Authentication error — API access denied. Aviad has been notified.';
-    } else if (
-      errDetail.includes('timeout') ||
-      errDetail.includes('timed out')
-    ) {
-      errorMsg =
-        '⚠️ Request timed out. The task may be too complex — try breaking it into smaller parts.';
-    } else if (
-      errDetail.includes('docker') ||
-      errDetail.includes('container') ||
-      errDetail.includes('spawn')
-    ) {
-      errorMsg = '⚠️ Processing system unavailable. Aviad has been notified.';
-    } else {
-      errorMsg =
-        '⚠️ Something went wrong processing your message. Will retry automatically.';
-    }
+    const errorCategory = classifyError(agentResult.errorDetail || '');
+    const errorMessages: Record<string, string> = {
+      rate_limit:
+        '⚠️ API rate limit reached. Your message was received — will retry automatically.',
+      billing:
+        '⚠️ API budget/billing issue — unable to process requests. Aviad has been notified.',
+      auth: '⚠️ Authentication error — API access denied. Aviad has been notified.',
+      timeout:
+        '⚠️ Request timed out. The task may be too complex — try breaking it into smaller parts.',
+      container: '⚠️ Processing system unavailable. Aviad has been notified.',
+      unknown:
+        '⚠️ Something went wrong processing your message. Will retry automatically.',
+    };
+    const errorMsg = errorMessages[errorCategory];
 
     // Send error notification to user — this is mechanistic, no LLM needed
     await sendResponse(
