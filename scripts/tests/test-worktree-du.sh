@@ -14,78 +14,7 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WORKTREE_DU="$SCRIPT_DIR/../worktree-du.sh"
 
-PASS=0
-FAIL=0
-
-assert_eq() {
-  local test_name="$1"
-  local expected="$2"
-  local actual="$3"
-  if [ "$expected" = "$actual" ]; then
-    echo "  PASS: $test_name"
-    ((PASS++))
-  else
-    echo "  FAIL: $test_name"
-    echo "    expected: '$expected'"
-    echo "    actual:   '$actual'"
-    ((FAIL++))
-  fi
-}
-
-assert_contains() {
-  local test_name="$1"
-  local needle="$2"
-  local haystack="$3"
-  if echo "$haystack" | grep -q "$needle"; then
-    echo "  PASS: $test_name"
-    ((PASS++))
-  else
-    echo "  FAIL: $test_name"
-    echo "    expected to contain: '$needle'"
-    echo "    actual: '$haystack'"
-    ((FAIL++))
-  fi
-}
-
-# Run a command, capture stdout/stderr/exit, and fail on script errors in stderr.
-# Usage: run_capturing COMMAND [ARGS...]
-# Sets: RUN_OUTPUT, RUN_STDERR, RUN_EXIT
-# Known-benign stderr (e.g., git warnings, cli-kaizen resolution) is allowed.
-# Shell/script errors (syntax error, arithmetic, unbound variable, etc.) cause a test failure.
-SCRIPT_ERROR_PATTERN='syntax error|bad substitution|unbound variable|command not found|arithmetic|not a valid identifier|unexpected token'
-run_capturing() {
-  local stderr_file
-  stderr_file=$(mktemp)
-  RUN_EXIT=0
-  RUN_OUTPUT=$("$@" 2>"$stderr_file") || RUN_EXIT=$?
-  RUN_STDERR=$(<"$stderr_file")
-  rm -f "$stderr_file"
-}
-
-assert_no_script_errors() {
-  local test_name="$1"
-  if echo "$RUN_STDERR" | grep -qiE "$SCRIPT_ERROR_PATTERN"; then
-    echo "  FAIL: $test_name — script errors on stderr"
-    echo "    stderr: $RUN_STDERR"
-    ((FAIL++))
-  else
-    echo "  PASS: $test_name"
-    ((PASS++))
-  fi
-}
-
-assert_true() {
-  local test_name="$1"
-  local condition="$2"
-  if eval "$condition"; then
-    echo "  PASS: $test_name"
-    ((PASS++))
-  else
-    echo "  FAIL: $test_name"
-    echo "    condition was false: $condition"
-    ((FAIL++))
-  fi
-}
+source "$SCRIPT_DIR/lib/test-utils.sh"
 
 # Determine the real project root for reference
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -210,10 +139,4 @@ else
   ((PASS++))
 fi
 
-echo ""
-echo "================================"
-echo "Results: $PASS passed, $FAIL failed"
-if [ "$FAIL" -gt 0 ]; then
-  exit 1
-fi
-echo "All tests passed."
+print_results
