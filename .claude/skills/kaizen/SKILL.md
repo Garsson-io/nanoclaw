@@ -56,6 +56,17 @@ Reflection happens at these mandatory checkpoints:
 
 Be specific. Not "we should test more" but "the roeto-session.js stealth plugin import was never tested in the container — need a pre-merge check that runs imports."
 
+### 2.5. ROOT CAUSE CATEGORY CHECK (kaizen #241)
+
+Before classifying individual impediments, ask: **do these impediments share a root cause category?**
+
+- List all impediments identified in step 2
+- Group any that share a common pattern (e.g., "format mismatch", "missing test category", "stale cache")
+- If 2+ impediments share a root cause, **name the category** and file a single kaizen issue for the category — not separate issues for each symptom
+- The category issue is more valuable than the individual symptoms because it enables compound fixes (see `/make-a-dent`)
+
+**Example:** Three impediments — "hook X didn't match format Y", "hook Z expected format W", "test used wrong format" — all share root cause "no format contract between hooks." File one issue for the format contract, not three for the individual mismatches.
+
 ### 3. CLASSIFY the level
 
 ## The Three Levels
@@ -204,6 +215,17 @@ Starting concrete and zooming out produces actionable output. Starting abstract 
 ```
 
 Positive findings (`type: "positive"`) may use `disposition: "no-action"` when the pattern is already working and needs no reinforcement. But if a positive finding is surprising or non-obvious, consider filing it as a reference for future agents.
+
+### Post-cycle ultrathink — escalating structural questions (kaizen #260)
+
+After completing the meta-reflection ladder above, spend one more cycle asking questions that surface **structural** insights the default reflection misses. These questions escalate from session-specific to system-wide:
+
+1. **What category does this session's work belong to?** Not the area label — the *type of improvement*. Was this a symptom fix, a category fix, a prevention mechanism, or a detection mechanism? (Ref: Zen §"The right level matters more than the right fix")
+2. **If this exact type of work recurs in 3 months, what should be different?** The answer reveals missing infrastructure, not missing instructions.
+3. **What assumption did this session validate or invalidate?** Every implementation tests a hypothesis about the system. Name it explicitly.
+4. **What's the smallest mechanism that would have prevented this session from being necessary?** If the answer is "nothing — this was genuinely new work," that's fine. If the answer is a hook, test, or contract, file it.
+
+These questions are intentionally abstract. They produce value when they surface something the concrete ladder missed. If they produce nothing beyond what steps 1-5 already found, say so — don't manufacture insight.
 
 ## Current Enforcement Inventory
 
