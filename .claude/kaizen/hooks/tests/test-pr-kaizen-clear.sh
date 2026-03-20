@@ -68,7 +68,7 @@ else
   ((FAIL++))
 fi
 assert_contains "output mentions gate cleared" "gate cleared" "$OUTPUT"
-assert_contains "output mentions impediment count" "1 impediment" "$OUTPUT"
+assert_contains "output mentions finding count" "1 finding" "$OUTPUT"
 
 echo ""
 echo "=== Empty array with reason clears gate (kaizen #140) ==="
@@ -137,7 +137,7 @@ else
   echo "  FAIL: multi-impediment declaration did NOT clear gate"
   ((FAIL++))
 fi
-assert_contains "output mentions 4 impediments" "4 impediment" "$OUTPUT"
+assert_contains "output mentions 4 findings" "4 finding" "$OUTPUT"
 
 echo ""
 echo "=== Invalid JSON does NOT clear gate ==="
@@ -578,6 +578,29 @@ else
 fi
 
 echo ""
+echo "=== 'finding' field accepted as alias for 'impediment' (kaizen #162) ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: "finding" is accepted as an alias for "impediment" to support
+# the expanded schema from kaizen #162 (meta-reflection actionability)
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
+[{\"finding\": \"DI pattern worked well\", \"type\": \"positive\", \"disposition\": \"no-action\", \"reason\": \"Already established\"}]
+IMPEDIMENTS" \
+  'KAIZEN_IMPEDIMENTS:
+[{"finding": "DI pattern worked well", "type": "positive", "disposition": "no-action", "reason": "Already established"}]')
+
+if ! has_pr_kaizen_state; then
+  echo "  PASS: 'finding' field accepted as alias"
+  ((PASS++))
+else
+  echo "  FAIL: 'finding' field NOT accepted as alias"
+  ((FAIL++))
+fi
+
+echo ""
 echo "=== All-waived reflections: advisory printed, gate still clears (#205) ==="
 
 setup
@@ -603,7 +626,7 @@ else
   echo "  FAIL: all-waived impediments did NOT clear gate"
   ((FAIL++))
 fi
-assert_contains "advisory printed for all-waived" "All impediments waived" "$OUTPUT"
+assert_contains "advisory printed for all-waived" "All findings waived" "$OUTPUT"
 assert_contains "advisory quotes zen" "file the issue" "$OUTPUT"
 
 echo ""
@@ -630,7 +653,7 @@ else
   echo "  FAIL: mixed dispositions did NOT clear gate"
   ((FAIL++))
 fi
-assert_not_contains "no advisory for mixed dispositions" "All impediments waived" "$OUTPUT"
+assert_not_contains "no advisory for mixed dispositions" "All findings waived" "$OUTPUT"
 
 echo ""
 echo "=== Meta-finding with no-action rejected (#213) ==="
@@ -657,6 +680,29 @@ else
   ((FAIL++))
 fi
 assert_contains "error mentions meta-finding" "meta" "$OUTPUT"
+
+echo ""
+echo "=== Meta-finding with no-action rejected using 'finding' field (#213 + #162) ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: Meta-findings with "finding" alias also get disposition validation
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
+[{\"finding\": \"Accept-case found preventions\", \"type\": \"meta\", \"disposition\": \"no-action\", \"reason\": \"Already noted\"}]
+IMPEDIMENTS" \
+  'KAIZEN_IMPEDIMENTS:
+[{"finding": "Accept-case found preventions", "type": "meta", "disposition": "no-action", "reason": "Already noted"}]')
+
+if has_pr_kaizen_state; then
+  echo "  PASS: meta + no-action with finding field rejected"
+  ((PASS++))
+else
+  echo "  FAIL: meta + no-action with finding field incorrectly accepted"
+  ((FAIL++))
+fi
+assert_contains "output mentions meta-finding must be filed or waived" "filed" "$OUTPUT"
 
 echo ""
 echo "=== Meta-finding with waived+reason accepted (#213) ==="
@@ -705,6 +751,28 @@ if ! has_pr_kaizen_state; then
   ((PASS++))
 else
   echo "  FAIL: meta-finding with filed+ref did NOT clear gate"
+  ((FAIL++))
+fi
+
+echo ""
+echo "=== Meta-finding with filed+ref using 'finding' alias (#213 + #162) ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: Meta-findings with "finding" alias and filed+ref are valid
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
+[{\"finding\": \"No CLI entry point\", \"type\": \"meta\", \"disposition\": \"filed\", \"ref\": \"#134\"}]
+IMPEDIMENTS" \
+  'KAIZEN_IMPEDIMENTS:
+[{"finding": "No CLI entry point", "type": "meta", "disposition": "filed", "ref": "#134"}]')
+
+if ! has_pr_kaizen_state; then
+  echo "  PASS: meta + filed + ref with finding alias accepted"
+  ((PASS++))
+else
+  echo "  FAIL: meta + filed + ref with finding alias rejected"
   ((FAIL++))
 fi
 
@@ -884,7 +952,7 @@ else
   echo "  FAIL: single waived did NOT clear gate"
   ((FAIL++))
 fi
-assert_contains "advisory for single waived" "All impediments waived" "$OUTPUT"
+assert_contains "advisory for single waived" "All findings waived" "$OUTPUT"
 
 echo ""
 echo "=== All no-action positive findings get advisory (#205) ==="
@@ -910,7 +978,39 @@ else
   echo "  FAIL: all-positive-no-action did NOT clear gate"
   ((FAIL++))
 fi
-assert_contains "advisory for all passive" "All impediments waived" "$OUTPUT"
+assert_contains "advisory for all passive" "All findings waived" "$OUTPUT"
+
+echo ""
+echo "=== Mixed types with meta + impediment + positive validates correctly (#162) ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: A declaration with both impediments and meta-findings validates
+# each type according to its rules, and accepts "finding" alias
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
+[
+  {\"impediment\": \"Slow CI\", \"disposition\": \"filed\", \"ref\": \"#200\"},
+  {\"finding\": \"Process gap\", \"type\": \"meta\", \"disposition\": \"filed\", \"ref\": \"#201\"},
+  {\"finding\": \"Good pattern\", \"type\": \"positive\", \"disposition\": \"no-action\", \"reason\": \"Validated\"}
+]
+IMPEDIMENTS" \
+  'KAIZEN_IMPEDIMENTS:
+[
+  {"impediment": "Slow CI", "disposition": "filed", "ref": "#200"},
+  {"finding": "Process gap", "type": "meta", "disposition": "filed", "ref": "#201"},
+  {"finding": "Good pattern", "type": "positive", "disposition": "no-action", "reason": "Validated"}
+]')
+
+if ! has_pr_kaizen_state; then
+  echo "  PASS: mixed types with proper dispositions accepted"
+  ((PASS++))
+else
+  echo "  FAIL: mixed types with proper dispositions rejected"
+  ((FAIL++))
+fi
+assert_contains "output mentions 3 findings" "3" "$OUTPUT"
 
 teardown
 print_results

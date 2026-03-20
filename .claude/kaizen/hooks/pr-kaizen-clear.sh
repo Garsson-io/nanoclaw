@@ -1,6 +1,6 @@
 #!/bin/bash
 # Part of kAIzen Agent Control Flow — see .claude/kaizen/README.md
-# pr-kaizen-clear.sh — Level 3 kaizen enforcement (Issue #57, #113, #140)
+# pr-kaizen-clear.sh — Level 3 kaizen enforcement (Issue #57, #113, #140, #162, #205, #213)
 # PostToolUse hook: clears the PR creation kaizen gate when the agent
 # submits a valid KAIZEN_IMPEDIMENTS JSON declaration covering all
 # identified impediments with proper dispositions.
@@ -9,12 +9,18 @@
 #   1. Bash: echo "KAIZEN_IMPEDIMENTS: [...]" (structured impediment declaration)
 #   2. Bash: echo "KAIZEN_NO_ACTION [category]: <reason>" (restricted — kaizen #140)
 #
-# Validation (kaizen #113):
+# Validation (kaizen #113, #162, #213):
 #   - JSON must be a valid array
-#   - Each entry must have "impediment" (non-empty string) and "disposition"
+#   - Each entry must have "impediment" or "finding" (non-empty string) and "disposition"
 #   - disposition "filed" or "incident" requires "ref" field
-#   - disposition "waived" requires "reason" field
+#   - disposition "waived" or "no-action" requires "reason" field
+#   - type "meta" findings: disposition must be "filed" or "waived" (not "no-action")
+#   - type "positive" findings: also allows "no-action" (with reason)
+#   - no type / other: standard dispositions (filed|incident|fixed-in-pr|waived)
 #   - Empty array [] requires a "reason" string after it (kaizen #140)
+#
+# Advisory nudge (kaizen #205):
+#   - When ALL findings are waived/no-action, prints advisory before clearing
 #
 # KAIZEN_NO_ACTION validation (kaizen #140):
 #   - Must include a category: docs-only|formatting|typo|config-only|test-only|trivial-refactor
@@ -167,32 +173,33 @@ EOF
     SHOULD_CLEAR=true
     CLEAR_REASON="no impediments identified ($EMPTY_REASON)"
   else
-    # Validate each entry (type-aware validation — kaizen #205, #213)
+    # Validate each entry (type-aware validation — kaizen #162, #205, #213)
+    # - "finding" accepted as alias for "impediment" (kaizen #162)
     # - type "meta": only filed (with ref) or waived (with reason)
     # - type "positive": also allows no-action (with reason)
     # - no type / other: standard dispositions (filed|incident|fixed-in-pr|waived)
     VALIDATION=$(echo "$JSON" | jq -r '
       [.[] | {
-        impediment: (.impediment // ""),
+        desc: ((.impediment // .finding) // ""),
         type: (.type // ""),
         disposition: (.disposition // ""),
         ref: (.ref // ""),
         reason: (.reason // "")
       } |
-      if .impediment == "" then
-        "missing \"impediment\" field"
+      if .desc == "" then
+        "missing \"impediment\" or \"finding\" field"
       elif .disposition == "" then
-        "missing \"disposition\" for: \(.impediment)"
+        "missing \"disposition\" for: \(.desc)"
       elif .type == "meta" and (.disposition | IN("filed", "fixed-in-pr", "waived") | not) then
-        "meta-finding \"\(.impediment)\" has disposition \"\(.disposition)\" — meta-findings must be \"filed\" (with ref), \"fixed-in-pr\", or \"waived\" (with reason). If it is truly not actionable, use \"waived\" and explain why."
+        "meta-finding \"\(.desc)\" has disposition \"\(.disposition)\" — meta-findings must be \"filed\" (with ref), \"fixed-in-pr\", or \"waived\" (with reason). If it is truly not actionable, use \"waived\" and explain why."
       elif .type == "positive" and (.disposition | IN("filed", "incident", "fixed-in-pr", "waived", "no-action") | not) then
-        "invalid disposition \"\(.disposition)\" for: \(.impediment) (must be filed|incident|fixed-in-pr|waived|no-action)"
+        "invalid disposition \"\(.disposition)\" for: \(.desc) (must be filed|incident|fixed-in-pr|waived|no-action)"
       elif (.type != "meta" and .type != "positive") and (.disposition | IN("filed", "incident", "fixed-in-pr", "waived") | not) then
-        "invalid disposition \"\(.disposition)\" for: \(.impediment) (must be filed|incident|fixed-in-pr|waived)"
+        "invalid disposition \"\(.disposition)\" for: \(.desc) (must be filed|incident|fixed-in-pr|waived)"
       elif (.disposition == "filed" or .disposition == "incident") and .ref == "" then
-        "disposition \"\(.disposition)\" requires \"ref\" field for: \(.impediment)"
+        "disposition \"\(.disposition)\" requires \"ref\" field for: \(.desc)"
       elif (.disposition == "waived" or .disposition == "no-action") and .reason == "" then
-        "disposition \"\(.disposition)\" requires \"reason\" field for: \(.impediment)"
+        "disposition \"\(.disposition)\" requires \"reason\" field for: \(.desc)"
       else
         empty
       end
@@ -208,7 +215,7 @@ EOF
     ALL_PASSIVE=$(echo "$JSON" | jq '[.[] | .disposition] | all(. == "waived" or . == "no-action")' 2>/dev/null)
 
     SHOULD_CLEAR=true
-    CLEAR_REASON="$ITEM_COUNT impediment(s) addressed"
+    CLEAR_REASON="$ITEM_COUNT finding(s) addressed"
   fi
 fi
 
@@ -296,7 +303,7 @@ if [ "$SHOULD_CLEAR" = true ]; then
   if [ "$ALL_PASSIVE" = "true" ]; then
     cat <<'ADVISORY'
 
-All impediments waived — none filed or fixed-in-pr.
+All findings waived — none filed or fixed-in-pr.
 "Every failure is a gift — if you file the issue."
 Are any of these actionable at L2+? If so, file them before proceeding.
 ADVISORY
