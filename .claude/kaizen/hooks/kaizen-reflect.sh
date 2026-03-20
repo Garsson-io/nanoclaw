@@ -10,6 +10,7 @@
 
 source "$(dirname "$0")/lib/parse-command.sh"
 source "$(dirname "$0")/lib/send-telegram-ipc.sh"
+source "$(dirname "$0")/lib/resolve-main-checkout.sh"
 
 INPUT=$(cat)
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
@@ -172,7 +173,7 @@ Valid categories: docs-only, formatting, typo, config-only, test-only, trivial-r
 
 **Also complete post-merge steps** (these are NOT delegated to the subagent):
 - Follow Post-Merge deployment procedure in CLAUDE.md
-- Sync main: \`git -C /home/aviadr1/projects/nanoclaw fetch origin main && git -C /home/aviadr1/projects/nanoclaw merge --ff-only origin/main\`
+- Sync main: \`git -C $MAIN_CHECKOUT fetch origin main && git -C $MAIN_CHECKOUT merge --ff-only origin/main\`
 - Close resolved kaizen issues
 - Delete merged branch and worktree
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

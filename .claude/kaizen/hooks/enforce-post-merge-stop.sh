@@ -18,6 +18,7 @@
 # Exit 0 with JSON {"decision":"block","reason":"..."} = block stop
 
 source "$(dirname "$0")/lib/state-utils.sh"
+source "$(dirname "$0")/lib/resolve-main-checkout.sh"
 
 INPUT=$(cat)
 
@@ -35,7 +36,7 @@ jq -n \
   --arg pr_url "$PR_URL" \
   '{
     decision: "block",
-    reason: ("STOP BLOCKED: Post-merge workflow is incomplete.\n\nPR: " + $pr_url + "\n\nYou MUST complete these steps before finishing:\n\n1. Run `/kaizen` — reflect on impediments, what you'"'"'d do differently, process friction\n2. Mark the case as done (if a case exists for this work)\n3. Sync main: `git -C /home/aviadr1/projects/nanoclaw fetch origin main && git -C /home/aviadr1/projects/nanoclaw merge origin/main --no-edit`\n4. Update linked kaizen issue if applicable\n\nThe /kaizen skill will clear this gate when complete.")
+    reason: ("STOP BLOCKED: Post-merge workflow is incomplete.\n\nPR: " + $pr_url + "\n\nYou MUST complete these steps before finishing:\n\n1. Run `/kaizen` — reflect on impediments, what you'"'"'d do differently, process friction\n2. Mark the case as done (if a case exists for this work)\n3. Sync main: `git -C '"$MAIN_CHECKOUT"' fetch origin main && git -C '"$MAIN_CHECKOUT"' merge origin/main --no-edit`\n4. Update linked kaizen issue if applicable\n\nThe /kaizen skill will clear this gate when complete.")
   }'
 
 exit 0

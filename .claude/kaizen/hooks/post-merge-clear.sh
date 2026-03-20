@@ -16,6 +16,7 @@
 
 source "$(dirname "$0")/lib/state-utils.sh"
 source "$(dirname "$0")/lib/parse-command.sh"
+source "$(dirname "$0")/lib/resolve-main-checkout.sh"
 
 INPUT=$(cat)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
@@ -25,13 +26,13 @@ if [ "$TOOL_NAME" = "Skill" ]; then
   SKILL_NAME=$(echo "$INPUT" | jq -r '.tool_input.skill // empty')
   if [ "$SKILL_NAME" = "kaizen" ]; then
     if clear_state_with_status "needs_post_merge"; then
-      cat <<'EOF'
+      cat <<EOF
 
 Post-merge gate cleared. The /kaizen reflection satisfies the post-merge workflow requirement.
 
 Remember to also:
 - Mark the case as done (if applicable)
-- Sync main: `git -C /home/aviadr1/projects/nanoclaw fetch origin main && git -C /home/aviadr1/projects/nanoclaw merge origin/main --no-edit`
+- Sync main: \`git -C $MAIN_CHECKOUT fetch origin main && git -C $MAIN_CHECKOUT merge origin/main --no-edit\`
 - Update linked kaizen issue
 EOF
     fi
@@ -77,7 +78,7 @@ if [ "$TOOL_NAME" = "Bash" ]; then
 Now complete the post-merge workflow:
 1. **Kaizen reflection (REQUIRED)** — Run \`/kaizen\` NOW to reflect on impediments and process friction
 2. **Mark case done** — if a case exists for this work
-3. **Sync main** — \`git -C /home/aviadr1/projects/nanoclaw fetch origin main && git -C /home/aviadr1/projects/nanoclaw merge origin/main --no-edit\`
+3. **Sync main** — \`git -C $MAIN_CHECKOUT fetch origin main && git -C $MAIN_CHECKOUT merge origin/main --no-edit\`
 4. **Update linked issue** — close the kaizen/tracking issue with lessons learned
 
 ⛔ You will NOT be able to finish until /kaizen is run.
