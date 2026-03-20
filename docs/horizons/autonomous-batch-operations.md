@@ -30,7 +30,7 @@ The vision: a batch runner that operates like a disciplined team lead. It picks 
 
 ## You Are Here
 
-**L1.** `scripts/overnight-dent.sh` exists. It loops `claude-wt -p` with a guidance prompt, logs output to timestamped files, supports `--max-runs`, `--budget`, `--cooldown`, and `--dry-run`. No output parsing, no reporting, no safety beyond budget caps, no strategic intelligence.
+**L2 with L3 basics.** `scripts/overnight-dent.sh` loops `claude-wt -p` with a guidance prompt. Has batch IDs, per-run tagging, output parsing (PRs/issues/cases), structured summaries, cumulative cross-run context. Safety: consecutive failure detection, fast-fail escalating cooldown, graceful SIGTERM/SIGINT shutdown. Not yet implemented: total budget enforcement, admin notifications, strategic planning.
 
 ## What Exists
 

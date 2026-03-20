@@ -19,7 +19,7 @@
 # Usage:
 #   ./scripts/overnight-dent.sh "focus on hooks reliability"
 #   ./scripts/overnight-dent.sh --max-runs 5 --budget 5.00 "improve test coverage"
-#   ./scripts/overnight-dent.sh --total-budget 30.00 "fix area/skills issues"
+#   ./scripts/overnight-dent.sh --max-runs 10 --budget 5.00 "fix area/skills issues"
 #   ./scripts/overnight-dent.sh --dry-run "test the prompt"
 #
 # Logs go to logs/overnight-dent/<batch-id>/
@@ -39,7 +39,7 @@ fi
 MAX_RUNS=0              # 0 = unlimited
 COOLDOWN=30             # seconds between runs
 BUDGET=""               # per-run budget (empty = no limit)
-TOTAL_BUDGET=""         # total batch budget (empty = no limit)
+# TOTAL_BUDGET is not yet implemented (L3 work) — tracked in kaizen #275
 MAX_FAILURES=3          # consecutive failures before stopping
 MIN_RUN_SECONDS=60      # runs shorter than this trigger fast-fail detection
 DRY_RUN=false
@@ -56,7 +56,6 @@ Options:
   --max-runs N         Stop after N iterations (default: unlimited)
   --cooldown N         Seconds between runs (default: 30)
   --budget N.NN        Max USD per run (passed to claude --max-budget-usd)
-  --total-budget N.NN  Max USD for the entire batch
   --max-failures N     Stop after N consecutive failures (default: 3)
   --dry-run            Show what would run without executing
   --help               Show this help
@@ -64,7 +63,7 @@ Options:
 Examples:
   ./scripts/overnight-dent.sh "focus on hooks reliability"
   ./scripts/overnight-dent.sh --max-runs 5 --budget 5.00 "improve test coverage"
-  ./scripts/overnight-dent.sh --total-budget 30.00 --max-runs 10 "fix area/skills issues"
+  ./scripts/overnight-dent.sh --max-runs 10 --budget 5.00 "fix area/skills issues"
 EOF
   exit 0
 }
@@ -76,7 +75,7 @@ while [[ $# -gt 0 ]]; do
     --max-runs) MAX_RUNS="$2"; shift 2 ;;
     --cooldown) COOLDOWN="$2"; shift 2 ;;
     --budget) BUDGET="$2"; shift 2 ;;
-    --total-budget) TOTAL_BUDGET="$2"; shift 2 ;;
+    --total-budget) echo "Warning: --total-budget is not yet enforced (L3 work, see kaizen #275)" >&2; shift 2 ;;
     --max-failures) MAX_FAILURES="$2"; shift 2 ;;
     --dry-run) DRY_RUN=true; shift ;;
     -*) echo "Unknown option: $1" >&2; exit 1 ;;
@@ -102,7 +101,6 @@ ALL_ISSUES_FILED=()
 ALL_ISSUES_CLOSED=()
 ALL_CASES=()
 CONSECUTIVE_FAILURES=0
-TOTAL_SPENT="0"
 STOP_REASON=""
 SHUTTING_DOWN=false
 
@@ -277,7 +275,7 @@ echo "║ Guidance:  $GUIDANCE"
 echo "║ Max runs:  $([ "$MAX_RUNS" -eq 0 ] && echo "unlimited" || echo "$MAX_RUNS")"
 echo "║ Cooldown:  ${COOLDOWN}s"
 [[ -n "$BUDGET" ]] && echo "║ Budget/run: \$$BUDGET"
-[[ -n "$TOTAL_BUDGET" ]] && echo "║ Total budget: \$$TOTAL_BUDGET"
+# --total-budget not yet enforced (L3 work)
 echo "║ Max consecutive failures: $MAX_FAILURES"
 echo "║ Logs:      $LOG_DIR"
 echo "╚══════════════════════════════════════════════════════════╝"

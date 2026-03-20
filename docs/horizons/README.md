@@ -32,7 +32,7 @@ For the full framework design, see [`docs/horizons-framework-spec.md`](../horizo
 | 6 | **Resilience** | L1 (failure detection) | L2 state preservation | [resilience.md](resilience.md) |
 | 7 | **Cost Governance** | L1 (tracking) | L2 per-case budgets | [cost-governance.md](cost-governance.md) |
 | 8 | **Worktree-First Infrastructure** | L0→L1 (ad-hoc fixes) | L2 shared `git-paths.ts` resolver | [worktree-first-infrastructure.md](worktree-first-infrastructure.md) |
-| 9 | **Autonomous Batch Operations** | L1 (basic loop) | L2 tagged runs + output parsing | [autonomous-batch-operations.md](autonomous-batch-operations.md) |
+| 9 | **Autonomous Batch Operations** | L2 (tagged + tracked) | L3 total budget enforcement | [autonomous-batch-operations.md](autonomous-batch-operations.md) |
 
 ### Trust (who can do what, who sees what)
 
