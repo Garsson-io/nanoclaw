@@ -268,9 +268,9 @@ After updating the spec, the landscape has changed:
                        for one PR but the direction is clear.
                        Output: dependency graph, sub-issues.
 
-/kaizen             → Reflection after implementation. What did we learn?
-                       What should we do differently next time?
-                       Output: kaizen reflections, new issues.
+/kaizen             → Reflection after implementation. What impediments
+                       did we encounter? What should the system learn?
+                       Output: structured KAIZEN_IMPEDIMENTS, new issues.
 ```
 
 The flow is usually: `write-prd → accept-case → implement-spec → kaizen`. But it's not always linear — `implement-spec` may loop back to `write-prd` when it discovers the spec needs more detail for the current level, or to `accept-case` when implementation reveals the problem is different than expected.
