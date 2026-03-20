@@ -68,7 +68,7 @@ else
   ((FAIL++))
 fi
 assert_contains "output mentions gate cleared" "gate cleared" "$OUTPUT"
-assert_contains "output mentions impediment count" "1 impediment" "$OUTPUT"
+assert_contains "output mentions finding count" "1 finding" "$OUTPUT"
 
 echo ""
 echo "=== Empty array with reason clears gate (kaizen #140) ==="
@@ -137,7 +137,7 @@ else
   echo "  FAIL: multi-impediment declaration did NOT clear gate"
   ((FAIL++))
 fi
-assert_contains "output mentions 4 impediments" "4 impediment" "$OUTPUT"
+assert_contains "output mentions 4 findings" "4 finding" "$OUTPUT"
 
 echo ""
 echo "=== Invalid JSON does NOT clear gate ==="
@@ -576,6 +576,235 @@ else
   echo "  FAIL: own branch's kaizen state NOT cleared"
   ((FAIL++))
 fi
+
+echo ""
+echo "=== 'finding' field accepted as alias for 'impediment' (kaizen #162) ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: "finding" is accepted as an alias for "impediment" to support
+# the expanded schema from kaizen #162 (meta-reflection actionability)
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
+[{\"finding\": \"DI pattern worked well\", \"type\": \"positive\", \"disposition\": \"no-action\", \"reason\": \"Already established\"}]
+IMPEDIMENTS" \
+  'KAIZEN_IMPEDIMENTS:
+[{"finding": "DI pattern worked well", "type": "positive", "disposition": "no-action", "reason": "Already established"}]')
+
+if ! has_pr_kaizen_state; then
+  echo "  PASS: 'finding' field accepted as alias"
+  ((PASS++))
+else
+  echo "  FAIL: 'finding' field NOT accepted as alias"
+  ((FAIL++))
+fi
+
+echo ""
+echo "=== type: positive with no-action + reason clears gate (kaizen #213) ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: Positive findings with no-action are OK if they have a reason
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
+[{\"finding\": \"Spec doc was accurate\", \"type\": \"positive\", \"disposition\": \"no-action\", \"reason\": \"Pipeline working as designed\"}]
+IMPEDIMENTS" \
+  'KAIZEN_IMPEDIMENTS:
+[{"finding": "Spec doc was accurate", "type": "positive", "disposition": "no-action", "reason": "Pipeline working as designed"}]')
+
+if ! has_pr_kaizen_state; then
+  echo "  PASS: positive + no-action + reason accepted"
+  ((PASS++))
+else
+  echo "  FAIL: positive + no-action + reason rejected"
+  ((FAIL++))
+fi
+
+echo ""
+echo "=== type: meta with no-action is REJECTED (kaizen #213) ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: Meta-findings with disposition "no-action" are rejected.
+# Meta-findings must be "filed" (with ref) or "waived" (with reason).
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
+[{\"finding\": \"Accept-case found preventions\", \"type\": \"meta\", \"disposition\": \"no-action\", \"reason\": \"Already noted\"}]
+IMPEDIMENTS" \
+  'KAIZEN_IMPEDIMENTS:
+[{"finding": "Accept-case found preventions", "type": "meta", "disposition": "no-action", "reason": "Already noted"}]')
+
+if has_pr_kaizen_state; then
+  echo "  PASS: meta + no-action correctly rejected"
+  ((PASS++))
+else
+  echo "  FAIL: meta + no-action incorrectly accepted"
+  ((FAIL++))
+fi
+assert_contains "output mentions meta-finding must be filed or waived" "filed" "$OUTPUT"
+
+echo ""
+echo "=== type: meta with filed + ref clears gate (kaizen #213) ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: Meta-findings with "filed" + ref are valid
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
+[{\"finding\": \"No CLI entry point\", \"type\": \"meta\", \"disposition\": \"filed\", \"ref\": \"#134\"}]
+IMPEDIMENTS" \
+  'KAIZEN_IMPEDIMENTS:
+[{"finding": "No CLI entry point", "type": "meta", "disposition": "filed", "ref": "#134"}]')
+
+if ! has_pr_kaizen_state; then
+  echo "  PASS: meta + filed + ref accepted"
+  ((PASS++))
+else
+  echo "  FAIL: meta + filed + ref rejected"
+  ((FAIL++))
+fi
+
+echo ""
+echo "=== type: meta with waived + reason clears gate (kaizen #213) ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: Meta-findings with "waived" + reason are valid
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
+[{\"finding\": \"Process overhead\", \"type\": \"meta\", \"disposition\": \"waived\", \"reason\": \"One-time edge case\"}]
+IMPEDIMENTS" \
+  'KAIZEN_IMPEDIMENTS:
+[{"finding": "Process overhead", "type": "meta", "disposition": "waived", "reason": "One-time edge case"}]')
+
+if ! has_pr_kaizen_state; then
+  echo "  PASS: meta + waived + reason accepted"
+  ((PASS++))
+else
+  echo "  FAIL: meta + waived + reason rejected"
+  ((FAIL++))
+fi
+
+echo ""
+echo "=== type: positive with no-action WITHOUT reason is rejected ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: Even positive findings with no-action need a reason
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
+[{\"finding\": \"Good pattern\", \"type\": \"positive\", \"disposition\": \"no-action\"}]
+IMPEDIMENTS" \
+  'KAIZEN_IMPEDIMENTS:
+[{"finding": "Good pattern", "type": "positive", "disposition": "no-action"}]')
+
+if has_pr_kaizen_state; then
+  echo "  PASS: positive + no-action without reason rejected"
+  ((PASS++))
+else
+  echo "  FAIL: positive + no-action without reason accepted"
+  ((FAIL++))
+fi
+
+echo ""
+echo "=== All-waived reflections print advisory nudge (kaizen #205) ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: When ALL findings are waived/no-action, print advisory (still clears gate)
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
+[
+  {\"impediment\": \"Slow CI\", \"disposition\": \"waived\", \"reason\": \"One-time\"},
+  {\"impediment\": \"Minor lint\", \"disposition\": \"waived\", \"reason\": \"Not worth filing\"},
+  {\"finding\": \"Good workflow\", \"type\": \"positive\", \"disposition\": \"no-action\", \"reason\": \"Validated\"}
+]
+IMPEDIMENTS" \
+  'KAIZEN_IMPEDIMENTS:
+[
+  {"impediment": "Slow CI", "disposition": "waived", "reason": "One-time"},
+  {"impediment": "Minor lint", "disposition": "waived", "reason": "Not worth filing"},
+  {"finding": "Good workflow", "type": "positive", "disposition": "no-action", "reason": "Validated"}
+]')
+
+# Gate should STILL clear (advisory, not a hard block)
+if ! has_pr_kaizen_state; then
+  echo "  PASS: all-waived reflection still clears gate"
+  ((PASS++))
+else
+  echo "  FAIL: all-waived reflection did NOT clear gate"
+  ((FAIL++))
+fi
+# But advisory should be printed
+assert_contains "advisory nudge printed" "All findings waived" "$OUTPUT"
+
+echo ""
+echo "=== Mixed filed+waived does NOT print advisory ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: When at least one finding is filed/fixed-in-pr, no advisory
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
+[
+  {\"impediment\": \"Slow CI\", \"disposition\": \"filed\", \"ref\": \"#200\"},
+  {\"impediment\": \"Minor lint\", \"disposition\": \"waived\", \"reason\": \"Not worth filing\"}
+]
+IMPEDIMENTS" \
+  'KAIZEN_IMPEDIMENTS:
+[
+  {"impediment": "Slow CI", "disposition": "filed", "ref": "#200"},
+  {"impediment": "Minor lint", "disposition": "waived", "reason": "Not worth filing"}
+]')
+
+if ! has_pr_kaizen_state; then
+  echo "  PASS: mixed filed+waived clears gate"
+  ((PASS++))
+else
+  echo "  FAIL: mixed filed+waived did NOT clear gate"
+  ((FAIL++))
+fi
+assert_not_contains "no advisory for mixed dispositions" "All findings waived" "$OUTPUT"
+
+echo ""
+echo "=== Mixed types with meta + impediment validates correctly ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: A declaration with both impediments and meta-findings validates
+# each type according to its rules
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
+[
+  {\"impediment\": \"Slow CI\", \"disposition\": \"filed\", \"ref\": \"#200\"},
+  {\"finding\": \"Process gap\", \"type\": \"meta\", \"disposition\": \"filed\", \"ref\": \"#201\"},
+  {\"finding\": \"Good pattern\", \"type\": \"positive\", \"disposition\": \"no-action\", \"reason\": \"Validated\"}
+]
+IMPEDIMENTS" \
+  'KAIZEN_IMPEDIMENTS:
+[
+  {"impediment": "Slow CI", "disposition": "filed", "ref": "#200"},
+  {"finding": "Process gap", "type": "meta", "disposition": "filed", "ref": "#201"},
+  {"finding": "Good pattern", "type": "positive", "disposition": "no-action", "reason": "Validated"}
+]')
+
+if ! has_pr_kaizen_state; then
+  echo "  PASS: mixed types with proper dispositions accepted"
+  ((PASS++))
+else
+  echo "  FAIL: mixed types with proper dispositions rejected"
+  ((FAIL++))
+fi
+assert_contains "output mentions 3 findings" "3" "$OUTPUT"
 
 teardown
 print_results
