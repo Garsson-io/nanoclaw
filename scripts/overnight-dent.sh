@@ -46,6 +46,8 @@ usage() {
 overnight-dent — Autonomous batch kaizen runner
 
 Usage: overnight-dent.sh [options] <guidance>
+       overnight-dent.sh --status
+       overnight-dent.sh --halt [batch-id]
 
 Options:
   --max-runs N         Stop after N iterations (default: unlimited)
@@ -53,10 +55,16 @@ Options:
   --budget N.NN        Max USD per run (passed to claude --max-budget-usd)
   --max-failures N     Stop after N consecutive failures (default: 3)
   --dry-run            Show what would run without executing
+  --status             Show status of all batches (active and stopped)
+  --halt [batch-id]    Halt a specific batch, or all active batches
   --help               Show this help
 
 Self-update: between runs, the trampoline pulls main so that merged
 improvements to the runner script take effect on the next iteration.
+
+Halt: Ctrl+C halts from the same terminal. From another terminal:
+  ./scripts/overnight-dent.sh --halt              # halt all active
+  ./scripts/overnight-dent.sh --halt batch-id     # halt one batch
 
 Examples:
   ./scripts/overnight-dent.sh "focus on hooks reliability"
@@ -65,6 +73,18 @@ Examples:
 EOF
   exit 0
 }
+
+# ── Subcommands (handled before main arg parsing) ─────────────────────────────
+CTL_SCRIPT="$SCRIPT_DIR/overnight-dent-ctl.ts"
+
+if [[ "${1:-}" = "--status" ]]; then
+  exec npx tsx "$CTL_SCRIPT" status
+fi
+
+if [[ "${1:-}" = "--halt" ]]; then
+  shift
+  exec npx tsx "$CTL_SCRIPT" halt "$@"
+fi
 
 # ── Arg parsing ───────────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
@@ -92,6 +112,7 @@ BATCH_ID="batch-$(date +%y%m%d-%H%M)-$(printf '%04x' $RANDOM)"
 BATCH_START=$(date +%s)
 LOG_DIR="$REPO_ROOT/logs/overnight-dent/$BATCH_ID"
 mkdir -p "$LOG_DIR"
+HALT_FILE="$LOG_DIR/HALT"
 
 # ── Initialize state file ────────────────────────────────────────────────────
 STATE_FILE="$LOG_DIR/state.json"
@@ -116,7 +137,12 @@ cat > "$STATE_FILE" << STATEOF
   "prs": [],
   "issues_filed": [],
   "issues_closed": [],
-  "cases": []
+  "cases": [],
+  "last_issue": "",
+  "last_pr": "",
+  "last_case": "",
+  "last_branch": "",
+  "last_worktree": ""
 }
 STATEOF
 
@@ -140,6 +166,7 @@ update_state() {
 
 # ── Graceful shutdown ─────────────────────────────────────────────────────────
 SHUTTING_DOWN=false
+HALT_FILE=""  # Set after LOG_DIR is created
 
 handle_shutdown() {
   if [[ "$SHUTTING_DOWN" = true ]]; then return; fi
@@ -149,6 +176,23 @@ handle_shutdown() {
   update_state stop_reason "signal (SIGTERM/SIGINT)"
 }
 trap handle_shutdown SIGTERM SIGINT
+
+# Print last-worked-on state on exit
+print_last_state() {
+  if [[ -n "$STATE_FILE" && -f "$STATE_FILE" ]]; then
+    npx tsx "$CTL_SCRIPT" halt-state "$STATE_FILE" 2>/dev/null || true
+  fi
+}
+
+check_halt_file() {
+  if [[ -n "$HALT_FILE" && -f "$HALT_FILE" ]]; then
+    echo ">>> Halt file detected: $HALT_FILE"
+    update_state stop_reason "halt file (remote request)"
+    SHUTTING_DOWN=true
+    return 0
+  fi
+  return 1
+}
 
 # ── Banner ────────────────────────────────────────────────────────────────────
 echo "╔══════════════════════════════════════════════════════════╗"
@@ -162,6 +206,7 @@ echo "║ Cooldown:  ${COOLDOWN}s"
 echo "║ Max consecutive failures: $MAX_FAILURES"
 echo "║ Logs:      $LOG_DIR"
 echo "║ State:     $STATE_FILE"
+echo "║ Halt:      touch $HALT_FILE  (or --halt from another terminal)"
 echo "║ Self-update: enabled (pulls main between runs)"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
@@ -179,6 +224,7 @@ fi
 # This loop is intentionally minimal. All real logic is in the runner.
 while true; do
   if [[ "$SHUTTING_DOWN" = true ]]; then break; fi
+  check_halt_file && break
 
   # Read current state
   RUN=$(read_state run)
@@ -260,11 +306,20 @@ while true; do
   fi
 
   if [[ "$SHUTTING_DOWN" = true ]]; then break; fi
+  check_halt_file && break
 
-  echo "Cooling down for ${CUR_COOLDOWN}s before next run..."
-  sleep "$CUR_COOLDOWN" &
-  SLEEP_PID=$!
-  wait $SLEEP_PID 2>/dev/null || true
+  # Cooldown with halt file polling (check every 3s)
+  echo "Cooling down for ${CUR_COOLDOWN}s before next run... (touch $HALT_FILE to stop)"
+  COOLDOWN_REMAINING=$CUR_COOLDOWN
+  while [[ "$COOLDOWN_REMAINING" -gt 0 ]]; do
+    POLL_INTERVAL=$(( COOLDOWN_REMAINING < 3 ? COOLDOWN_REMAINING : 3 ))
+    sleep "$POLL_INTERVAL" &
+    SLEEP_PID=$!
+    wait $SLEEP_PID 2>/dev/null || true
+    COOLDOWN_REMAINING=$((COOLDOWN_REMAINING - POLL_INTERVAL))
+    if [[ "$SHUTTING_DOWN" = true ]]; then break; fi
+    check_halt_file && break 2
+  done
 done
 
 # ── Batch summary ─────────────────────────────────────────────────────────────
@@ -328,3 +383,6 @@ node -e "
   fs.writeFileSync(summaryPath, lines + '\n');
   console.log('Summary: ' + summaryPath);
 " "$STATE_FILE"
+
+# Print last-worked-on state for easy resume
+print_last_state
