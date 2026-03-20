@@ -32,25 +32,26 @@ For the full framework design, see [`docs/horizons-framework-spec.md`](../horizo
 | 6 | **Resilience** | L1 (failure detection) | L2 state preservation | [resilience.md](resilience.md) |
 | 7 | **Cost Governance** | L1 (tracking) | L2 per-case budgets | [cost-governance.md](cost-governance.md) |
 | 8 | **Worktree-First Infrastructure** | L0→L1 (ad-hoc fixes) | L2 shared `git-paths.ts` resolver | [worktree-first-infrastructure.md](worktree-first-infrastructure.md) |
+| 9 | **Autonomous Batch Operations** | L1 (basic loop) | L2 tagged runs + output parsing | [autonomous-batch-operations.md](autonomous-batch-operations.md) |
 
 ### Trust (who can do what, who sees what)
 
 | # | Horizon | Current | Next Step | Doc |
 |---|---------|---------|-----------|-----|
-| 9 | **Security** | L1-2 (least privilege + credential proxy) | L3 input sanitization | [security.md](security.md) |
-| 10 | **Human-Agent Interface** | L0 (raw output) | L1 plain-language summaries | [human-agent-interface.md](human-agent-interface.md) |
+| 10 | **Security** | L1-2 (least privilege + credential proxy) | L3 input sanitization | [security.md](security.md) |
+| 11 | **Human-Agent Interface** | L0 (raw output) | L1 plain-language summaries | [human-agent-interface.md](human-agent-interface.md) |
 
 ### Platform (how the system grows)
 
 | # | Horizon | Current | Next Step | Doc |
 |---|---------|---------|-----------|-----|
-| 11 | **Extensibility** | L1-2 (documented extension points) | L3 validated integration | [extensibility.md](extensibility.md) |
+| 12 | **Extensibility** | L1-2 (documented extension points) | L3 validated integration | [extensibility.md](extensibility.md) |
 
 ## Dormant Horizons
 
 | # | Horizon | Activation Signal | Doc |
 |---|---------|-------------------|-----|
-| 12 | **Scalability** | 3+ active verticals | [scalability.md](scalability.md) |
+| 13 | **Scalability** | 3+ active verticals | [scalability.md](scalability.md) |
 
 ## Meta
 
@@ -89,5 +90,8 @@ Observability → feeds → Incident-Driven Kaizen → feeds → Autonomous Kaiz
 
 Human-Agent Interface → gates → Autonomous Kaizen L7 (auto-merge needs trust)
 Worktree-First Infra  → prerequisite → Autonomous Kaizen L6+ (agents always in worktrees)
+Autonomous Batch Ops  → operationalizes → Autonomous Kaizen (the runner that makes it real)
+Cost Governance L2+   → prerequisite → Autonomous Batch Ops L3 (per-run budgets)
+Observability L2+     → prerequisite → Autonomous Batch Ops L5 (outcome tracking)
 Horizon Completeness  → discovers → new horizons across all categories
 ```
