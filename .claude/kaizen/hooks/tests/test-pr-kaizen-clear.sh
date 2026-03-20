@@ -710,9 +710,9 @@ echo "=== Meta-finding with waived+reason accepted (#213) ==="
 setup
 create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
 
-# INVARIANT: type "meta" with "waived" + reason is valid
+# INVARIANT: type "meta" with "waived" + reason + impact_minutes is valid (kaizen #280)
 META_WAIVED_JSON='[
-  {"impediment": "could improve naming", "type": "meta", "disposition": "waived", "reason": "cosmetic only, not worth an issue"}
+  {"impediment": "could improve naming", "type": "meta", "disposition": "waived", "reason": "cosmetic only, no agent time lost", "impact_minutes": 1}
 ]'
 OUTPUT=$(run_posttool_bash \
   "echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
@@ -936,7 +936,7 @@ setup
 create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
 
 SINGLE_WAIVED_JSON='[
-  {"impediment": "minor issue", "disposition": "waived", "reason": "not worth filing"}
+  {"impediment": "minor issue", "disposition": "waived", "reason": "one-time occurrence, already resolved in this PR"}
 ]'
 OUTPUT=$(run_posttool_bash \
   "echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
