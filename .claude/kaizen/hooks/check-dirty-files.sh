@@ -35,10 +35,20 @@ else
   exit 0
 fi
 
+
+# Fix cross-worktree false positive (kaizen #232):
+# When the command uses `git -C <path> push`, check status in the target path,
+# not the CWD. Without this, pushing from worktree B while CWD is worktree A
+# falsely blocks on worktree A's dirty files.
+GIT_C_FLAG=""
+TARGET_DIR=$(extract_git_c_path "$CMD_LINE")
+if [ -n "$TARGET_DIR" ]; then
+  GIT_C_FLAG="-C $TARGET_DIR"
+fi
 # Get dirty files, excluding noise patterns and lifecycle-managed files
 # Uses git status --porcelain: first two chars are status, then filename
 # .worktree-lock.json: managed by worktree lifecycle (kaizen #225)
-DIRTY=$(git status --porcelain 2>/dev/null | \
+DIRTY=$(git $GIT_C_FLAG status --porcelain 2>/dev/null | \
   grep -vE '(node_modules/|\.DS_Store|dist/|\.tsbuildinfo|\.env\.local|\.worktree-lock\.json)' || true)
 
 # No dirty files → allow

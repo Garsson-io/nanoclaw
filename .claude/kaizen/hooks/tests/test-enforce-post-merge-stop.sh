@@ -159,3 +159,19 @@ fi
 
 teardown
 print_results
+
+echo ""
+echo "=== Stacked PRs: multiple post-merge states shown (kaizen #279) ==="
+
+reset_state
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+create_post_merge_state "https://github.com/Garsson-io/nanoclaw/pull/100" "needs_post_merge" "$CURRENT_BRANCH"
+create_post_merge_state "https://github.com/Garsson-io/nanoclaw/pull/101" "needs_post_merge" "$CURRENT_BRANCH"
+create_post_merge_state "https://github.com/Garsson-io/nanoclaw/pull/102" "needs_post_merge" "$CURRENT_BRANCH"
+
+OUTPUT=$(echo '{}' | bash "$HOOK" 2>/dev/null)
+assert_contains "stacked PRs: block includes count" "3 PRs" "$OUTPUT"
+assert_contains "stacked PRs: includes first PR" "pull/100" "$OUTPUT"
+assert_contains "stacked PRs: includes second PR" "pull/101" "$OUTPUT"
+assert_contains "stacked PRs: includes third PR" "pull/102" "$OUTPUT"
+assert_contains "stacked PRs: mentions one invocation clears all" "clears ALL" "$OUTPUT"

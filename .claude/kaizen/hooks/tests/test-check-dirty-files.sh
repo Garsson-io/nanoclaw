@@ -125,3 +125,52 @@ assert_contains "real file listed" "real-change" "$OUTPUT"
 assert_not_contains "worktree-lock not listed as dirty" "worktree-lock" "$OUTPUT"
 
 print_results
+
+echo ""
+echo "=== Cross-worktree: git -C targets correct directory (kaizen #232) ==="
+
+# Create a mock git that differentiates based on -C flag
+cat > "$MOCK_DIR/git" << 'MOCK'
+#!/bin/bash
+# When -C /clean/worktree, return clean status
+if echo "$@" | grep -q "\-C /clean/worktree"; then
+  if echo "$@" | grep -q "status --porcelain"; then
+    # Clean worktree
+    exit 0
+  fi
+fi
+# When -C /dirty/worktree or no -C (CWD), return dirty status
+if echo "$@" | grep -q "status --porcelain"; then
+  echo " M src/dirty-in-cwd.ts"
+  exit 0
+fi
+/usr/bin/git "$@"
+MOCK
+chmod +x "$MOCK_DIR/git"
+
+# Push with -C to clean worktree should be allowed even if CWD is dirty
+OUTPUT=$(run_hook "$HOOK" "git -C /clean/worktree push origin main")
+assert_eq "push to clean worktree via -C is allowed" "" "$OUTPUT"
+
+# Push without -C should be blocked (dirty CWD)
+OUTPUT=$(run_hook "$HOOK" "git push origin main")
+assert_contains "push without -C blocked (dirty CWD)" "deny" "$OUTPUT"
+
+# Push with -C to another path (mock returns dirty for everything else)
+cat > "$MOCK_DIR/git" << 'MOCK'
+#!/bin/bash
+if echo "$@" | grep -q "\-C /dirty/other"; then
+  if echo "$@" | grep -q "status --porcelain"; then
+    echo " M src/dirty-remote.ts"
+    exit 0
+  fi
+fi
+if echo "$@" | grep -q "status --porcelain"; then
+  exit 0
+fi
+/usr/bin/git "$@"
+MOCK
+chmod +x "$MOCK_DIR/git"
+
+OUTPUT=$(run_hook "$HOOK" "git -C /dirty/other push origin main")
+assert_contains "push to dirty worktree via -C is blocked" "deny" "$OUTPUT"

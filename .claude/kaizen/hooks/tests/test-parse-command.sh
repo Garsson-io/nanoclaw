@@ -265,3 +265,32 @@ assert_eq "works with --auto flag" \
   "$(reconstruct_pr_url "gh pr merge 150 --repo Garsson-io/nanoclaw --squash --delete-branch --auto" "" "" "merge")"
 
 print_results
+
+echo ""
+echo "=== extract_git_c_path ==="
+
+source "$(dirname "$0")/../lib/parse-command.sh"
+
+RESULT=$(extract_git_c_path "git -C /path/to/worktree push origin main")
+assert_eq "extracts -C path from git push" "/path/to/worktree" "$RESULT"
+
+RESULT=$(extract_git_c_path "git -C /home/user/projects/repo push")
+assert_eq "extracts -C path with deep path" "/home/user/projects/repo" "$RESULT"
+
+RESULT=$(extract_git_c_path "git push origin main")
+assert_eq "no -C returns empty" "" "$RESULT"
+
+RESULT=$(extract_git_c_path "git -C /worktree1 push && git -C /worktree2 push")
+assert_eq "extracts first -C from chained commands" "/worktree1" "$RESULT"
+
+echo ""
+echo "=== is_git_command with -C flag ==="
+
+is_git_command "git -C /some/path push origin main" "push" && RESULT="matched" || RESULT="no match"
+assert_eq "git -C path push matches push" "matched" "$RESULT"
+
+is_git_command "git -C /some/path fetch origin" "push" && RESULT="matched" || RESULT="no match"
+assert_eq "git -C path fetch does not match push" "no match" "$RESULT"
+
+is_git_command "git -C /some/path push" "push" && RESULT="matched" || RESULT="no match"
+assert_eq "git -C path push (no remote) matches push" "matched" "$RESULT"

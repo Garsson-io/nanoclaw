@@ -426,3 +426,72 @@ teardown
 rm -rf "$DEFAULT_MOCK_DIR"
 
 print_results
+
+echo ""
+echo "=== find_all_states_with_status: finds all matching (kaizen #279) ==="
+
+reset_state
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+create_post_merge_state "https://github.com/Garsson-io/nanoclaw/pull/10" "needs_post_merge" "$CURRENT_BRANCH"
+create_post_merge_state "https://github.com/Garsson-io/nanoclaw/pull/11" "needs_post_merge" "$CURRENT_BRANCH"
+create_post_merge_state "https://github.com/Garsson-io/nanoclaw/pull/12" "awaiting_merge" "$CURRENT_BRANCH"
+
+ALL=$(find_all_states_with_status "needs_post_merge")
+COUNT=$(echo "$ALL" | wc -l | tr -d ' ')
+assert_eq "find_all finds 2 needs_post_merge states" "2" "$COUNT"
+assert_contains "find_all includes PR 10" "pull/10" "$ALL"
+assert_contains "find_all includes PR 11" "pull/11" "$ALL"
+assert_not_contains "find_all excludes awaiting_merge" "pull/12" "$ALL"
+
+echo ""
+echo "=== find_all_states_with_status: returns failure when none ==="
+
+reset_state
+find_all_states_with_status "needs_post_merge" > /dev/null 2>&1 && RESULT="found" || RESULT="not found"
+assert_eq "find_all returns failure when empty" "not found" "$RESULT"
+
+echo ""
+echo "=== find_all_states_with_status: respects cross-worktree isolation ==="
+
+reset_state
+create_post_merge_state "https://github.com/Garsson-io/nanoclaw/pull/20" "needs_post_merge" "$CURRENT_BRANCH"
+create_post_merge_state "https://github.com/Garsson-io/nanoclaw/pull/21" "needs_post_merge" "other-branch"
+
+ALL=$(find_all_states_with_status "needs_post_merge")
+COUNT=$(echo "$ALL" | wc -l | tr -d ' ')
+assert_eq "find_all only finds own branch" "1" "$COUNT"
+assert_contains "find_all includes own branch PR" "pull/20" "$ALL"
+
+echo ""
+echo "=== clear_all_states_with_status: clears all matching (kaizen #279) ==="
+
+reset_state
+create_post_merge_state "https://github.com/Garsson-io/nanoclaw/pull/30" "needs_post_merge" "$CURRENT_BRANCH"
+create_post_merge_state "https://github.com/Garsson-io/nanoclaw/pull/31" "needs_post_merge" "$CURRENT_BRANCH"
+create_post_merge_state "https://github.com/Garsson-io/nanoclaw/pull/32" "awaiting_merge" "$CURRENT_BRANCH"
+
+clear_all_states_with_status "needs_post_merge"
+REMAINING=$(find_all_states_with_status "needs_post_merge" 2>/dev/null)
+assert_eq "clear_all removed all needs_post_merge" "" "$REMAINING"
+
+# awaiting_merge should still exist
+AWAITING=$(find_state_with_status "awaiting_merge")
+assert_contains "clear_all preserved awaiting_merge" "pull/32" "$AWAITING"
+
+echo ""
+echo "=== clear_all_states_with_status: only clears own branch ==="
+
+reset_state
+create_post_merge_state "https://github.com/Garsson-io/nanoclaw/pull/40" "needs_post_merge" "$CURRENT_BRANCH"
+create_post_merge_state "https://github.com/Garsson-io/nanoclaw/pull/41" "needs_post_merge" "other-branch"
+
+clear_all_states_with_status "needs_post_merge"
+# The other branch's state should still exist (as a file, even though find won't return it)
+OTHER_FILE="$STATE_DIR/post-merge-Garsson-io_nanoclaw_41"
+if [ -f "$OTHER_FILE" ]; then
+  echo "  PASS: other branch's state preserved"
+  ((PASS++))
+else
+  echo "  FAIL: other branch's state was deleted"
+  ((FAIL++))
+fi
