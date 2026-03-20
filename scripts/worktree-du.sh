@@ -16,7 +16,7 @@ set -euo pipefail
 
 # Resolve project root — works from any worktree or main checkout
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --git-common-dir 2>/dev/null | sed 's|/\.git$||')"
+PROJECT_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null)"
 if [ -z "$PROJECT_ROOT" ] || [ ! -d "$PROJECT_ROOT" ]; then
   PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 fi
