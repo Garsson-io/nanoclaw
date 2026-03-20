@@ -40,7 +40,7 @@ interface BatchState {
   stop_reason: string;
 }
 
-interface RunResult {
+export interface RunResult {
   prs: string[];
   issuesFiled: string[];
   issuesClosed: string[];
@@ -132,7 +132,10 @@ function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max - 1) + '\u2026' : s;
 }
 
-function formatToolUse(name: string, input: Record<string, any>): string {
+export function formatToolUse(
+  name: string,
+  input: Record<string, any>,
+): string {
   switch (name) {
     case 'Read':
       return `Read ${truncate(input?.file_path || '?', 60)}`;
@@ -159,7 +162,7 @@ function formatToolUse(name: string, input: Record<string, any>): string {
   }
 }
 
-function extractArtifacts(text: string, result: RunResult): void {
+export function extractArtifacts(text: string, result: RunResult): void {
   for (const m of text.matchAll(
     /https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+/g,
   )) {
@@ -180,7 +183,7 @@ function extractArtifacts(text: string, result: RunResult): void {
   }
 }
 
-function checkStopSignal(text: string, result: RunResult): void {
+export function checkStopSignal(text: string, result: RunResult): void {
   const match = text.match(/OVERNIGHT_STOP:\s*(.+)/);
   if (match) {
     result.stopRequested = true;
@@ -188,7 +191,7 @@ function checkStopSignal(text: string, result: RunResult): void {
   }
 }
 
-function processStreamMessage(
+export function processStreamMessage(
   msg: Record<string, any>,
   result: RunResult,
   runStart: number,
@@ -482,7 +485,14 @@ async function main(): Promise<void> {
   process.exit(exitCode);
 }
 
-main().catch((err) => {
-  console.error('Fatal error:', err);
-  process.exit(1);
-});
+// Guard: don't run main() when imported for testing
+const isDirectRun =
+  process.argv[1]?.endsWith('overnight-dent-run.ts') ||
+  process.argv[1]?.endsWith('overnight-dent-run.js');
+
+if (isDirectRun) {
+  main().catch((err) => {
+    console.error('Fatal error:', err);
+    process.exit(1);
+  });
+}
