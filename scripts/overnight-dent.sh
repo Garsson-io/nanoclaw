@@ -166,7 +166,6 @@ update_state() {
 
 # ── Graceful shutdown ─────────────────────────────────────────────────────────
 SHUTTING_DOWN=false
-HALT_FILE=""  # Set after LOG_DIR is created
 
 handle_shutdown() {
   if [[ "$SHUTTING_DOWN" = true ]]; then return; fi
