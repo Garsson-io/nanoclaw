@@ -12,6 +12,7 @@ import {
   formatToolUse,
   processStreamMessage,
   type RunResult,
+  type BatchState,
 } from './overnight-dent-run.js';
 
 function emptyResult(): RunResult {
