@@ -38,6 +38,6 @@ A living checklist of practices learned from kaizen reflections. Consulted befor
 
 ## Agent Practices
 
-- [ ] **Kaizen level assessment.** For every fix: What level is this? (L1 instructions, L2 hooks, L3 mechanistic) Has this type of failure happened before? If yes, the previous level wasn't enough — escalate. (ref: kaizen skill escalation framework)
+- [ ] **Kaizen level assessment.** See [`policies.md` §1](policies.md) for the full escalation framework. Quick check: What level is this fix? Has this type of failure happened before? If yes, escalate. (ref: kaizen skill escalation framework)
 
 - [ ] **Auto-detect over flags.** When the system can determine context (worktree path, branch name, case association), don't require the agent to pass flags. Make the right thing automatic. (ref: [#210](https://github.com/Garsson-io/kaizen/issues/210) — auto-detect worktree in case-create)

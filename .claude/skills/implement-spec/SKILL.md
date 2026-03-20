@@ -71,6 +71,20 @@ If re-examination reveals something significant has changed (e.g., half the spec
 
 **The spec was written to be complete. Implementation should match the problem.** Not everything in the spec needs to be built right now — but what you do build should be built well. *"Avoiding overengineering is not a license to underengineer."*
 
+## Work Classification — BEFORE writing code (kaizen #257)
+
+Before diving into implementation, classify what TYPE of work this is. Different types have different risk profiles:
+
+| Type | Description | Key risk | Mitigation |
+|------|-------------|----------|------------|
+| **New feature** | Adding capability that doesn't exist | Scope creep, over-engineering | Smallest viable step, ship early |
+| **Bug fix** | Correcting incorrect behavior | Fixing symptoms not root cause | Path-trace the full chain first |
+| **Refactor** | Restructuring without behavior change | Behavior accidentally changes | Tests must pass before AND after |
+| **Split/Extract** | Moving code to a new location | Callers silently break | Grep all callers, update every one |
+| **Integration** | Connecting existing components | Interface mismatch at boundary | Test the boundary, not just each side |
+
+**Why this matters:** A "split/extract" that's treated like a "new feature" will miss caller updates. A "refactor" without the "tests pass before AND after" discipline may silently change behavior. Name the type, apply its discipline.
+
 ## Kaizen Issue Lifecycle Tracking
 
 When implementing work linked to a kaizen issue, maintain the issue's status throughout the lifecycle. This prevents other agents from picking the same work and provides visibility into progress.
@@ -248,6 +262,18 @@ After updating the spec, the landscape has changed:
 - The refined Phase N+1 section is now your implementation target
 
 **Don't treat the spec as a checklist to grind through.** Treat it as a map that gets more detailed as you explore the territory.
+
+## Dogfooding — verify by experiencing the problem path (kaizen #212)
+
+After implementation, **reproduce the original problem and verify it's actually fixed.** This is not the same as running tests — tests verify invariants, dogfooding verifies the user experience.
+
+**Checklist:**
+1. **Identify the original trigger.** What action caused the problem? (e.g., "run `/gap-analysis` when issue #107 is already fixed")
+2. **Reproduce the trigger.** Actually do the thing that used to fail. Don't simulate — experience it.
+3. **Verify the new behavior.** Does it produce the expected output? Is the error gone? Is the UX what you intended?
+4. **Record the result.** Include the dogfooding output in the PR description — it's evidence, not just a claim.
+
+**When to skip:** Pure library refactors with no user-facing behavior change, or when the trigger requires infrastructure you don't have (e.g., testing container behavior without a running container). State why in the PR.
 
 ## Relationship to Other Skills
 

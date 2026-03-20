@@ -52,6 +52,27 @@ Also search for:
 - Test coverage: what's tested, what critical paths have zero coverage
 - CI pipeline: what checks exist, what's missing
 
+### Phase 1.5: Cluster by Shared Root Cause (kaizen #207)
+
+Before classifying gaps, **cluster the open issues by shared root cause**. Individual issues are symptoms; clusters reveal categories.
+
+**How to cluster:**
+1. For each open issue, write a one-line root cause hypothesis (not the symptom — the underlying reason)
+2. Group issues whose root causes share a common theme
+3. Name each cluster (e.g., "format contracts missing", "stale cache assumptions", "skill files lack meta-cognitive checkpoints")
+4. Count the cluster size — clusters of 3+ are high-value targets for `/make-a-dent`
+
+**Output format:**
+```
+Root cause cluster                    | Issues        | Size | Compound fix?
+--------------------------------------|---------------|------|-------------
+Format contracts missing between hooks | #163,#125,#239|   3  | Yes — add format specs
+Skill files lack verification prompts  | #212,#257,#260|   3  | Yes — add checkpoints
+Worktree state assumed but not checked | #233,#232,#196|   3  | Yes — add guards
+```
+
+Clusters feed directly into the "Low-Hanging Fruit" and "Feature PRD Candidates" lists in Phase 5. A cluster with a compound fix is worth more than the sum of its individual issues.
+
 ### Phase 2: Classify Gaps
 
 Organize findings into three categories:
