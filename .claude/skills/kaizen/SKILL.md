@@ -182,17 +182,19 @@ When the kaizen system itself fails (e.g., reflections happen but don't produce 
 
 **Kaizen horizon taxonomy:** See [horizon.md](../../kaizen/horizon.md) for the L0–L8 taxonomy of autonomous kaizen. Current state: L3–L4, with L5 just beginning.
 
-### Meta-reflection — MANDATORY and ACTIONABLE in every kaizen reflection
+### Meta-reflection — concrete-to-abstract ladder (MANDATORY)
 
-Every kaizen reflection must include a meta-reflection on the kaizen system itself. This is what makes the recursion real, not just aspirational.
+Every kaizen reflection must include meta-reflection on the kaizen system itself. This is what makes the recursion real, not just aspirational.
 
-**Questions to ask:**
-- **Are the skills asking the right questions?** Did `/accept-case` surface the right tradeoffs? Did `/implement-spec` check for the right things? Did any skill prompt lead you astray or waste time?
-- **Are the skills asking questions in the right way?** Was a prompt too prescriptive (caused underengineering by encouraging scope reduction)? Too vague (didn't guide useful thinking)?
-- **Are the skills asking about the right things?** Did you encounter friction that no skill addresses? Is there a gap in the workflow where a skill should exist but doesn't?
-- **Did the escalation framework fit?** Was the level classification obvious, or did you struggle with it? Does a new category of fix need a new level?
+**Answer these in order. Each builds on the previous:**
 
-If the answer to any of these is "no" or "I'm not sure," **file a kaizen issue about the skill or process itself.** The kaizen system is just code and prompts — it should improve as aggressively as the codebase does.
+1. **What specific friction did you encounter?** Name the exact moment, not the category. Example: "gap analysis recommended #107 as low-hanging fruit but it was already fixed in PR #210."
+2. **Is there a generalized version of this friction?** Extract the principle — does this apply beyond this session? Example: "any system that recommends action from cached state is vulnerable to cache-code drift."
+3. **What should change in the kaizen system?** Which skill, hook, or process should be different? Example: "gap-analysis should verify recommendations against git log before declaring low-hanging fruit."
+4. **What should change in how kaizen improves itself?** Is the reflection mechanism catching this type of friction? Example: "meta-findings are filed individually but never aggregated — the same friction recurs across sessions without anyone connecting the dots."
+5. **What mechanism would make this automatic?** Don't just identify — propose the enforcement level (L1/L2/L3). Example: "L2.5 — a meta-finding aggregation step in gap-analysis that scans recent KAIZEN_IMPEDIMENTS for patterns."
+
+Starting concrete and zooming out produces actionable output. Starting abstract produces abstract output. If any step surfaces an improvement, **file a kaizen issue about the skill or process itself.** The kaizen system is just code and prompts — it should improve as aggressively as the codebase does.
 
 **Actionability rule:** Every meta-reflection finding MUST have a disposition — either a filed issue (with `ref: "#NNN"`) or an explicit waiver (with reason). An observation without a disposition is decoration, not kaizen. Include meta-reflection findings in your `KAIZEN_IMPEDIMENTS` declaration with `"type": "meta"`:
 
