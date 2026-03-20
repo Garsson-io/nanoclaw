@@ -63,7 +63,7 @@ Branch protection has `strict: true` status checks. Auto-merge is enabled. The a
 1. **Queue**: `gh pr merge <url> --repo Garsson-io/nanoclaw --squash --delete-branch --auto`
 2. **Wait**: `gh pr checks <url> --repo Garsson-io/nanoclaw --watch` or `gh run watch <id>`
 3. **Verify**: `gh pr view <url> --json state --jq .state` → expect `MERGED`
-4. **Sync**: `git -C /home/aviadr1/projects/nanoclaw fetch origin main && git -C /home/aviadr1/projects/nanoclaw merge origin/main --no-edit`
+4. **Sync**: `MAIN_CHECKOUT="$(git worktree list --porcelain | head -1 | sed 's/^worktree //')"; git -C "$MAIN_CHECKOUT" fetch origin main && git -C "$MAIN_CHECKOUT" merge origin/main --no-edit`
 
 **Failure handling** (agent does this autonomously, no human needed):
 - **CI fails**: fix the issue, commit, push. Auto-merge stays queued, CI re-runs.
