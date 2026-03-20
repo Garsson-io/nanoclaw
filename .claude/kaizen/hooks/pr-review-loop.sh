@@ -14,6 +14,7 @@
 
 source "$(dirname "$0")/lib/parse-command.sh"
 source "$(dirname "$0")/lib/state-utils.sh"
+source "$(dirname "$0")/lib/resolve-main-checkout.sh"
 
 DEBUG_LOG="/tmp/pr-review-hook-debug.log"
 echo "[$(date -Iseconds)] pr-review-loop.sh INVOKED" >> "$DEBUG_LOG"
@@ -249,7 +250,7 @@ Now complete the post-merge workflow:
    - src/ changes → needs \`npm run build\` + service restart (~10s downtime)
    - container/Dockerfile → needs \`./container/build.sh\` + restart
    - package.json deps → needs \`npm install\` + build + restart
-3. **Sync main** — \`git -C /home/aviadr1/projects/nanoclaw fetch origin main && git -C /home/aviadr1/projects/nanoclaw merge origin/main --no-edit\`
+3. **Sync main** — \`git -C $MAIN_CHECKOUT fetch origin main && git -C $MAIN_CHECKOUT merge origin/main --no-edit\`
 4. **Update linked issue** — Close the kaizen/tracking issue with lessons learned.
 5. **Spec update** — If a spec/PRD exists, move completed work to "Already Solved".
 
