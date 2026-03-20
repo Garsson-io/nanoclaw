@@ -71,6 +71,17 @@ These are registered in `.claude/settings.json` and fire on Claude Code tool-use
 | `test-*.sh` | Per-hook and integration test files (15+) |
 | `test_hooks.py` | Python-based hook tests |
 
+### System Documents (this directory)
+
+| File | Purpose |
+|------|---------|
+| `policies.md` | Kaizen enforcement policies (#11-17) — recursive kaizen, hooks, MCP, security, isolation, testing, language boundaries |
+| `verification.md` | Verification discipline — path tracing, invariant statements, runtime artifact verification, smoke tests |
+| `workflow.md` | Dev work skill chain — trigger→skill routing for `/pick-work` → `/accept-case` → `/implement-spec` → `/kaizen` |
+| `practices.md` | Engineering practices checklist — consulted before shipping (advisory) |
+| `zen.md` | The Zen of Kaizen — philosophical principles |
+| `horizon.md` | Horizon tracking dimensions |
+
 ### Documentation (`docs/`)
 
 | File | Purpose |
@@ -78,6 +89,12 @@ These are registered in `.claude/settings.json` and fire on Claude Code tool-use
 | `hook-design-principles.md` | Design patterns for writing hooks |
 | `hook-portability-matrix.md` | Maps each hook to its best portable alternative |
 | `hook-migration-plan.md` | Phase plan for moving enforcement to strongest layers |
+
+### Skills (`skills/`)
+
+| Skill | Purpose |
+|-------|---------|
+| `trim-claude-md` | Measure CLAUDE.md, identify bloat, extract to kaizen system or reference docs. Symlinked from `.claude/skills/` for discoverability. |
 
 ### Integration Points (outside this directory)
 
