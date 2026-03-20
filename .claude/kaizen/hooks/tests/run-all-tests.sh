@@ -76,6 +76,11 @@ UNIT_TESTS=(
   "$SCRIPT_DIR/test-kaizen-reflect.sh"
   "$SCRIPT_DIR/test-warn-code-quality.sh"
   "$SCRIPT_DIR/test-worktree-du-cleanup.sh"
+  "$SCRIPT_DIR/test-check-practices.sh"
+  "$SCRIPT_DIR/test-resolve-main-checkout.sh"
+  "$SCRIPT_DIR/test-verify-before-stop.sh"
+  "$SCRIPT_DIR/test-check-cleanup-on-stop.sh"
+  "$SCRIPT_DIR/test-check-wip.sh"
 )
 
 # Bash harness tests (integration + interaction tests)
