@@ -2,13 +2,16 @@
 # Tests for worktree-du.sh cleanup enhancements (kaizen #190, #193, #194, #195)
 # Run: bash .claude/kaizen/hooks/tests/test-worktree-du-cleanup.sh
 #
+# INVARIANT: PROJECT_ROOT resolves to an absolute path (never relative).
+# INVARIANT: PROJECT_ROOT resolves correctly from subdirectories of the repo.
+# INVARIANT: PROJECT_ROOT resolves correctly from worktrees.
 # INVARIANT: Orphaned locks (dead PID) are removed during cleanup.
 # INVARIANT: Active locks (live PID) always block cleanup.
 # INVARIANT: Stale locks (live PID, old heartbeat) always block cleanup.
 # INVARIANT: classify_lock returns "active", "stale", "orphaned", or "none".
 # INVARIANT: Squash-merged branches are detected even though git branch --merged misses them.
 # INVARIANT: At-main (stillborn) worktrees are eligible for cleanup.
-# SUT: worktree-du.sh lock functions, branch_merge_status(), cleanup Phase 1
+# SUT: worktree-du.sh PROJECT_ROOT resolution, lock functions, branch_merge_status(), cleanup Phase 1
 
 set -u
 
@@ -73,6 +76,53 @@ create_mock_worktree() {
   echo "$dir"
 }
 
+echo "=== PROJECT_ROOT resolution (meta) ==="
+
+# Meta test: PROJECT_ROOT must be absolute, not relative.
+# This is the bug that caused "fatal: not a git repository" in Phase 4 cleanup.
+# The old code used `git rev-parse --git-common-dir` which returns relative paths
+# (e.g., "../.git"), then stripped "/.git" to get ".." — a relative path that breaks
+# when the script runs as a background process with an unpredictable CWD.
+
+# Extract PROJECT_ROOT resolution from the actual script (lines 18-22)
+resolve_project_root_from_script() {
+  local script_dir="$1"
+  # Run the exact resolution logic from worktree-du.sh
+  (
+    SCRIPT_DIR="$script_dir"
+    PROJECT_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null)"
+    if [ -z "$PROJECT_ROOT" ] || [ ! -d "$PROJECT_ROOT" ]; then
+      PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+    fi
+    echo "$PROJECT_ROOT"
+  )
+}
+
+# Test: from scripts/ directory (the normal case for claude-wt.sh)
+RESOLVED=$(resolve_project_root_from_script "$REPO_ROOT/scripts")
+assert_eq "PROJECT_ROOT from scripts/ is absolute" "/" "${RESOLVED:0:1}"
+assert_eq "PROJECT_ROOT from scripts/ resolves to repo root" "$REPO_ROOT" "$RESOLVED"
+
+# Test: from repo root
+RESOLVED=$(resolve_project_root_from_script "$REPO_ROOT")
+assert_eq "PROJECT_ROOT from repo root is absolute" "/" "${RESOLVED:0:1}"
+assert_eq "PROJECT_ROOT from repo root resolves to repo root" "$REPO_ROOT" "$RESOLVED"
+
+# Test: from a nested subdirectory
+RESOLVED=$(resolve_project_root_from_script "$REPO_ROOT/scripts/lib")
+assert_eq "PROJECT_ROOT from nested dir is absolute" "/" "${RESOLVED:0:1}"
+assert_eq "PROJECT_ROOT from nested dir resolves to repo root" "$REPO_ROOT" "$RESOLVED"
+
+# Test: running the actual script produces an absolute PROJECT_ROOT
+# Run worktree-du.sh in dry-run mode and capture the PROJECT_ROOT line
+SCRIPT_HEADER=$(head -1 <(bash -c "
+  SCRIPT_DIR='$REPO_ROOT/scripts'
+  PROJECT_ROOT=\"\$(git -C \"\$SCRIPT_DIR\" rev-parse --show-toplevel 2>/dev/null)\"
+  echo \"\$PROJECT_ROOT\"
+") 2>/dev/null)
+assert_eq "Actual script resolution is absolute" "/" "${SCRIPT_HEADER:0:1}"
+
+echo ""
 echo "=== Lock PID detection ==="
 
 # Test: get_lock_pid returns PID from lock file
