@@ -65,9 +65,8 @@ for arg in "$@"; do
   esac
 done
 
-# Resolve cli-kaizen: tsx from source (no build needed) or dist/ fallback
-source "$SCRIPT_DIR/lib/resolve-cli-kaizen.sh" 2>/dev/null || true
-CLI_KAIZEN=$(resolve_cli_kaizen "$PROJECT_ROOT" 2>/dev/null) || CLI_KAIZEN="node $PROJECT_ROOT/dist/cli-kaizen.js"
+# Resolve cli-kaizen (kaizen #209: single-line executable pattern)
+CLI_KAIZEN=$("$SCRIPT_DIR/lib/resolve-cli-kaizen.sh" "$PROJECT_ROOT" 2>/dev/null) || CLI_KAIZEN="node $PROJECT_ROOT/dist/cli-kaizen.js"
 
 # Helpers
 query_db() {
@@ -282,7 +281,7 @@ analyze_worktrees() {
       [ -n "$case_row" ] && case_str="$case_row"
     fi
 
-    printf "  %-42s %7s  %-18s %-22b %-28b %s\n" \
+    printf "  %-42s %7s  %-18s %-22b %-28b %b\n" \
       "$name" "$size_str" "$branch_short" "$lock_str" "$state_parts" "$case_str"
   done
 

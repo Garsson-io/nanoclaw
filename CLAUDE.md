@@ -39,15 +39,16 @@ NanoClaw (harness, public)              Verticals (private repos)
 
 ### Dependency placement rules
 
-| Dependency type | Where it goes | Example |
-|----------------|---------------|---------|
-| Universal system deps | Harness Dockerfile (`container/Dockerfile`) | `chromium`, `git`, `node`, `ghostscript`, `poppler-utils` |
-| Vertical-specific system deps | Declared by vertical, installed in container | `tesseract-ocr` (insurance) |
-| Vertical npm deps | Vertical's `package.json` | `sharp`, `pdfjs-dist` |
-| Domain tools/workflows | Vertical repo | `policy-cache-manager.js`, `workflows/` |
-| Harness infrastructure | This repo | `src/`, `container/`, skills |
+| Dependency type               | Where it goes                                | Example                                                   |
+| ----------------------------- | -------------------------------------------- | --------------------------------------------------------- |
+| Universal system deps         | Harness Dockerfile (`container/Dockerfile`)  | `chromium`, `git`, `node`, `ghostscript`, `poppler-utils` |
+| Vertical-specific system deps | Declared by vertical, installed in container | `tesseract-ocr` (insurance)                               |
+| Vertical npm deps             | Vertical's `package.json`                    | `sharp`, `pdfjs-dist`                                     |
+| Domain tools/workflows        | Vertical repo                                | `policy-cache-manager.js`, `workflows/`                   |
+| Harness infrastructure        | This repo                                    | `src/`, `container/`, skills                              |
 
 **Rules:**
+
 - **NEVER install system packages on the host** (no `sudo apt install`) — system deps go in Dockerfiles. npm deps go in the relevant `package.json` and are installed via `npm install`
 - **Dockerfile cache policy:** Layers are ordered least-frequently-changed → most-frequently-changed. When adding a new dependency, **ADD a new `RUN` layer** at the latest valid position — do NOT modify existing heavy layers (that invalidates all downstream cache and costs minutes in CI). See the cache strategy comments in `container/Dockerfile` for the layer map.
 - **Domain-specific code goes in the vertical repo**, not here
@@ -58,10 +59,10 @@ NanoClaw (harness, public)              Verticals (private repos)
 
 Verticals provide domain-specific configuration via files in their `config/` directory, mounted into containers at `/workspace/extra/{name}/config/`. The harness reads these files and acts on them. This keeps deployment-specific config portable with the repo — no host-level reconfiguration when moving between machines.
 
-| Config file | Purpose | Docs |
-|-------------|---------|------|
+| Config file              | Purpose                                                                    | Docs                                          |
+| ------------------------ | -------------------------------------------------------------------------- | --------------------------------------------- |
 | `config/escalation.yaml` | Escalation policy: admins, gap types, priority signals, notification rules | See `escalation.example.yaml` in any vertical |
-| `config/materials.json` | Material definitions, pricing | Vertical-specific |
+| `config/materials.json`  | Material definitions, pricing                                              | Vertical-specific                             |
 
 The pattern: **harness provides mechanism, vertical provides policy**. The harness knows HOW to create cases, compute priority, and send notifications. The vertical knows WHO the admins are, WHAT gaps matter, and WHEN to notify.
 
@@ -91,18 +92,19 @@ Container (agent-facing MCP tools)          Host (harness)
                                         └──────────────────────────────┘
 ```
 
-| Layer | Naming pattern | Example | Responsibility |
-|-------|---------------|---------|----------------|
-| **MCP tools** (container) | `mcp-*` or in `container/agent-runner/` | `ipc-mcp-stdio.ts` | Agent-facing tool definitions |
-| **IPC dispatcher** | `ipc.ts` | `src/ipc.ts` | File watcher, routing to domain handlers |
-| **IPC domain handlers** | `ipc-{domain}.ts` | `src/ipc-cases.ts` | Domain-specific IPC business logic |
-| **Domain model** | `{domain}.ts` | `src/cases.ts` | Data types, DB ops, lifecycle logic |
-| **Domain policy** | `{domain}-auth.ts` | `src/case-auth.ts` | Authorization gates, policy decisions |
-| **Backend interface** | `{domain}-backend.ts` | `src/case-backend.ts` | Backend-agnostic adapter interface |
-| **Backend implementation** | `{domain}-backend-{provider}.ts` | `src/case-backend-github.ts` | Provider-specific backend (CRM sync) |
-| **Provider API client** | `{provider}-api.ts` | `src/github-api.ts` | Low-level REST API client |
+| Layer                      | Naming pattern                          | Example                      | Responsibility                           |
+| -------------------------- | --------------------------------------- | ---------------------------- | ---------------------------------------- |
+| **MCP tools** (container)  | `mcp-*` or in `container/agent-runner/` | `ipc-mcp-stdio.ts`           | Agent-facing tool definitions            |
+| **IPC dispatcher**         | `ipc.ts`                                | `src/ipc.ts`                 | File watcher, routing to domain handlers |
+| **IPC domain handlers**    | `ipc-{domain}.ts`                       | `src/ipc-cases.ts`           | Domain-specific IPC business logic       |
+| **Domain model**           | `{domain}.ts`                           | `src/cases.ts`               | Data types, DB ops, lifecycle logic      |
+| **Domain policy**          | `{domain}-auth.ts`                      | `src/case-auth.ts`           | Authorization gates, policy decisions    |
+| **Backend interface**      | `{domain}-backend.ts`                   | `src/case-backend.ts`        | Backend-agnostic adapter interface       |
+| **Backend implementation** | `{domain}-backend-{provider}.ts`        | `src/case-backend-github.ts` | Provider-specific backend (CRM sync)     |
+| **Provider API client**    | `{provider}-api.ts`                     | `src/github-api.ts`          | Low-level REST API client                |
 
 **Rules:**
+
 - Backend files (`*-backend*.ts`) handle cloud sync. They never touch IPC or MCP.
 - IPC handlers (`ipc-*.ts`) translate IPC requests into domain operations. They never call provider APIs directly — they go through the domain model or backend adapter.
 - Domain model files (`cases.ts`, `case-auth.ts`) are the single source of truth for business logic. Both IPC handlers and backends depend on them.
@@ -113,6 +115,7 @@ Container (agent-facing MCP tools)          Host (harness)
 There are two case types: **work** (customer tasks) and **dev** (tooling improvements / kaizen). Both use the same case system, same MCP tools, same lifecycle.
 
 **The kaizen loop:**
+
 - Work agents encounter friction → file improvement requests → these become **dev cases** (backed by `Garsson-io/kaizen`)
 - Dev agents also encounter friction → file improvement requests → also become **dev cases**
 - When any case is marked done, the agent reflects on impediments → `case_suggest_dev` → new dev case suggested
@@ -127,42 +130,42 @@ There are two case types: **work** (customer tasks) and **dev** (tooling improve
 
 ## Key Files
 
-| File | Purpose |
-|------|---------|
-| `src/index.ts` | Orchestrator: state, message loop, agent invocation |
-| `src/cases.ts` | Case model, DB ops, workspace management, lifecycle |
-| `src/case-auth.ts` | Case creation authorization gate |
-| `src/case-backend.ts` | Backend-agnostic sync adapter interface |
-| `src/case-backend-github.ts` | GitHub Issues CRM backend implementation |
-| `src/case-router.ts` | Haiku-based message routing to cases |
-| `src/channels/registry.ts` | Channel registry (self-registration at startup) |
-| `src/ipc.ts` | IPC watcher + dispatcher |
-| `src/ipc-cases.ts` | Case lifecycle IPC handlers |
-| `src/github-api.ts` | GitHub REST API client (shared by CRM + kaizen) |
-| `src/router.ts` | Message formatting and outbound routing |
-| `src/config.ts` | Trigger pattern, paths, intervals |
-| `src/container-runner.ts` | Spawns agent containers with mounts |
-| `src/task-scheduler.ts` | Runs scheduled tasks |
-| `src/db.ts` | SQLite operations |
-| `store/messages.db` | SQLite database (messages, chats, cases, api_usage) |
-| `groups/{name}/CLAUDE.md` | Per-group memory (isolated) |
+| File                                | Purpose                                                    |
+| ----------------------------------- | ---------------------------------------------------------- |
+| `src/index.ts`                      | Orchestrator: state, message loop, agent invocation        |
+| `src/cases.ts`                      | Case model, DB ops, workspace management, lifecycle        |
+| `src/case-auth.ts`                  | Case creation authorization gate                           |
+| `src/case-backend.ts`               | Backend-agnostic sync adapter interface                    |
+| `src/case-backend-github.ts`        | GitHub Issues CRM backend implementation                   |
+| `src/case-router.ts`                | Haiku-based message routing to cases                       |
+| `src/channels/registry.ts`          | Channel registry (self-registration at startup)            |
+| `src/ipc.ts`                        | IPC watcher + dispatcher                                   |
+| `src/ipc-cases.ts`                  | Case lifecycle IPC handlers                                |
+| `src/github-api.ts`                 | GitHub REST API client (shared by CRM + kaizen)            |
+| `src/router.ts`                     | Message formatting and outbound routing                    |
+| `src/config.ts`                     | Trigger pattern, paths, intervals                          |
+| `src/container-runner.ts`           | Spawns agent containers with mounts                        |
+| `src/task-scheduler.ts`             | Runs scheduled tasks                                       |
+| `src/db.ts`                         | SQLite operations                                          |
+| `store/messages.db`                 | SQLite database (messages, chats, cases, api_usage)        |
+| `groups/{name}/CLAUDE.md`           | Per-group memory (isolated)                                |
 | `container/skills/agent-browser.md` | Browser automation tool (available to all agents via Bash) |
 
 ## Skills
 
-| Skill | When to Use |
-|-------|-------------|
-| `/setup` | First-time installation, authentication, service configuration |
-| `/customize` | Adding channels, integrations, changing behavior |
-| `/debug` | Container issues, logs, troubleshooting |
-| `/update-nanoclaw` | Bring upstream NanoClaw updates into a customized install |
-| `/contribute-skill` | Build and submit a new skill to the NanoClaw ecosystem |
-| `/qodo-pr-resolver` | Fetch and fix Qodo PR review issues interactively or in batch |
-| `/get-qodo-rules` | Load org- and repo-level coding rules from Qodo before code tasks |
-| `/kaizen` | Recursive process improvement — escalation framework (Level 1→2→3) |
-| `/pick-work` | Intelligently select next kaizen issue — filters claimed, balances epic momentum vs diversity |
-| `/gap-analysis` | Strategic analysis of kaizen backlog — finds tooling/testing gaps, horizon concentration, unnamed dimensions |
-| `/make-a-dent` | Autonomous deep-dive — fix root cause category behind repeated issues, add interaction tests, ship one high-impact PR |
+| Skill               | When to Use                                                                                                           |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `/setup`            | First-time installation, authentication, service configuration                                                        |
+| `/customize`        | Adding channels, integrations, changing behavior                                                                      |
+| `/debug`            | Container issues, logs, troubleshooting                                                                               |
+| `/update-nanoclaw`  | Bring upstream NanoClaw updates into a customized install                                                             |
+| `/contribute-skill` | Build and submit a new skill to the NanoClaw ecosystem                                                                |
+| `/qodo-pr-resolver` | Fetch and fix Qodo PR review issues interactively or in batch                                                         |
+| `/get-qodo-rules`   | Load org- and repo-level coding rules from Qodo before code tasks                                                     |
+| `/kaizen`           | Recursive process improvement — escalation framework (Level 1→2→3)                                                    |
+| `/pick-work`        | Intelligently select next kaizen issue — filters claimed, balances epic momentum vs diversity                         |
+| `/gap-analysis`     | Strategic analysis of kaizen backlog — finds tooling/testing gaps, horizon concentration, unnamed dimensions          |
+| `/make-a-dent`      | Autonomous deep-dive — fix root cause category behind repeated issues, add interaction tests, ship one high-impact PR |
 
 ### Dev work skill chain — MUST follow this workflow
 
@@ -194,6 +197,7 @@ Work is done
 ```
 
 **Key triggers to recognize:**
+
 - **Strategic gap analysis:** "gap analysis", "analyze gaps", "where are problems concentrated", "tooling gaps", "testing gaps" → `/gap-analysis`
 - **Autonomous deep-dive:** "make a dent", "hero mode", "fix the category", "deep dive kaizen", "autonomous fix" → `/make-a-dent`
 - **Selecting work from backlog:** "pick a kaizen", "what's next", "what should we work on", "find work", "choose issue" → `/pick-work`
@@ -255,10 +259,11 @@ These policies were learned from past mistakes. Follow them strictly.
     - **If it's a false positive**, fix the hook. Improve its matching logic, add exclusions with rationale, and add a test case that covers the false-positive scenario. This is recursive kaizen — making the enforcement smarter, not weaker.
     - **If it's a true positive**, fix the underlying issue. The hook is doing its job.
     - **Always add a test** for any hook change in `.claude/kaizen/hooks/tests/`. Hooks without tests are Level 1 pretending to be Level 2.
-14. **MCP tools are Level 3 enforcement points, not passthroughs.** When an agent behavior problem surfaces through an MCP tool, the fix belongs in the tool's logic — validation, auto-detection, or rejection. Don't default to updating the tool's description text (Level 1) when the kaizen rules demand Level 3. The MCP boundary is where agent intent meets system action; that's where policy enforcement belongs. Level 1 description improvements are defense-in-depth on top of Level 3, not a substitute.
-15. **Authoritative security files: do NOT duplicate, do NOT bypass.** Files with `security`, `auth`, or `allowlist` in their name (`case-auth.ts`, `mount-security.ts`, `sender-allowlist.ts`) are the single source of truth for their policy domain. All authorization decisions in that domain MUST go through the authoritative file. Never inline ad-hoc authorization checks elsewhere — call the gate function instead. Changes to these files require careful review and tests.
-16. **Hooks MUST be worktree-isolated.** A hook running in worktree A must NEVER read, modify, or block based on state from worktree B. This is a hard safety invariant — violations cause cross-worktree contamination where one agent's work hijacks another agent's session. All state file iteration MUST go through `lib/state-utils.sh` (`is_state_for_current_worktree`, `list_state_files_for_current_worktree`). Never iterate `/tmp/.pr-review-state/` directly. State files without a BRANCH field are treated as unattributable and skipped.
-17. **Co-commit source and test changes.** Every source file change must have a corresponding test file change in the same PR. Test utilities use the `.test-util.ts` extension (excluded from coverage checks). If a source change genuinely doesn't need tests (e.g., trivial constant change, already covered by existing tests), declare it in the PR body using the `test-exceptions` fenced block — this is public and auditable.
+13. **MCP tools are Level 3 enforcement points, not passthroughs.** When an agent behavior problem surfaces through an MCP tool, the fix belongs in the tool's logic — validation, auto-detection, or rejection. Don't default to updating the tool's description text (Level 1) when the kaizen rules demand Level 3. The MCP boundary is where agent intent meets system action; that's where policy enforcement belongs. Level 1 description improvements are defense-in-depth on top of Level 3, not a substitute.
+14. **Authoritative security files: do NOT duplicate, do NOT bypass.** Files with `security`, `auth`, or `allowlist` in their name (`case-auth.ts`, `mount-security.ts`, `sender-allowlist.ts`) are the single source of truth for their policy domain. All authorization decisions in that domain MUST go through the authoritative file. Never inline ad-hoc authorization checks elsewhere — call the gate function instead. Changes to these files require careful review and tests.
+15. **Hooks MUST be worktree-isolated.** A hook running in worktree A must NEVER read, modify, or block based on state from worktree B. This is a hard safety invariant — violations cause cross-worktree contamination where one agent's work hijacks another agent's session. All state file iteration MUST go through `lib/state-utils.sh` (`is_state_for_current_worktree`, `list_state_files_for_current_worktree`). Never iterate `/tmp/.pr-review-state/` directly. State files without a BRANCH field are treated as unattributable and skipped.
+16. **Co-commit source and test changes.** Every source file change must have a corresponding test file change in the same PR. Test utilities use the `.test-util.ts` extension (excluded from coverage checks). If a source change genuinely doesn't need tests (e.g., trivial constant change, already covered by existing tests), declare it in the PR body using the `test-exceptions` fenced block — this is public and auditable.
+17. **Hook language boundaries: L1-L2 bash, L3-L4 TypeScript.** Simple guards and pattern matching stay in bash. Scripts that need arithmetic, data transformation, error recovery, or their own test assertions belong in TypeScript. The signal: if you're hand-rolling `try/catch` or `expect()` in bash, move to TypeScript. See [`docs/hook-language-boundaries.md`](docs/hook-language-boundaries.md) for the full decision framework and migration plan.
 
 ## Verification Discipline (Kaizen #11, #15, #17)
 
@@ -286,6 +291,7 @@ VERIFICATION: [how the test proves the invariant holds]
 ```
 
 **Anti-patterns to avoid:**
+
 - Testing mocks instead of real code (you're proving your mocks work, not your code)
 - Testing the wrong artifact (e.g., `/app/dist/` when runtime uses `/tmp/dist/`)
 - "All 275 tests pass" when none cover the actual change
@@ -294,6 +300,7 @@ VERIFICATION: [how the test proves the invariant holds]
 
 **Meta tests — MANDATORY for infrastructure scripts:**
 Scripts that resolve paths, detect environments, or set up state used by all subsequent logic MUST have tests that verify the resolution/detection itself — not tests that hardcode the resolved value and only test downstream logic. If a test bypasses the setup that the real script performs, it can't catch bugs in that setup. Examples:
+
 - Path resolution: test that the output is absolute, points to the right directory, works from subdirectories and worktrees
 - Environment detection: test that detection works in the actual environments it will run in (main checkout, worktree, background process)
 - State initialization: test that initialization produces valid state, not just that functions work given pre-initialized state
@@ -301,6 +308,7 @@ Scripts that resolve paths, detect environments, or set up state used by all sub
 ### Runtime Artifact Verification
 
 Always test the **actual deployed artifact**, not just source presence:
+
 - If code is compiled, test the compiled output
 - If code runs in a container, verify inside the container
 - If a mount provides a file, verify the mount exists AND the consumer reads it
@@ -311,6 +319,7 @@ Always test the **actual deployed artifact**, not just source presence:
 When a PR review says a smoke test is needed, **you must perform it before declaring the PR ready**. "Pending manual smoke test" is not an acceptable review outcome — it means the review is incomplete.
 
 Smoke test checklist:
+
 1. **Identify what to smoke test** — the review will name the untested path (e.g., "never hit real GitHub API", "never ran in container")
 2. **Run it** — execute the actual end-to-end path. If it requires credentials or infrastructure you don't have, ask the user to provide them or run the test together.
 3. **Record the result** — include the smoke test output (success or failure) in the PR or review comment.
@@ -324,49 +333,9 @@ Future work, process improvements, and cross-repo engineering proposals are trac
 
 **Issue taxonomy:** See [`docs/issue-taxonomy.md`](docs/issue-taxonomy.md) for labeling requirements, epic lifecycle policy, and incident recording format. Every issue MUST have: `kaizen` + level (`level-1`/`level-2`/`level-3`) + area (`area/hooks`, `area/skills`, etc.). Epics are directions that stay open; specs are deliverables that close when shipped.
 
-## Post-Merge: Deploy & Maintenance Policy
+## Post-Merge: Auto-Deploy
 
-After merging to main, classify the change and follow the appropriate procedure. **Leads (Aviad/Liraz) MUST be notified** via Telegram at every stage.
-
-### Change classification
-
-| Change type | Action needed | Downtime |
-|------------|--------------|----------|
-| CLAUDE.md, docs/ | None — read on next conversation | Zero |
-| Vertical repo (tools, workflows) | None — mounted live into containers | Zero |
-| `src/` code | `npm run build` + service restart | ~10s |
-| `container/Dockerfile` or `agent-runner/` | `./container/build.sh` then restart | Build: 1-5min (zero), restart: ~10s |
-| `package.json` deps | `npm install` + build + restart | ~10s |
-
-### Procedure for restart-required changes
-
-```
-1. CLASSIFY — what action is needed?
-2. PRE-FLIGHT checks:
-   - `git status` on main checkout — must be clean. If dirty, investigate (don't blindly stash).
-   - `docker ps` — verify Docker is available (if container build needed).
-   - `git pull origin main` — ensure main is up to date.
-3. NOTIFY leads BEFORE starting:
-   "🔧 Maintenance: [what changed]. Building now, will restart when ready (~Xmin)."
-4. BUILD while still running (zero downtime during build):
-   - npm install (if deps changed)
-   - npm run build (if src/ changed)
-   - ./container/build.sh (if Dockerfile changed)
-5. If build FAILS → DO NOT restart. Report:
-   "❌ Build failed: [error]. Still running previous version."
-   Stop and investigate.
-6. If build SUCCEEDS → report:
-   "🔧 Build done. Restarting now (~10s downtime)."
-   Then restart the service.
-7. Verify health — can the service respond to messages?
-8. Report completion:
-   "✅ Maintenance complete. New capabilities: [list]."
-   OR "❌ Restart failed: [error]. Investigating."
-```
-
-### For zero-downtime changes
-
-Notify only: "✅ Updated [what]. Active on next conversation, no restart needed."
+After merging to main, sync local main — the `.husky/post-merge` hook automatically triggers `scripts/deploy.sh` which builds, restarts, health-checks, and notifies on Telegram. See [`docs/auto-deploy.md`](docs/auto-deploy.md) for full details.
 
 ### After every merge: sync local main
 
@@ -377,15 +346,16 @@ MAIN_CHECKOUT="$(git worktree list --porcelain | head -1 | sed 's/^worktree //')
 git -C "$MAIN_CHECKOUT" fetch origin main && git -C "$MAIN_CHECKOUT" merge --ff-only origin/main
 ```
 
-This ensures hooks, settings, and CLAUDE.md changes take effect in the current session. Skipping this causes hooks registered in merged PRs to remain inactive. The `git worktree list` resolution works from any worktree and doesn't depend on username or install location.
+This triggers the post-merge hook which handles build + restart + notification automatically. The `git worktree list` resolution works from any worktree and doesn't depend on username or install location.
 
-**NEVER `cd` to the main checkout.** The main checkout is the production instance — other agents may be using it, and dirtying it can cause cross-agent contamination. Always use `git -C` for the sync and stay in your worktree. If you need follow-up work after merge, create a new branch from within your worktree.
+**NEVER `cd` to the main checkout.** The main checkout is the production instance — other agents may be using it, and dirtying it can cause cross-agent contamination. Always use `git -C` for the sync and stay in your worktree.
 
-### Critical rules
+### Deploy safety rules
 
-- **Build BEFORE restart** — never restart with an untested build
-- **Never leave leads uninformed** — they must know if the system is down or degraded
+- **Build BEFORE restart** — if the build fails, old version keeps running
+- **Leads are auto-notified** on Telegram at start, success, and failure
 - **If anything fails, keep running on the old version** — availability > new features
+- **Manual override**: `./scripts/deploy.sh --dry-run` to preview, `--build-only` to skip restart
 
 ## Database
 
@@ -403,6 +373,7 @@ node dist/cli-kaizen.js case-list                              # all cases
 ```
 
 For other tables, query via `better-sqlite3`:
+
 ```bash
 node -e "const db=require('better-sqlite3')('store/messages.db'); console.log(JSON.stringify(db.prepare('SELECT * FROM messages ORDER BY timestamp DESC LIMIT 5').all(), null, 2))"
 ```
@@ -421,6 +392,7 @@ npm run build        # Compile TypeScript
 ```
 
 Service management:
+
 ```bash
 # macOS (launchd)
 launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist
@@ -452,11 +424,13 @@ EOF
 ```
 
 **Common mistakes:**
+
 - Type must be `"message"`, NOT `"send_message"`
 - Directory must be `messages/`, NOT `tasks/`
 - The `tasks/` directory is for scheduled tasks, not direct messages
 
 **Known group JIDs:**
+
 - Garsson: `tg:-5128317012` (folder: `telegram_garsson`)
 
 ## End-of-Session Cleanup
@@ -473,6 +447,7 @@ Before ending a dev session, run through this checklist:
 ## Git Remotes
 
 This is a fork of `qwibitai/nanoclaw`. Remotes:
+
 - `origin` = `Garsson-io/nanoclaw` (our fork — PRs for main go here)
 - `upstream` = `qwibitai/nanoclaw` (upstream — only for skill contributions)
 
@@ -483,6 +458,7 @@ This is a fork of `qwibitai/nanoclaw`. Remotes:
 Branch protection has `strict: true` status checks. Auto-merge is enabled. The agent handles the full merge loop autonomously — do NOT ask the user unless something is genuinely broken after retries.
 
 Required status checks (all must pass before merge):
+
 - **ci** — typecheck, format, contract check, unit tests (harness + agent-runner)
 - **pr-policy** — test coverage for changed source files, verification section in PR body
 - **e2e** — container build + Tier 1 (MCP tool registration) + Tier 2 (IPC round-trip with stub API). Uses BuildKit with GHA cache; skips expensive steps on docs-only PRs via path filter.
@@ -525,6 +501,7 @@ git -C "$MAIN_CHECKOUT" fetch origin main && git -C "$MAIN_CHECKOUT" merge --ff-
 `build.sh` uses per-branch slot rotation: each branch gets `{branch}-current` and `{branch}-previous` tags. `:latest` always tracks the last-built `:current` for backward compatibility. Failed builds leave the current slot unchanged.
 
 **Policy:**
+
 - `./container/build.sh` — build with auto-rotation (no args) or legacy mode (`./container/build.sh <tag>`)
 - `./container/gc.sh` — dry run by default, `--force` to clean stale images. Stale = no worktree + no active case.
 - `./container/status.sh` — shows all images, active/stale status, build cache, soft cap
