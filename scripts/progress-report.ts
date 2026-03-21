@@ -135,12 +135,12 @@ function loadSpiritDocs(): string {
 // ── Narrative Generation (Claude API) ───────────────────────────────────
 
 async function generateNarrative(data: RawData): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-
-  if (!apiKey) {
-    console.log(
-      'No ANTHROPIC_API_KEY — using template-only report (no narrative)',
-    );
+  // Use claude CLI with subscription auth (not raw API key).
+  // The CLI is authed via CLAUDE_ACCESS_TOKEN in CI, or local OAuth.
+  try {
+    execSync('claude --version', { encoding: 'utf8', timeout: 5_000 });
+  } catch {
+    console.log('claude CLI not available — using template-only report');
     return generateTemplateReport(data);
   }
 
@@ -185,34 +185,23 @@ Write a progress report that combines hard data with narrative storytelling. Inc
 ${spirit}`;
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 4096,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-
-    if (!response.ok) {
-      console.error(`API error: ${response.status} ${response.statusText}`);
+    // Use claude CLI with Sonnet for quality narrative.
+    // Auth: subscription token via CLAUDE_ACCESS_TOKEN (CI) or local OAuth.
+    // --dangerously-skip-permissions: non-interactive (CI context)
+    // --max-turns 1: single response, no tool use needed
+    const result = execSync(
+      `claude -p ${JSON.stringify(prompt)} --model claude-sonnet-4-6 --output-format text --max-turns 1 --dangerously-skip-permissions`,
+      { encoding: 'utf8', timeout: 120_000, maxBuffer: 1024 * 1024 },
+    );
+    if (!result.trim()) {
+      console.error('Empty claude CLI response');
       return generateTemplateReport(data);
     }
-
-    const result = (await response.json()) as any;
-    const text = result.content?.[0]?.text;
-    if (!text) {
-      console.error('Empty API response');
-      return generateTemplateReport(data);
-    }
-    return text;
+    return result.trim();
   } catch (e: any) {
-    console.error(`API call failed: ${e.message}`);
+    console.error(
+      `claude CLI failed: ${e.message?.split('\n')[0] || 'unknown error'}`,
+    );
     return generateTemplateReport(data);
   }
 }
