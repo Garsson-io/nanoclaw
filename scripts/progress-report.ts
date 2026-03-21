@@ -187,10 +187,10 @@ ${spirit}`;
   try {
     // Use claude CLI with Sonnet for quality narrative.
     // Auth: subscription token via CLAUDE_ACCESS_TOKEN (CI) or local OAuth.
-    // --bare: skip hooks (this is a standalone report, not a dev session)
-    // --max-turns 1: single response, no tool use
+    // --dangerously-skip-permissions: non-interactive (CI context)
+    // --max-turns 1: single response, no tool use needed
     const result = execSync(
-      `claude -p ${JSON.stringify(prompt)} --model claude-sonnet-4-6 --output-format text --max-turns 1 --bare`,
+      `claude -p ${JSON.stringify(prompt)} --model claude-sonnet-4-6 --output-format text --max-turns 1 --dangerously-skip-permissions`,
       { encoding: 'utf8', timeout: 120_000, maxBuffer: 1024 * 1024 },
     );
     if (!result.trim()) {
