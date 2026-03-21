@@ -413,7 +413,7 @@ Are any of these actionable at L2+? If so, file them before proceeding.
 ADVISORY
   fi
 
-  clear_state_with_status_any_branch "needs_pr_kaizen"
+  clear_state_with_status_any_branch "needs_pr_kaizen" "$GATE_PR_URL"
 
   # Auto-close referenced kaizen issues if PR is merged (kaizen #283)
   auto_close_kaizen_issues "$GATE_PR_URL" 2>/dev/null || true

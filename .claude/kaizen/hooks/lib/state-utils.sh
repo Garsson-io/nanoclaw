@@ -263,13 +263,24 @@ find_state_with_status_any_branch() {
 }
 
 # Clear state with given STATUS across all branches (not branch-scoped).
+# Optional second arg: PR_URL to target a specific state file (kaizen #309).
+# When PR_URL is provided, only clears the file matching both STATUS and PR_URL.
 # Returns 0 if a file was cleared, 1 if none found.
 clear_state_with_status_any_branch() {
   local wanted_status="$1"
+  local wanted_pr_url="${2:-}"
   while IFS= read -r f; do
     local status
     status=$(grep -E '^STATUS=' "$f" 2>/dev/null | head -1 | cut -d= -f2-)
     if [ "$status" = "$wanted_status" ]; then
+      # If a specific PR_URL was requested, only clear that file (kaizen #309)
+      if [ -n "$wanted_pr_url" ]; then
+        local file_pr_url
+        file_pr_url=$(grep -E '^PR_URL=' "$f" 2>/dev/null | head -1 | cut -d= -f2-)
+        if [ "$file_pr_url" != "$wanted_pr_url" ]; then
+          continue
+        fi
+      fi
       rm -f "$f" 2>/dev/null
       return 0
     fi
