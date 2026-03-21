@@ -95,6 +95,7 @@
         "fonts-liberation",
         "fonts-noto-cjk",
         "fonts-noto-color-emoji",
+        "fonts-noto-core",
         "gh",
         "ghostscript",
         "git",
@@ -113,7 +114,8 @@
         "libxshmfence1",
         "poppler-utils",
         "python3",
-        "python3-pip"
+        "python3-pip",
+        "xvfb"
       ],
       "pythonPackages": [
         "Pillow>=10.0",
