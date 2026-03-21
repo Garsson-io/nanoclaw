@@ -1,0 +1,56 @@
+name: Progress Report
+
+on:
+  schedule:
+    # Every 24 hours at 06:00 UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch: # Manual trigger
+
+permissions:
+  contents: read
+  discussions: write
+
+jobs:
+  check-threshold:
+    runs-on: ubuntu-latest
+    outputs:
+      should_report: ${{ steps.check.outputs.should_report }}
+      pr_count: ${{ steps.check.outputs.pr_count }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Check PR threshold (mechanistic — ≥10 PRs in last 48h)
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if npx tsx scripts/progress-report.ts --check-threshold; then
+            echo "should_report=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_report=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  generate-report:
+    needs: check-threshold
+    if: needs.check-threshold.outputs.should_report == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # Full history for git stats
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Generate and post progress report
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: npx tsx scripts/progress-report.ts
