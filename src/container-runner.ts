@@ -28,6 +28,7 @@ import {
   stopContainer,
 } from './container-runtime.js';
 import { detectAuthMode } from './credential-proxy.js';
+import { z } from 'zod';
 import { ContainerOutputSchema } from './schemas.js';
 import { validateAdditionalMounts } from './mount-security.js';
 import { RegisteredGroup, UsageData } from './types.js';
@@ -53,13 +54,7 @@ export interface ContainerInput {
   devModeRequested?: boolean;
 }
 
-export interface ContainerOutput {
-  status: 'success' | 'error';
-  result: string | null;
-  newSessionId?: string;
-  error?: string;
-  usage?: UsageData;
-}
+export type ContainerOutput = z.infer<typeof ContainerOutputSchema>;
 
 interface VolumeMount {
   hostPath: string;

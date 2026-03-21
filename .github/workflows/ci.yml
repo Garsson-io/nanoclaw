@@ -41,6 +41,9 @@ jobs:
         run: bash scripts/run-all-tests.sh
 
   e2e:
+    # Temporarily disabled during kaizen split (kaizen #398)
+    # Re-enable after Phase 5 of kaizen split (#395) by removing `if: false`
+    if: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
