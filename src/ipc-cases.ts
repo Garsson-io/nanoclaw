@@ -53,6 +53,7 @@ import {
   suggestDevCase,
   updateCase,
   updateWorktreeLockHeartbeat,
+  writeWorktreeContext,
 } from './cases.js';
 import type { Case } from './cases.js';
 import { createGitHubIssue, DEV_CASE_ISSUE_REPO } from './github-api.js';
@@ -727,6 +728,22 @@ async function handleCaseCreate(
     },
     'Case created via IPC',
   );
+
+  // Write .worktree-context.json for /agents skill tracking
+  if (worktreePath) {
+    writeWorktreeContext(worktreePath, {
+      case_id: id,
+      case_name: name,
+      description: d.description,
+      ...(githubIssue != null
+        ? {
+            issue_number: githubIssue,
+            issue_repo: `${DEV_CASE_ISSUE_REPO.owner}/${DEV_CASE_ISSUE_REPO.repo}`,
+            issue_url: issueUrl ?? undefined,
+          }
+        : {}),
+    });
+  }
 
   const resultDir = path.join(DATA_DIR, 'ipc', sourceGroup, 'case_results');
   fs.mkdirSync(resultDir, { recursive: true });

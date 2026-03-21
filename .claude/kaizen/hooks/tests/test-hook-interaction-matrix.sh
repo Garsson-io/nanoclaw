@@ -26,6 +26,7 @@ PR_KAIZEN_CLEAR="$HOOKS_DIR/pr-kaizen-clear.sh"
 ENFORCE_PR_REVIEW="$HOOKS_DIR/enforce-pr-review.sh"
 ENFORCE_PR_REVIEW_TOOLS="$HOOKS_DIR/enforce-pr-review-tools.sh"
 PR_REVIEW_LOOP="$HOOKS_DIR/pr-review-loop.sh"
+KAIZEN_REFLECT="$HOOKS_DIR/kaizen-reflect.sh"
 
 setup_test_env
 
@@ -415,8 +416,8 @@ CLEAR_CMD="echo 'KAIZEN_IMPEDIMENTS: [] no process issues'"
 OUTPUT=$(run_posttool_bash "$PR_KAIZEN_CLEAR" "$CLEAR_CMD" "KAIZEN_IMPEDIMENTS: [] no process issues")
 assert_contains "cross-wt: KAIZEN_IMPEDIMENTS clears gate from different branch" "gate cleared" "$OUTPUT"
 
-# Verify state file was actually removed (kaizen-done markers are expected)
-REMAINING=$(ls "$STATE_DIR"/ 2>/dev/null | grep -v '^kaizen-done-' | wc -l)
+# Verify pr-kaizen state file was actually removed (kaizen-done markers are expected — #288)
+REMAINING=$(ls "$STATE_DIR"/pr-kaizen-* 2>/dev/null | wc -l)
 REMAINING=$(echo "$REMAINING" | tr -d ' ')
 assert_eq "cross-wt: state file removed after cross-branch clear" "0" "$REMAINING"
 
@@ -443,10 +444,48 @@ CLEAR_STDOUT="KAIZEN_IMPEDIMENTS: [] cross-worktree lifecycle test"
 OUTPUT=$(run_posttool_bash "$PR_KAIZEN_CLEAR" "$CLEAR_CMD" "$CLEAR_STDOUT")
 assert_contains "cross-wt lifecycle: gate cleared" "gate cleared" "$OUTPUT"
 
-# Step 3: Verify no orphaned state (kaizen-done markers are expected)
-REMAINING=$(ls "$STATE_DIR"/ 2>/dev/null | grep -v '^kaizen-done-' | wc -l)
+# Step 3: Verify no orphaned pr-kaizen state (kaizen-done markers are expected — #288)
+REMAINING=$(ls "$STATE_DIR"/pr-kaizen-* 2>/dev/null | wc -l)
 REMAINING=$(echo "$REMAINING" | tr -d ' ')
 assert_eq "cross-wt lifecycle: no orphaned state files" "0" "$REMAINING"
+
+
+# ================================================================
+# INTERACTION PAIR 4e: kaizen-done marker prevents duplicate gate (#288)
+# After gate cleared for a PR, kaizen-reflect should NOT create new gate
+# ================================================================
+
+echo ""
+echo "--- 4e: kaizen-done marker prevents duplicate gate (#288) ---"
+
+setup
+# Step 1: Create and clear gate for PR #70
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/70"
+CLEAR_CMD="echo 'KAIZEN_IMPEDIMENTS: [] test done marker'"
+CLEAR_STDOUT="KAIZEN_IMPEDIMENTS: [] test done marker"
+run_posttool_bash "$PR_KAIZEN_CLEAR" "$CLEAR_CMD" "$CLEAR_STDOUT" > /dev/null
+
+# Verify kaizen-done marker exists
+DONE_FILES=$(ls "$STATE_DIR"/kaizen-done-* 2>/dev/null | wc -l)
+DONE_FILES=$(echo "$DONE_FILES" | tr -d ' ')
+assert_eq "kaizen-done marker created for #70" "1" "$DONE_FILES"
+
+# Step 2: Simulate merge for same PR — should NOT create new gate
+MERGE_INPUT=$(jq -n '{
+  "tool_input": {"command": "gh pr merge 70 --squash"},
+  "tool_response": {
+    "stdout": "Merged https://github.com/Garsson-io/nanoclaw/pull/70",
+    "stderr": "",
+    "exit_code": "0"
+  }
+}')
+
+echo "$MERGE_INPUT" | IPC_DIR="$HARNESS_TEMP/ipc" SEND_TELEGRAM_IPC_DISABLED=true PATH="$MOCK_DIR:$PATH" bash "$KAIZEN_REFLECT" 2>/dev/null
+
+# Verify no new pr-kaizen state file was created
+GATE_FILES=$(ls "$STATE_DIR"/pr-kaizen-* 2>/dev/null | wc -l)
+GATE_FILES=$(echo "$GATE_FILES" | tr -d ' ')
+assert_eq "no duplicate gate for already-reflected PR #70 (kaizen #288)" "0" "$GATE_FILES"
 
 # ================================================================
 # INTERACTION PAIR 5: Auto-close kaizen issues on merge (#283)
