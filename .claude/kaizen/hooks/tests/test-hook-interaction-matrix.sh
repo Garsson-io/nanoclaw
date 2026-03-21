@@ -415,8 +415,8 @@ CLEAR_CMD="echo 'KAIZEN_IMPEDIMENTS: [] no process issues'"
 OUTPUT=$(run_posttool_bash "$PR_KAIZEN_CLEAR" "$CLEAR_CMD" "KAIZEN_IMPEDIMENTS: [] no process issues")
 assert_contains "cross-wt: KAIZEN_IMPEDIMENTS clears gate from different branch" "gate cleared" "$OUTPUT"
 
-# Verify state file was actually removed
-REMAINING=$(ls "$STATE_DIR"/ 2>/dev/null | wc -l)
+# Verify state file was actually removed (kaizen-done markers are expected)
+REMAINING=$(ls "$STATE_DIR"/ 2>/dev/null | grep -v '^kaizen-done-' | wc -l)
 REMAINING=$(echo "$REMAINING" | tr -d ' ')
 assert_eq "cross-wt: state file removed after cross-branch clear" "0" "$REMAINING"
 
@@ -443,8 +443,8 @@ CLEAR_STDOUT="KAIZEN_IMPEDIMENTS: [] cross-worktree lifecycle test"
 OUTPUT=$(run_posttool_bash "$PR_KAIZEN_CLEAR" "$CLEAR_CMD" "$CLEAR_STDOUT")
 assert_contains "cross-wt lifecycle: gate cleared" "gate cleared" "$OUTPUT"
 
-# Step 3: Verify no orphaned state
-REMAINING=$(ls "$STATE_DIR"/ 2>/dev/null | wc -l)
+# Step 3: Verify no orphaned state (kaizen-done markers are expected)
+REMAINING=$(ls "$STATE_DIR"/ 2>/dev/null | grep -v '^kaizen-done-' | wc -l)
 REMAINING=$(echo "$REMAINING" | tr -d ' ')
 assert_eq "cross-wt lifecycle: no orphaned state files" "0" "$REMAINING"
 
