@@ -170,6 +170,47 @@ clear_state_with_status() {
   return 1
 }
 
+# Find ALL state files matching a given STATUS for the current branch (kaizen #279).
+# Outputs "PR_URL|STATUS" per line. Returns 1 if none found.
+#
+# Usage:
+#   ALL_INFO=$(find_all_states_with_status "needs_post_merge")
+#   echo "$ALL_INFO" | while IFS='|' read -r url status; do ... done
+find_all_states_with_status() {
+  local wanted_status="$1"
+  local found=false
+  while IFS= read -r f; do
+    local status
+    status=$(grep -E '^STATUS=' "$f" 2>/dev/null | head -1 | cut -d= -f2-)
+    if [ "$status" = "$wanted_status" ]; then
+      local pr_url
+      pr_url=$(grep -E '^PR_URL=' "$f" 2>/dev/null | head -1 | cut -d= -f2-)
+      echo "$pr_url|$status"
+      found=true
+    fi
+  done < <(list_state_files_for_current_worktree)
+  if [ "$found" = true ]; then return 0; else return 1; fi
+}
+
+# Clear ALL state files matching a given STATUS for the current branch (kaizen #279).
+# Returns 0 if any files were cleared, 1 if none found.
+#
+# Usage:
+#   clear_all_states_with_status "needs_post_merge"
+clear_all_states_with_status() {
+  local wanted_status="$1"
+  local cleared=false
+  while IFS= read -r f; do
+    local status
+    status=$(grep -E '^STATUS=' "$f" 2>/dev/null | head -1 | cut -d= -f2-)
+    if [ "$status" = "$wanted_status" ]; then
+      rm -f "$f" 2>/dev/null
+      cleared=true
+    fi
+  done < <(list_state_files_for_current_worktree)
+  if [ "$cleared" = true ]; then return 0; else return 1; fi
+}
+
 # Cross-branch state lookup (kaizen #239, #125):
 # When an agent ACTIVELY submits a declaration (KAIZEN_IMPEDIMENTS,
 # KAIZEN_NO_ACTION, /kaizen), the current branch may differ from the

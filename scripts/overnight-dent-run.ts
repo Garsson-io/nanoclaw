@@ -22,9 +22,10 @@ import { dirname, resolve } from 'path';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-interface BatchState {
+export interface BatchState {
   batch_id: string;
   batch_start: number;
+  batch_end?: number;
   guidance: string;
   max_runs: number;
   cooldown: number;
@@ -38,6 +39,11 @@ interface BatchState {
   consecutive_failures: number;
   current_cooldown: number;
   stop_reason: string;
+  last_issue: string;
+  last_pr: string;
+  last_case: string;
+  last_branch: string;
+  last_worktree: string;
 }
 
 export interface RunResult {
@@ -447,6 +453,22 @@ async function main(): Promise<void> {
   }
   for (const caseName of result.cases) {
     if (!freshState.cases.includes(caseName)) freshState.cases.push(caseName);
+  }
+
+  // Track last-worked-on artifacts for halt/status reporting
+  if (result.prs.length > 0) {
+    freshState.last_pr = result.prs[result.prs.length - 1];
+  }
+  if (result.issuesFiled.length > 0) {
+    freshState.last_issue = result.issuesFiled[result.issuesFiled.length - 1];
+  } else if (result.issuesClosed.length > 0) {
+    freshState.last_issue = result.issuesClosed[result.issuesClosed.length - 1];
+  }
+  if (result.cases.length > 0) {
+    const lastCase = result.cases[result.cases.length - 1];
+    freshState.last_case = lastCase;
+    freshState.last_branch = `case/${lastCase}`;
+    freshState.last_worktree = `.claude/worktrees/${lastCase}`;
   }
 
   // Consecutive failure tracking
