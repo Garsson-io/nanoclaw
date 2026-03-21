@@ -54,6 +54,11 @@
             "type": "command",
             "command": "./.claude/kaizen/hooks/check-practices.sh",
             "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "./.claude/kaizen/hooks/block-git-rebase.sh",
+            "timeout": 10
           }
         ]
       },
