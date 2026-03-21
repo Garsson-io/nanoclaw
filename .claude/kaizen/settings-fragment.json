@@ -60,6 +60,11 @@
             "type": "command",
             "command": "./.claude/kaizen/hooks/block-git-rebase.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "./.claude/kaizen/hooks/squash-merge-safety.sh",
+            "timeout": 15
           }
         ]
       },
