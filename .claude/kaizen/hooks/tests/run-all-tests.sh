@@ -83,6 +83,7 @@ UNIT_TESTS=(
   "$SCRIPT_DIR/test-check-wip.sh"
   "$SCRIPT_DIR/test-waiver-quality.sh"
   "$SCRIPT_DIR/test-block-git-rebase.sh"
+  "$SCRIPT_DIR/test-squash-merge-safety.sh"
 )
 
 # Bash harness tests (integration + interaction tests)
