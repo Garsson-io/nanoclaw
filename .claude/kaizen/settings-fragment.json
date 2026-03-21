@@ -1,5 +1,5 @@
 {
-  "_comment": "kAIzen Agent Control Flow — merge this into your .claude/settings.json hooks section",
+  "_comment": "kAIzen Agent Control Flow \u2014 merge this into your .claude/settings.json hooks section",
   "hooks": {
     "SessionStart": [
       {
@@ -55,6 +55,11 @@
             "type": "command",
             "command": "./.claude/kaizen/hooks/check-practices.sh",
             "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "./.claude/kaizen/hooks/block-git-rebase.sh",
+            "timeout": 10
           }
         ]
       },
