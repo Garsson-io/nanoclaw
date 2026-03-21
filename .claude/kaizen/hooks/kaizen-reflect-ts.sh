@@ -5,6 +5,6 @@
 #
 # Always exits 0 — advisory hook (PostToolUse).
 
-source "$(dirname "$0")/lib/resolve-project-root.sh"
-exec npx tsx "$PROJECT_ROOT/src/hooks/kaizen-reflect.ts" 2>/dev/null
+# Subshell ensures exit 0 is always reachable even if source fails (kaizen #371)
+(source "$(dirname "$0")/lib/resolve-project-root.sh" && exec npx tsx "$PROJECT_ROOT/src/hooks/kaizen-reflect.ts") 2>/dev/null
 exit 0

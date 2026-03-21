@@ -13,6 +13,23 @@ import {
 import type { CaseCreateDeps, CaseQueryDeps } from './cli-kaizen.js';
 import type { Case } from './cases.js';
 
+// Mock modules for area-overlap detection tests (kaizen #374)
+vi.mock('./cases.js', async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return {
+    ...actual,
+    getActiveCases: vi.fn().mockReturnValue([]),
+  };
+});
+
+vi.mock('./github-api.js', async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return {
+    ...actual,
+    getGitHubIssue: vi.fn().mockResolvedValue({ success: false }),
+  };
+});
+
 const exec = promisify(execFile);
 const CLI_SOURCE = path.resolve(__dirname, 'cli-kaizen.ts');
 
@@ -989,5 +1006,152 @@ describe('cli-kaizen case query argument parsing', () => {
       expect(error.stderr).toContain('case-by-branch');
       expect(error.stderr).toContain('case-update-status');
     }
+  });
+});
+
+// INVARIANT: Area-overlap detection warns (but doesn't block) when a new dev case
+// shares area labels with an existing active dev case (kaizen #374).
+describe('handleCaseCreate area-overlap detection (kaizen #374)', () => {
+  test('warns when new issue shares area labels with active case', async () => {
+    const { getActiveCases } = await import('./cases.js');
+    const { getGitHubIssue } = await import('./github-api.js');
+
+    // Set up: active dev case on kaizen #100 with area/hooks label
+    (getActiveCases as ReturnType<typeof vi.fn>).mockReturnValue([
+      {
+        name: '260320-1200-existing-case',
+        type: 'dev',
+        status: 'active',
+        github_issue: 100,
+      },
+    ]);
+
+    // Mock GitHub API: both issues have area/hooks
+    (getGitHubIssue as ReturnType<typeof vi.fn>).mockImplementation(
+      async ({ issueNumber }: { issueNumber: number }) => ({
+        success: true,
+        issue: {
+          number: issueNumber,
+          labels:
+            issueNumber === 42
+              ? [{ name: 'area/hooks' }, { name: 'level-2' }]
+              : [{ name: 'area/hooks' }, { name: 'area/testing' }],
+        },
+      }),
+    );
+
+    const deps = makeDeps();
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await handleCaseCreate(
+      [
+        '--description',
+        'Test overlap',
+        '--type',
+        'dev',
+        '--github-issue',
+        '42',
+      ],
+      deps,
+    );
+
+    // Case should still be created (advisory only)
+    expect(deps.insert).toHaveBeenCalled();
+
+    // Warning should have been printed
+    const warnings = errorSpy.mock.calls.map((c) => c[0] as string).join('\n');
+    expect(warnings).toContain('DOMAIN OVERLAP');
+    expect(warnings).toContain('area/hooks');
+    expect(warnings).toContain('260320-1200-existing-case');
+
+    logSpy.mockRestore();
+    errorSpy.mockRestore();
+    (getActiveCases as ReturnType<typeof vi.fn>).mockReturnValue([]);
+    (getGitHubIssue as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: false,
+    });
+  });
+
+  test('no warning when no area overlap', async () => {
+    const { getActiveCases } = await import('./cases.js');
+    const { getGitHubIssue } = await import('./github-api.js');
+
+    (getActiveCases as ReturnType<typeof vi.fn>).mockReturnValue([
+      {
+        name: '260320-1200-other-case',
+        type: 'dev',
+        status: 'active',
+        github_issue: 200,
+      },
+    ]);
+
+    (getGitHubIssue as ReturnType<typeof vi.fn>).mockImplementation(
+      async ({ issueNumber }: { issueNumber: number }) => ({
+        success: true,
+        issue: {
+          number: issueNumber,
+          labels:
+            issueNumber === 42
+              ? [{ name: 'area/hooks' }]
+              : [{ name: 'area/cases' }],
+        },
+      }),
+    );
+
+    const deps = makeDeps();
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await handleCaseCreate(
+      ['--description', 'No overlap', '--type', 'dev', '--github-issue', '42'],
+      deps,
+    );
+
+    expect(deps.insert).toHaveBeenCalled();
+    const warnings = errorSpy.mock.calls.map((c) => c[0] as string).join('\n');
+    expect(warnings).not.toContain('DOMAIN OVERLAP');
+
+    logSpy.mockRestore();
+    errorSpy.mockRestore();
+    (getActiveCases as ReturnType<typeof vi.fn>).mockReturnValue([]);
+    (getGitHubIssue as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: false,
+    });
+  });
+
+  test('area overlap check does not block on API failure', async () => {
+    const { getActiveCases } = await import('./cases.js');
+    const { getGitHubIssue } = await import('./github-api.js');
+
+    (getActiveCases as ReturnType<typeof vi.fn>).mockReturnValue([
+      {
+        name: 'some-case',
+        type: 'dev',
+        status: 'active',
+        github_issue: 300,
+      },
+    ]);
+
+    (getGitHubIssue as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error('API error'),
+    );
+
+    const deps = makeDeps();
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    // Should not throw — try/catch handles the failure
+    await handleCaseCreate(
+      ['--description', 'API fails', '--type', 'dev', '--github-issue', '42'],
+      deps,
+    );
+
+    expect(deps.insert).toHaveBeenCalled();
+
+    logSpy.mockRestore();
+    (getActiveCases as ReturnType<typeof vi.fn>).mockReturnValue([]);
+    (getGitHubIssue as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: false,
+    });
   });
 });
