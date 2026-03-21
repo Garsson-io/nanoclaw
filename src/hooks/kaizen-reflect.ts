@@ -1,82 +1,174 @@
-#!/usr/bin/env npx tsx
 /**
- * kaizen-reflect.ts — Triggers kaizen reflection after gh pr create/merge.
+ * kaizen-reflect.ts — TypeScript port of .claude/kaizen/hooks/kaizen-reflect.sh
  *
- * Port of .claude/kaizen/hooks/kaizen-reflect.sh (197 lines) to TypeScript.
- * PostToolUse hook on Bash — always exits 0 (advisory, not blocking).
+ * PostToolUse hook that triggers after `gh pr create` or `gh pr merge`.
+ * Emits reflection prompts instructing the agent to launch a kaizen-bg subagent.
+ * Always exits 0 — advisory, not blocking.
  *
- * Triggers:
- *   1. gh pr create — set kaizen gate + output reflection instructions
- *   2. gh pr merge  — same gate + Telegram notification to leads
- *
- * Improvements over bash:
- * - Native JSON parsing, no jq dependency
- * - Proper error handling for API calls
- * - Typed state management
- * - No silent failures on Telegram notification
+ * Part of kAIzen Agent Control Flow — see .claude/kaizen/README.md
+ * Migration: kaizen #320 (Phase 3 of #223)
  */
 
+import { execSync } from 'node:child_process';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { type HookInput, readHookInput, writeHookOutput } from './hook-io.js';
 import {
-  readHookInput,
-  exitCode,
-  emit,
-  exitHook,
-  currentBranch,
-  shell,
-  mainCheckout,
-} from './hook-utils.js';
-import {
-  stripHeredocBody,
+  extractRepoFlag,
   isGhPrCommand,
   reconstructPrUrl,
-  getPrChangedFiles,
+  stripHeredocBody,
 } from './parse-command.js';
 import {
-  ensureStateDir,
+  DEFAULT_STATE_DIR,
+  isReflectionDone,
   prUrlToStateKey,
   writeStateFile,
-  isReflectionDone,
-  stateDir,
 } from './state-utils.js';
-import { sendTelegramIpc } from './telegram-ipc.js';
-import * as path from 'node:path';
 
-// ── Reflection prompt templates ──────────────────────────────────────
+/** Detect the GitHub repo from the origin remote URL. */
+function detectGhRepo(): string | undefined {
+  try {
+    const url = execSync('git remote get-url origin', {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+    const match = url.match(/github\.com[:/]([^/]+\/[^/.]+)/);
+    return match?.[1];
+  } catch {
+    return undefined;
+  }
+}
 
-function reflectionPrompt(
-  event: 'create' | 'merge',
+/** Get current git branch. */
+function getCurrentBranch(): string {
+  try {
+    return execSync('git rev-parse --abbrev-ref HEAD', {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+  } catch {
+    return 'unknown';
+  }
+}
+
+/** Get changed files for context. */
+function getChangedFiles(cmdLine: string, isMerge: boolean): string {
+  try {
+    if (isMerge) {
+      const prNum = cmdLine.match(/gh\s+pr\s+merge\s+(\d+)/)?.[1];
+      const repo = extractRepoFlag(cmdLine) ?? detectGhRepo();
+      const repoFlag = repo ? `--repo ${repo}` : '';
+      if (prNum) {
+        return execSync(`gh pr diff ${prNum} --name-only ${repoFlag}`, {
+          encoding: 'utf-8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+        }).trim();
+      }
+      return execSync(`gh pr diff --name-only ${repoFlag}`, {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }).trim();
+    }
+    return execSync('git diff --name-only main...HEAD', {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+  } catch {
+    return '';
+  }
+}
+
+/** Get main checkout path. */
+function getMainCheckout(): string {
+  try {
+    const output = execSync('git worktree list --porcelain', {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    const firstLine = output.split('\n')[0];
+    return firstLine.replace('worktree ', '');
+  } catch {
+    return '.';
+  }
+}
+
+/** Send a Telegram notification via IPC. */
+function sendTelegramIpc(text: string, projectDir?: string): void {
+  if (process.env.SEND_TELEGRAM_IPC_DISABLED === 'true') return;
+
+  const ipcDir =
+    process.env.IPC_DIR ??
+    join(
+      projectDir ?? process.env.CLAUDE_PROJECT_DIR ?? '.',
+      'data/ipc/main/messages',
+    );
+
+  if (!existsSync(ipcDir)) {
+    try {
+      mkdirSync(ipcDir, { recursive: true });
+    } catch {
+      return;
+    }
+  }
+
+  const chatJid = 'tg:-5128317012';
+  const filename = `notify-${Math.floor(Date.now() / 1000)}-${process.pid}-${Math.random().toString(36).slice(2, 6)}.json`;
+  const filepath = join(ipcDir, filename);
+
+  try {
+    writeFileSync(
+      filepath,
+      JSON.stringify({
+        type: 'message',
+        chatJid,
+        text,
+      }),
+    );
+  } catch {
+    // Best-effort notification
+  }
+}
+
+/** Get PR title via gh CLI. */
+function getPrTitle(prUrl: string): string {
+  const prNum = prUrl.match(/(\d+)$/)?.[1];
+  const repo = prUrl.match(/github\.com\/([^/]+\/[^/]+)\/pull/)?.[1];
+  if (!prNum || !repo) return 'unknown';
+  try {
+    return (
+      execSync(`gh pr view ${prNum} --repo ${repo} --json title --jq .title`, {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }).trim() || 'unknown'
+    );
+  } catch {
+    return 'unknown';
+  }
+}
+
+/** Generate the reflection prompt for PR creation. */
+export function generateCreateReflection(
   prUrl: string,
   branch: string,
-  changedFiles: string,
-  mc: string,
+  changed: string,
 ): string {
-  const eventLabel = event === 'create' ? 'Post-PR Creation' : 'Post-Merge';
-  const extraMergeSteps =
-    event === 'merge'
-      ? `
-**Also complete post-merge steps** (these are NOT delegated to the subagent):
-- Follow Post-Merge deployment procedure in CLAUDE.md
-- Sync main: \`git -C ${mc} fetch origin main && git -C ${mc} merge --ff-only origin/main\`
-- Close resolved kaizen issues
-- Delete merged branch and worktree`
-      : '';
-
   return `
-\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
-\ud83d\udd04 KAIZEN REFLECTION \u2014 ${eventLabel} (background)
-\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 KAIZEN REFLECTION — Post-PR Creation (background)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Launch a background kaizen-bg subagent to handle reflection while you continue${event === 'merge' ? '\nwith post-merge steps (deploy verification, main sync, case closure).' : ' working.'}
+Launch a background kaizen-bg subagent to handle reflection while you continue working.
 
 **Use the Agent tool** with these parameters:
 - subagent_type: "kaizen-bg"
 - run_in_background: true
 - prompt: Include this context:
-  - Event: PR ${event === 'create' ? 'created' : 'merged'}
+  - Event: PR created
   - PR URL: ${prUrl}
   - Branch: ${branch}
-  - Changed files: ${changedFiles}
-  - List any impediments/friction you encountered during this work${event === 'merge' ? '\n  - Ask it to also check if any open kaizen issues are now resolved by this merge' : ''}
+  - Changed files: ${changed}
+  - List any impediments/friction you encountered during this work
   - IMPORTANT: For each impediment, search existing kaizen issues FIRST.
     Recording an incident on an existing issue is MORE VALUABLE than filing new.
     New issues MUST have labels: kaizen + level-N + area/{subsystem}.
@@ -92,103 +184,189 @@ echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
 [
   {"impediment": "description", "disposition": "filed", "ref": "#NNN"},
   {"impediment": "description", "disposition": "incident", "ref": "#NNN"},
-  {"impediment": "description", "disposition": "fixed-in-pr"},
-  {"impediment": "description", "disposition": "waived", "reason": "why"}
+  {"impediment": "description", "disposition": "fixed-in-pr"}
 ]
 IMPEDIMENTS
 \`\`\`
 
 If the subagent found no impediments: \`echo 'KAIZEN_IMPEDIMENTS: []'\`
 
-\u26d4 You are GATED until you submit a valid KAIZEN_IMPEDIMENTS declaration.
+⛔ You are GATED until you submit a valid KAIZEN_IMPEDIMENTS declaration.
 Allowed commands: gh issue/pr, gh api, gh run, git read-only, ls/cat.
 
-\u26a0\ufe0f **Waiver quality is enforced (kaizen #280).** Waivers with blocklisted
-reasons ("low frequency", "overengineering", "edge case", etc.) are REJECTED.
-Meta-findings waived must include "impact_minutes": N. If impact >= 5, file instead.
-When in doubt, file \u2014 it takes 2 minutes; implementation is a separate decision.
+⚠️ **"Waived" disposition is eliminated (kaizen #198).** Every impediment must be
+filed (\`disposition: "filed"\`) or fixed in this PR (\`disposition: "fixed-in-pr"\`).
+If something is not real friction, reclassify as \`type: "positive"\` with \`disposition: "no-action"\`.
+When in doubt, file — it takes 2 minutes; implementation is a separate decision.
 
 For trivial changes (typo, formatting, docs-only), you may also use:
   \`echo 'KAIZEN_NO_ACTION [docs-only]: updated README formatting'\`
 Valid categories: docs-only, formatting, typo, config-only, test-only, trivial-refactor
-${extraMergeSteps}
-\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `;
 }
 
-// ── Main ─────────────────────────────────────────────────────────────
+/** Generate the reflection prompt for PR merge. */
+export function generateMergeReflection(
+  prUrl: string,
+  branch: string,
+  changed: string,
+  mainCheckout: string,
+): string {
+  return `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 KAIZEN REFLECTION — Post-Merge (background)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-function main(): void {
-  const input = readHookInput();
+Launch a background kaizen-bg subagent to handle reflection while you continue
+with post-merge steps (deploy verification, main sync, case closure).
 
-  if (exitCode(input) !== 0) exitHook(0);
+**Use the Agent tool** with these parameters:
+- subagent_type: "kaizen-bg"
+- run_in_background: true
+- prompt: Include this context:
+  - Event: PR merged
+  - PR URL: ${prUrl}
+  - Branch: ${branch}
+  - Changed files: ${changed}
+  - List any impediments/friction you encountered during this work
+  - Ask it to also check if any open kaizen issues are now resolved by this merge
+  - IMPORTANT: For each impediment, search existing kaizen issues FIRST.
+    Recording an incident on an existing issue is MORE VALUABLE than filing new.
+    New issues MUST have labels: kaizen + level-N + area/{subsystem}.
+    See docs/issue-taxonomy.md for the full policy.
 
-  const command = input.tool_input.command ?? '';
-  const stdout = input.tool_response.stdout ?? '';
-  const stderr = input.tool_response.stderr ?? '';
+The kaizen-bg subagent will search for duplicate issues, file incidents, and
+create new kaizen issues as needed. It will report results back to you.
+
+**When the subagent completes**, use its results to clear the gate:
+
+\`\`\`bash
+echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
+[
+  {"impediment": "description", "disposition": "filed", "ref": "#NNN"},
+  {"impediment": "description", "disposition": "incident", "ref": "#NNN"},
+  {"impediment": "description", "disposition": "fixed-in-pr"}
+]
+IMPEDIMENTS
+\`\`\`
+
+If the subagent found no impediments: \`echo 'KAIZEN_IMPEDIMENTS: []'\`
+
+⛔ You are GATED until you submit a valid KAIZEN_IMPEDIMENTS declaration.
+Allowed commands: gh issue/pr, gh api, gh run, git read-only, ls/cat.
+
+⚠️ **"Waived" disposition is eliminated (kaizen #198).** Every impediment must be
+filed (\`disposition: "filed"\`) or fixed in this PR (\`disposition: "fixed-in-pr"\`).
+If something is not real friction, reclassify as \`type: "positive"\` with \`disposition: "no-action"\`.
+When in doubt, file — it takes 2 minutes; implementation is a separate decision.
+
+For trivial changes (typo, formatting, docs-only), you may also use:
+  \`echo 'KAIZEN_NO_ACTION [docs-only]: updated README formatting'\`
+Valid categories: docs-only, formatting, typo, config-only, test-only, trivial-refactor
+
+**Also complete post-merge steps** (these are NOT delegated to the subagent):
+- Follow Post-Merge deployment procedure in CLAUDE.md
+- Sync main: \`git -C ${mainCheckout} fetch origin main && git -C ${mainCheckout} merge --ff-only origin/main\`
+- Close resolved kaizen issues
+- Delete merged branch and worktree
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`;
+}
+
+/**
+ * Core hook logic — processes the input and returns the output text.
+ * Extracted for testability. The main() function handles I/O.
+ */
+export function processHookInput(
+  input: HookInput,
+  options: {
+    stateDir?: string;
+    branch?: string;
+    repoFromGit?: string;
+    mainCheckout?: string;
+    changedFiles?: string;
+    sendNotification?: (text: string) => void;
+  } = {},
+): string | null {
+  const command = input.tool_input?.command ?? '';
+  const stdout = input.tool_response?.stdout ?? '';
+  const stderr = input.tool_response?.stderr ?? '';
+  const exitCode = String(input.tool_response?.exit_code ?? '0');
+
+  // Only trigger on successful commands
+  if (exitCode !== '0') return null;
+
   const cmdLine = stripHeredocBody(command);
-
   const isCreate = isGhPrCommand(cmdLine, 'create');
   const isMerge = isGhPrCommand(cmdLine, 'merge');
-  if (!isCreate && !isMerge) exitHook(0);
 
-  // Extract PR URL
+  if (!isCreate && !isMerge) return null;
+
   const subcommand = isCreate ? 'create' : 'merge';
-  const prUrl = reconstructPrUrl(cmdLine, stdout, stderr, subcommand);
-  if (!prUrl) exitHook(0);
-
-  // Skip gate if reflection was already done (kaizen #288)
-  if (isReflectionDone(prUrl)) exitHook(0);
-
-  const branch = currentBranch();
-  const changedFiles = getPrChangedFiles(cmdLine, isMerge)
-    .split('\n')
-    .slice(0, 20)
-    .join('\n');
-  const mc = mainCheckout();
-
-  // Set up kaizen gate state
-  ensureStateDir();
-  const stateFilePath = path.join(
-    stateDir(),
-    `pr-kaizen-${prUrlToStateKey(prUrl)}`,
+  const stateDir = options.stateDir ?? DEFAULT_STATE_DIR;
+  const repoFromGit = options.repoFromGit ?? detectGhRepo();
+  const prUrl = reconstructPrUrl(
+    cmdLine,
+    stdout,
+    stderr,
+    subcommand,
+    repoFromGit,
   );
-  writeStateFile(stateFilePath, {
+
+  // Guard: skip if PR URL is empty
+  if (!prUrl) return null;
+
+  // Skip if reflection was already done for this PR
+  if (isReflectionDone(prUrl, stateDir)) return null;
+
+  const branch = options.branch ?? getCurrentBranch();
+  const changed = options.changedFiles ?? getChangedFiles(cmdLine, isMerge);
+
+  // Write state file for the kaizen gate
+  const stateKey = prUrlToStateKey(prUrl);
+  writeStateFile(stateDir, `pr-kaizen-${stateKey}`, {
     PR_URL: prUrl,
     STATUS: 'needs_pr_kaizen',
     BRANCH: branch,
   });
 
-  // Output reflection prompt
-  emit(
-    reflectionPrompt(
-      isCreate ? 'create' : 'merge',
-      prUrl,
-      branch,
-      changedFiles,
-      mc,
-    ),
-  );
+  if (isCreate) {
+    return generateCreateReflection(prUrl, branch, changed);
+  }
 
-  // Telegram notification on merge (kaizen #31)
-  if (isMerge) {
-    const prNumMatch = prUrl.match(/(\d+)$/);
-    const repoMatch = prUrl.match(
-      /https:\/\/github\.com\/([^/]+\/[^/]+)\/pull/,
-    );
-    let prTitle = 'unknown';
-    if (prNumMatch && repoMatch) {
-      prTitle =
-        shell(
-          `gh pr view ${prNumMatch[1]} --repo "${repoMatch[1]}" --json title --jq '.title'`,
-        ) || 'unknown';
-    }
+  // Merge path
+  const mainCheckout = options.mainCheckout ?? getMainCheckout();
+  const output = generateMergeReflection(prUrl, branch, changed, mainCheckout);
 
-    const notifyText = `\u2705 PR merged: ${prTitle}\n${prUrl}\nBranch: ${branch}\n\nCheck CLAUDE.md post-merge procedure for deploy steps.`;
+  // Send Telegram notification for merges
+  const prTitle = getPrTitle(prUrl);
+  const notifyText = `✅ PR merged: ${prTitle}\n${prUrl}\nBranch: ${branch}\n\nCheck CLAUDE.md post-merge procedure for deploy steps.`;
+  if (options.sendNotification) {
+    options.sendNotification(notifyText);
+  } else {
     sendTelegramIpc(notifyText);
   }
 
-  exitHook(0);
+  return output;
 }
 
-main();
+/** Main entry point — read stdin, process, write stdout. */
+async function main(): Promise<void> {
+  const input = await readHookInput();
+  if (!input) process.exit(0);
+
+  const output = processHookInput(input);
+  if (output) {
+    writeHookOutput(output);
+  }
+  process.exit(0);
+}
+
+// Only run main when executed directly (not when imported for testing)
+if (
+  process.argv[1]?.endsWith('kaizen-reflect.ts') ||
+  process.argv[1]?.endsWith('kaizen-reflect.js')
+) {
+  main().catch(() => process.exit(0));
+}

@@ -1,5 +1,10 @@
 #!/bin/bash
-# Thin wrapper: delegates to TypeScript implementation.
-# Migrated from pr-kaizen-clear.sh (290 lines) → src/hooks/pr-kaizen-clear.ts
-# See: Garsson-io/kaizen#320, docs/hook-language-boundaries.md Phase 3
-exec npx tsx "$(git rev-parse --show-toplevel)/src/hooks/pr-kaizen-clear.ts"
+# Thin bash wrapper for pr-kaizen-clear.ts (TypeScript migration of pr-kaizen-clear.sh)
+# Part of kAIzen Agent Control Flow — see .claude/kaizen/README.md
+# Migration: kaizen #320 (Phase 3 of #223)
+#
+# Always exits 0 — state management hook (PostToolUse).
+
+source "$(dirname "$0")/lib/resolve-project-root.sh"
+exec npx tsx "$PROJECT_ROOT/src/hooks/pr-kaizen-clear.ts" 2>/dev/null
+exit 0

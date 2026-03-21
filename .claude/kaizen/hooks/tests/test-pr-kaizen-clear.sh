@@ -121,7 +121,7 @@ MULTI_JSON='[
   {"impediment": "slow CI", "disposition": "filed", "ref": "#200"},
   {"impediment": "hook confusion", "disposition": "incident", "ref": "#125"},
   {"impediment": "typo in docs", "disposition": "fixed-in-pr"},
-  {"impediment": "minor lint warning", "disposition": "waived", "reason": "one-time occurrence"}
+  {"finding": "clean workflow", "type": "positive", "disposition": "no-action", "reason": "no issues encountered"}
 ]'
 OUTPUT=$(run_posttool_bash \
   "echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
@@ -207,7 +207,7 @@ echo "=== Invalid disposition value does NOT clear gate ==="
 setup
 create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
 
-# INVARIANT: Only filed|incident|fixed-in-pr|waived are valid dispositions
+# INVARIANT: Only filed|incident|fixed-in-pr are valid dispositions for impediments
 OUTPUT=$(run_posttool_bash \
   "echo 'KAIZEN_IMPEDIMENTS:' && echo '[{\"impediment\": \"slow CI\", \"disposition\": \"ignored\"}]'" \
   'KAIZEN_IMPEDIMENTS:
@@ -265,25 +265,26 @@ fi
 assert_contains "output mentions ref required" "requires" "$OUTPUT"
 
 echo ""
-echo "=== waived without reason does NOT clear gate ==="
+echo "=== waived disposition is REJECTED (kaizen #198) ==="
 
 setup
 create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
 
-# INVARIANT: disposition "waived" requires a "reason" field
+# INVARIANT: disposition "waived" is no longer accepted (kaizen #198)
 OUTPUT=$(run_posttool_bash \
-  "echo 'KAIZEN_IMPEDIMENTS:' && echo '[{\"impediment\": \"minor thing\", \"disposition\": \"waived\"}]'" \
+  "echo 'KAIZEN_IMPEDIMENTS:' && echo '[{\"impediment\": \"minor thing\", \"disposition\": \"waived\", \"reason\": \"one-time\"}]'" \
   'KAIZEN_IMPEDIMENTS:
-[{"impediment": "minor thing", "disposition": "waived"}]')
+[{"impediment": "minor thing", "disposition": "waived", "reason": "one-time"}]')
 
 if has_pr_kaizen_state; then
-  echo "  PASS: waived without reason rejected"
+  echo "  PASS: waived disposition rejected"
   ((PASS++))
 else
-  echo "  FAIL: waived without reason incorrectly accepted"
+  echo "  FAIL: waived disposition incorrectly accepted"
   ((FAIL++))
 fi
-assert_contains "output mentions reason required" "requires" "$OUTPUT"
+assert_contains "mentions kaizen #198" "kaizen #198" "$OUTPUT"
+assert_contains "output mentions reclassify" "reclassify" "$OUTPUT"
 
 echo ""
 echo "=== fixed-in-pr needs no extra fields ==="
@@ -595,12 +596,12 @@ else
 fi
 
 echo ""
-echo "=== All-waived reflections: advisory printed, gate still clears (#205) ==="
+echo "=== All-waived reflections are REJECTED (kaizen #198) ==="
 
 setup
 create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
 
-# INVARIANT: All-waived impediments clear the gate but print an advisory nudge
+# INVARIANT: "waived" is no longer accepted — all entries are rejected
 ALL_WAIVED_JSON='[
   {"impediment": "slow CI", "disposition": "waived", "reason": "one-time"},
   {"impediment": "hook confusion", "disposition": "waived", "reason": "resolved"},
@@ -613,18 +614,17 @@ IMPEDIMENTS" \
   "KAIZEN_IMPEDIMENTS:
 $ALL_WAIVED_JSON")
 
-if ! has_pr_kaizen_state; then
-  echo "  PASS: all-waived impediments still cleared gate"
+if has_pr_kaizen_state; then
+  echo "  PASS: all-waived impediments blocked"
   ((PASS++))
 else
-  echo "  FAIL: all-waived impediments did NOT clear gate"
+  echo "  FAIL: all-waived impediments incorrectly cleared gate"
   ((FAIL++))
 fi
-assert_contains "advisory printed for all-waived" "All findings waived" "$OUTPUT"
-assert_contains "advisory quotes zen" "file the issue" "$OUTPUT"
+assert_contains "rejection mentions kaizen #198" "kaizen #198" "$OUTPUT"
 
 echo ""
-echo "=== Mixed filed+waived: no advisory (#205) ==="
+echo "=== Mixed filed+waived: BLOCKED because waived is invalid (#198) ==="
 
 setup
 create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
@@ -640,14 +640,14 @@ IMPEDIMENTS" \
   "KAIZEN_IMPEDIMENTS:
 $MIXED_JSON")
 
-if ! has_pr_kaizen_state; then
-  echo "  PASS: mixed dispositions cleared gate"
+if has_pr_kaizen_state; then
+  echo "  PASS: mixed with waived blocked"
   ((PASS++))
 else
-  echo "  FAIL: mixed dispositions did NOT clear gate"
+  echo "  FAIL: mixed with waived incorrectly cleared gate"
   ((FAIL++))
 fi
-assert_not_contains "no advisory for mixed dispositions" "All findings waived" "$OUTPUT"
+assert_contains "mentions kaizen #198" "kaizen #198" "$OUTPUT"
 
 echo ""
 echo "=== Meta-finding with no-action rejected (#213) ==="
@@ -696,15 +696,15 @@ else
   echo "  FAIL: meta + no-action with finding field incorrectly accepted"
   ((FAIL++))
 fi
-assert_contains "output mentions meta-finding must be filed or waived" "filed" "$OUTPUT"
+assert_contains "output mentions meta-finding must be filed" "filed" "$OUTPUT"
 
 echo ""
-echo "=== Meta-finding with waived+reason accepted (#213) ==="
+echo "=== Meta-finding with waived is REJECTED (kaizen #198) ==="
 
 setup
 create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
 
-# INVARIANT: type "meta" with "waived" + reason + impact_minutes is valid (kaizen #280)
+# INVARIANT: type "meta" with "waived" is rejected (kaizen #198)
 META_WAIVED_JSON='[
   {"impediment": "could improve naming", "type": "meta", "disposition": "waived", "reason": "cosmetic only, no agent time lost", "impact_minutes": 1}
 ]'
@@ -715,13 +715,14 @@ IMPEDIMENTS" \
   "KAIZEN_IMPEDIMENTS:
 $META_WAIVED_JSON")
 
-if ! has_pr_kaizen_state; then
-  echo "  PASS: meta-finding with waived+reason cleared gate"
+if has_pr_kaizen_state; then
+  echo "  PASS: meta-finding with waived blocked"
   ((PASS++))
 else
-  echo "  FAIL: meta-finding with waived+reason did NOT clear gate"
+  echo "  FAIL: meta-finding with waived incorrectly cleared gate"
   ((FAIL++))
 fi
+assert_contains "mentions kaizen #198" "kaizen #198" "$OUTPUT"
 
 echo ""
 echo "=== Meta-finding with filed+ref accepted (#213) ==="
@@ -924,7 +925,7 @@ fi
 assert_contains "error mentions invalid disposition" "invalid disposition" "$OUTPUT"
 
 echo ""
-echo "=== Single waived impediment gets advisory too (#205) ==="
+echo "=== Single waived impediment is REJECTED (kaizen #198) ==="
 
 setup
 create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
@@ -939,14 +940,14 @@ IMPEDIMENTS" \
   "KAIZEN_IMPEDIMENTS:
 $SINGLE_WAIVED_JSON")
 
-if ! has_pr_kaizen_state; then
-  echo "  PASS: single waived still clears gate"
+if has_pr_kaizen_state; then
+  echo "  PASS: single waived blocked"
   ((PASS++))
 else
-  echo "  FAIL: single waived did NOT clear gate"
+  echo "  FAIL: single waived incorrectly cleared gate"
   ((FAIL++))
 fi
-assert_contains "advisory for single waived" "All findings waived" "$OUTPUT"
+assert_contains "mentions kaizen #198" "kaizen #198" "$OUTPUT"
 
 echo ""
 echo "=== All no-action positive findings get advisory (#205) ==="
@@ -972,7 +973,7 @@ else
   echo "  FAIL: all-positive-no-action did NOT clear gate"
   ((FAIL++))
 fi
-assert_contains "advisory for all passive" "All findings waived" "$OUTPUT"
+assert_contains "advisory for all passive" "All findings classified as positive" "$OUTPUT"
 
 echo ""
 echo "=== Mixed types with meta + impediment + positive validates correctly (#162) ==="
@@ -1005,6 +1006,162 @@ else
   ((FAIL++))
 fi
 assert_contains "output mentions 3 findings" "3" "$OUTPUT"
+
+echo ""
+echo "=== STDOUT without prefix: raw JSON array in stdout (kaizen #313) ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT (kaizen #313): When STDOUT contains just the JSON array without
+# the KAIZEN_IMPEDIMENTS: prefix, the hook should still extract and validate it.
+# This happens when echo output and cat heredoc output are captured separately.
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
+[{\"impediment\": \"Test issue\", \"disposition\": \"fixed-in-pr\"}]
+IMPEDIMENTS" \
+  '[{"impediment": "Test issue", "disposition": "fixed-in-pr"}]')
+
+if ! has_pr_kaizen_state; then
+  echo "  PASS: raw JSON array in stdout cleared gate"
+  ((PASS++))
+else
+  echo "  FAIL: raw JSON array in stdout did NOT clear gate (kaizen #313 regression)"
+  ((FAIL++))
+fi
+assert_contains "output mentions gate cleared" "gate cleared" "$OUTPUT"
+
+echo ""
+echo "=== STDOUT without prefix: multiline JSON array (kaizen #313) ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: Multiline JSON without prefix also works
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
+[
+  {\"impediment\": \"Issue A\", \"disposition\": \"fixed-in-pr\"},
+  {\"impediment\": \"Issue B\", \"disposition\": \"filed\", \"ref\": \"#100\"}
+]
+IMPEDIMENTS" \
+  '[
+  {"impediment": "Issue A", "disposition": "fixed-in-pr"},
+  {"impediment": "Issue B", "disposition": "filed", "ref": "#100"}
+]')
+
+if ! has_pr_kaizen_state; then
+  echo "  PASS: multiline JSON without prefix cleared gate"
+  ((PASS++))
+else
+  echo "  FAIL: multiline JSON without prefix did NOT clear gate (kaizen #313 regression)"
+  ((FAIL++))
+fi
+assert_contains "output mentions 2 findings" "2 finding" "$OUTPUT"
+
+echo ""
+echo "=== Empty STDOUT: JSON extracted from COMMAND heredoc body (kaizen #313) ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42"
+
+# INVARIANT: When STDOUT is empty but COMMAND contains heredoc with JSON,
+# extraction from the full COMMAND (not stripped CMD_LINE) should work
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
+[{\"impediment\": \"Fallback test\", \"disposition\": \"fixed-in-pr\"}]
+IMPEDIMENTS" \
+  "")
+
+if ! has_pr_kaizen_state; then
+  echo "  PASS: empty stdout, extracted from COMMAND heredoc"
+  ((PASS++))
+else
+  echo "  FAIL: empty stdout, COMMAND heredoc fallback failed (kaizen #313 regression)"
+  ((FAIL++))
+fi
+
+
+
+echo ""
+echo "=== Multi-PR: clears the most recent gate, not a stale one (kaizen #327) ==="
+
+setup
+
+# INVARIANT: When multiple needs_pr_kaizen state files exist (from different PRs),
+# the clear operation targets the most recently created one — the one the agent
+# is responding to.
+
+# Create state for PR #42 (older — created first)
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/42" "main"
+sleep 1
+# Create state for PR #43 (newer — the one the agent is responding to)
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/43" "main"
+
+# Submit KAIZEN_IMPEDIMENTS — should clear the newest gate (PR #43)
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS: [] straightforward fix, no issues'" \
+  "KAIZEN_IMPEDIMENTS: [] straightforward fix, no issues")
+
+# Check that gate was cleared
+assert_contains "multi-PR: gate cleared message shown" "gate cleared" "$OUTPUT"
+
+# Check which state files remain — PR #42 should still exist, PR #43 should be cleared
+PR42_KEY=$(pr_url_to_state_key "https://github.com/Garsson-io/nanoclaw/pull/42")
+PR43_KEY=$(pr_url_to_state_key "https://github.com/Garsson-io/nanoclaw/pull/43")
+
+if [ -f "$STATE_DIR/pr-kaizen-$PR42_KEY" ]; then
+  echo "  PASS: multi-PR: older PR #42 gate still exists"
+  ((PASS++))
+else
+  echo "  FAIL: multi-PR: older PR #42 gate was incorrectly cleared"
+  ((FAIL++))
+fi
+
+if [ ! -f "$STATE_DIR/pr-kaizen-$PR43_KEY" ]; then
+  echo "  PASS: multi-PR: newer PR #43 gate was cleared"
+  ((PASS++))
+else
+  echo "  FAIL: multi-PR: newer PR #43 gate was NOT cleared"
+  ((FAIL++))
+fi
+
+echo ""
+echo "=== Multi-PR: clear reports failure if no matching state found (kaizen #327) ==="
+
+setup
+
+# INVARIANT: If the clear operation cannot find a matching state file,
+# the output should NOT say "gate cleared" — it should report an error.
+
+# Create NO state files
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS: [] no issues'" \
+  "KAIZEN_IMPEDIMENTS: [] no issues")
+
+# Should exit silently (no gate to clear = early exit at line 140)
+assert_not_contains "no-gate: does not say gate cleared" "gate cleared" "$OUTPUT"
+
+echo ""
+echo "=== Multi-PR: clearing newest gate when only one exists works (kaizen #327) ==="
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/99" "main"
+
+OUTPUT=$(run_posttool_bash \
+  "echo 'KAIZEN_IMPEDIMENTS: [] simple change'" \
+  "KAIZEN_IMPEDIMENTS: [] simple change")
+
+assert_contains "single-gate: cleared message shown" "gate cleared" "$OUTPUT"
+
+PR99_KEY=$(pr_url_to_state_key "https://github.com/Garsson-io/nanoclaw/pull/99")
+if [ ! -f "$STATE_DIR/pr-kaizen-$PR99_KEY" ]; then
+  echo "  PASS: single-gate: PR #99 gate was cleared"
+  ((PASS++))
+else
+  echo "  FAIL: single-gate: PR #99 gate was NOT cleared"
+  ((FAIL++))
+fi
 
 teardown
 print_results

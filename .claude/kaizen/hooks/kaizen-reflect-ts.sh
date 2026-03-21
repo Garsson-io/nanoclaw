@@ -1,5 +1,10 @@
 #!/bin/bash
-# Thin wrapper: delegates to TypeScript implementation.
-# Migrated from kaizen-reflect.sh (197 lines) → src/hooks/kaizen-reflect.ts
-# See: Garsson-io/kaizen#320, docs/hook-language-boundaries.md Phase 3
-exec npx tsx "$(git rev-parse --show-toplevel)/src/hooks/kaizen-reflect.ts"
+# Thin bash wrapper for kaizen-reflect.ts (TypeScript migration of kaizen-reflect.sh)
+# Part of kAIzen Agent Control Flow — see .claude/kaizen/README.md
+# Migration: kaizen #320 (Phase 3 of #223)
+#
+# Always exits 0 — advisory hook (PostToolUse).
+
+source "$(dirname "$0")/lib/resolve-project-root.sh"
+exec npx tsx "$PROJECT_ROOT/src/hooks/kaizen-reflect.ts" 2>/dev/null
+exit 0

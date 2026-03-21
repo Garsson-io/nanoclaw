@@ -1,8 +1,10 @@
 #!/bin/bash
-# DEACTIVATED — Migrated to TypeScript: src/hooks/kaizen-reflect.ts
-# Wrapper: .claude/kaizen/hooks/kaizen-reflect-ts.sh
-# Migration: Garsson-io/kaizen#320, docs/hook-language-boundaries.md Phase 3
+# DEACTIVATED: Migrated to TypeScript — see src/hooks/kaizen-reflect.ts
+# Thin wrapper kaizen-reflect-ts.sh now delegates to the TS implementation.
+# This file is kept for reference during the migration period.
+# Migration: kaizen #320 (Phase 3 of #223)
 #
+# To use the old bash version, change settings.json to point back to this file.
 # Part of kAIzen Agent Control Flow — see .claude/kaizen/README.md
 # kaizen-reflect.sh — Level 2 kaizen enforcement (Issue #9)
 # Triggers after `gh pr create` or `gh pr merge` to prompt structured
@@ -103,8 +105,7 @@ echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
 [
   {"impediment": "description", "disposition": "filed", "ref": "#NNN"},
   {"impediment": "description", "disposition": "incident", "ref": "#NNN"},
-  {"impediment": "description", "disposition": "fixed-in-pr"},
-  {"impediment": "description", "disposition": "waived", "reason": "why"}
+  {"impediment": "description", "disposition": "fixed-in-pr"}
 ]
 IMPEDIMENTS
 \`\`\`
@@ -114,9 +115,9 @@ If the subagent found no impediments: \`echo 'KAIZEN_IMPEDIMENTS: []'\`
 ⛔ You are GATED until you submit a valid KAIZEN_IMPEDIMENTS declaration.
 Allowed commands: gh issue/pr, gh api, gh run, git read-only, ls/cat.
 
-⚠️ **Waiver quality is enforced (kaizen #280).** Waivers with blocklisted
-reasons ("low frequency", "overengineering", "edge case", etc.) are REJECTED.
-Meta-findings waived must include "impact_minutes": N. If impact >= 5, file instead.
+⚠️ **"Waived" disposition is eliminated (kaizen #198).** Every impediment must be
+filed (`disposition: "filed"`) or fixed in this PR (`disposition: "fixed-in-pr"`).
+If something is not real friction, reclassify as `type: "positive"` with `disposition: "no-action"`.
 When in doubt, file — it takes 2 minutes; implementation is a separate decision.
 
 For trivial changes (typo, formatting, docs-only), you may also use:
@@ -181,8 +182,7 @@ echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
 [
   {"impediment": "description", "disposition": "filed", "ref": "#NNN"},
   {"impediment": "description", "disposition": "incident", "ref": "#NNN"},
-  {"impediment": "description", "disposition": "fixed-in-pr"},
-  {"impediment": "description", "disposition": "waived", "reason": "why"}
+  {"impediment": "description", "disposition": "fixed-in-pr"}
 ]
 IMPEDIMENTS
 \`\`\`
@@ -192,9 +192,9 @@ If the subagent found no impediments: \`echo 'KAIZEN_IMPEDIMENTS: []'\`
 ⛔ You are GATED until you submit a valid KAIZEN_IMPEDIMENTS declaration.
 Allowed commands: gh issue/pr, gh api, gh run, git read-only, ls/cat.
 
-⚠️ **Waiver quality is enforced (kaizen #280).** Waivers with blocklisted
-reasons ("low frequency", "overengineering", "edge case", etc.) are REJECTED.
-Meta-findings waived must include "impact_minutes": N. If impact >= 5, file instead.
+⚠️ **"Waived" disposition is eliminated (kaizen #198).** Every impediment must be
+filed (`disposition: "filed"`) or fixed in this PR (`disposition: "fixed-in-pr"`).
+If something is not real friction, reclassify as `type: "positive"` with `disposition: "no-action"`.
 When in doubt, file — it takes 2 minutes; implementation is a separate decision.
 
 For trivial changes (typo, formatting, docs-only), you may also use:

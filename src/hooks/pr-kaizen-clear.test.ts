@@ -132,7 +132,7 @@ describe('pr-kaizen-clear: valid impediments', () => {
     expect(output).toContain('PR kaizen gate cleared');
   });
 
-  it('clears gate with waived disposition and reason', () => {
+  it('rejects waived disposition (kaizen #198 — waived eliminated)', () => {
     const json = JSON.stringify([
       {
         impediment: 'minor thing',
@@ -141,7 +141,9 @@ describe('pr-kaizen-clear: valid impediments', () => {
       },
     ]);
     const output = runHook(impedimentsInput(json));
-    expect(output).toContain('PR kaizen gate cleared');
+    expect(output).toContain('waived');
+    expect(output).toContain('no longer accepted');
+    expect(gateExists()).toBe(true);
   });
 
   it('clears gate with finding alias (kaizen #162)', () => {
@@ -214,12 +216,12 @@ describe('pr-kaizen-clear: validation', () => {
     expect(output).toContain('requires "ref" field');
   });
 
-  it('rejects waived without reason', () => {
+  it('rejects waived disposition entirely (kaizen #198)', () => {
     const json = JSON.stringify([
       { impediment: 'test', disposition: 'waived' },
     ]);
     const output = runHook(impedimentsInput(json));
-    expect(output).toContain('requires "reason" field');
+    expect(output).toContain('no longer accepted');
   });
 
   it('rejects invalid JSON', () => {
@@ -248,7 +250,7 @@ describe('pr-kaizen-clear: type-aware validation', () => {
       },
     ]);
     const output = runHook(impedimentsInput(json));
-    expect(output).toContain('meta-findings must be');
+    expect(output).toContain('must be "filed" or "fixed-in-pr"');
     expect(gateExists()).toBe(true);
   });
 
@@ -279,92 +281,53 @@ describe('pr-kaizen-clear: type-aware validation', () => {
   });
 });
 
-describe('pr-kaizen-clear: waiver quality (kaizen #280)', () => {
-  it('rejects waiver with "low frequency" rationalization', () => {
+describe('pr-kaizen-clear: waived elimination (kaizen #198)', () => {
+  it('rejects ALL waived dispositions regardless of reason quality', () => {
     const json = JSON.stringify([
       {
         impediment: 'test',
         disposition: 'waived',
-        reason: 'This has low frequency of occurrence',
+        reason: 'This is a perfectly valid reason with no blocklist matches',
       },
     ]);
     const output = runHook(impedimentsInput(json));
-    expect(output).toContain('blocklisted rationalization');
-    expect(output).toContain('low frequency');
+    expect(output).toContain('no longer accepted');
+    expect(gateExists()).toBe(true);
   });
 
-  it('rejects waiver with "edge case" rationalization', () => {
+  it('guides user to reclassify waived as positive/no-action', () => {
     const json = JSON.stringify([
       {
         impediment: 'test',
         disposition: 'waived',
-        reason: 'This is just an edge case',
+        reason: 'not real friction',
       },
     ]);
     const output = runHook(impedimentsInput(json));
-    expect(output).toContain('blocklisted rationalization');
-  });
-
-  it('rejects meta-finding waiver without impact_minutes', () => {
-    const json = JSON.stringify([
-      {
-        finding: 'process issue',
-        type: 'meta',
-        disposition: 'waived',
-        reason: 'cosmetic only',
-      },
-    ]);
-    const output = runHook(impedimentsInput(json));
-    expect(output).toContain('waived without impact_minutes');
-  });
-
-  it('rejects meta-finding waiver with impact >= 5', () => {
-    const json = JSON.stringify([
-      {
-        finding: 'process issue',
-        type: 'meta',
-        disposition: 'waived',
-        reason: 'cosmetic only',
-        impact_minutes: 10,
-      },
-    ]);
-    const output = runHook(impedimentsInput(json));
-    expect(output).toContain('too high to waive');
-  });
-
-  it('allows meta-finding waiver with impact < 5', () => {
-    const json = JSON.stringify([
-      {
-        finding: 'minor process issue',
-        type: 'meta',
-        disposition: 'waived',
-        reason: 'cosmetic only, minimal time impact',
-        impact_minutes: 2,
-      },
-    ]);
-    const output = runHook(impedimentsInput(json));
-    expect(output).toContain('PR kaizen gate cleared');
+    expect(output).toContain('positive');
+    expect(output).toContain('no-action');
   });
 });
 
 describe('pr-kaizen-clear: all-passive advisory (kaizen #205)', () => {
-  it('shows advisory when all findings are waived', () => {
+  it('shows advisory when all findings are no-action', () => {
     const json = JSON.stringify([
       {
-        impediment: 'thing 1',
-        disposition: 'waived',
-        reason: 'cosmetic, no functional change needed',
+        finding: 'thing 1',
+        type: 'positive',
+        disposition: 'no-action',
+        reason: 'positive observation, no change needed',
       },
       {
-        impediment: 'thing 2',
-        disposition: 'waived',
-        reason: 'addressed in separate initiative',
+        finding: 'thing 2',
+        type: 'positive',
+        disposition: 'no-action',
+        reason: 'validated existing pattern',
       },
     ]);
     const output = runHook(impedimentsInput(json));
-    expect(output).toContain('All findings waived');
+    expect(output).toContain('no-action');
     expect(output).toContain('Every failure is a gift');
-    // Gate still clears
     expect(output).toContain('PR kaizen gate cleared');
   });
 });

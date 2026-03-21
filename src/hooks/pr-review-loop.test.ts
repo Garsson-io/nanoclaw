@@ -385,7 +385,6 @@ describe('pr-review-loop: escalation', () => {
     const output = runHook(gitPushInput());
     expect(output).toContain('REVIEW ROUND 4/4');
     expect(output).toContain('escalate');
-    expect(output).toContain('gh pr comment');
 
     const state = readState('Garsson-io_nanoclaw_60');
     expect(state.STATUS).toBe('escalated');

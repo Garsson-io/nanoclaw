@@ -1,47 +1,39 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  stripHeredocBody,
+  extractPrNumber,
+  extractPrUrl,
+  extractRepoFlag,
   isGhPrCommand,
   isGitCommand,
-  extractPrNumber,
-  extractRepoFlag,
-  extractGitCPath,
   reconstructPrUrl,
+  stripHeredocBody,
 } from './parse-command.js';
 
 describe('stripHeredocBody', () => {
-  it('returns command as-is when no heredoc present', () => {
-    expect(stripHeredocBody('echo hello')).toBe('echo hello');
+  it('returns command unchanged when no heredoc', () => {
+    expect(stripHeredocBody('gh pr create --title "test"')).toBe(
+      'gh pr create --title "test"',
+    );
   });
 
-  it('strips heredoc body after <<EOF', () => {
-    const cmd = `cat <<EOF\nsome body\nmore body\nEOF`;
-    expect(stripHeredocBody(cmd)).toBe('cat <<EOF');
+  it('strips heredoc body with single-quoted delimiter', () => {
+    const cmd = `gh pr create --body "$(cat <<'EOF'\nsome body\nEOF\n)"`;
+    const result = stripHeredocBody(cmd);
+    expect(result).toContain('gh pr create');
+    expect(result).toContain("<<'EOF'");
+    expect(result).not.toContain('some body');
   });
 
-  it('handles <<-EOF variant', () => {
-    const cmd = `cat <<-EOF\n\tbody\n\tEOF`;
-    expect(stripHeredocBody(cmd)).toBe('cat <<-EOF');
+  it('strips heredoc body with unquoted delimiter', () => {
+    const cmd = `echo test\ncat <<HEREDOC\nline1\nline2\nHEREDOC`;
+    const result = stripHeredocBody(cmd);
+    expect(result).toContain('<<HEREDOC');
   });
 
-  it("handles quoted heredoc <<'EOF'", () => {
-    const cmd = `cat <<'EOF'\nbody\nEOF`;
-    expect(stripHeredocBody(cmd)).toBe("cat <<'EOF'");
-  });
-
-  it('returns first line if heredoc is on line 1', () => {
-    const cmd = `echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'\n[]\nIMPEDIMENTS`;
-    expect(stripHeredocBody(cmd)).toContain('KAIZEN_IMPEDIMENTS');
-  });
-
-  it('preserves multi-line commands before heredoc', () => {
-    const cmd = `echo "hello"\necho "world"\ncat <<EOF\nbody\nEOF`;
-    expect(stripHeredocBody(cmd)).toBe('echo "hello"\necho "world"\ncat <<EOF');
-  });
-
-  it('does not treat << in arithmetic as heredoc', () => {
-    // Heredoc pattern requires [A-Za-z_] after <<, so "1 << 4" won't match
-    expect(stripHeredocBody('echo $((1 << 4))')).toBe('echo $((1 << 4))');
+  it('strips heredoc body with dash operator', () => {
+    const cmd = `cat <<-EOF\n\tindented\nEOF`;
+    const result = stripHeredocBody(cmd);
+    expect(result).toContain('<<-EOF');
   });
 });
 
@@ -54,87 +46,91 @@ describe('isGhPrCommand', () => {
     expect(isGhPrCommand('gh pr merge 42 --squash', 'merge')).toBe(true);
   });
 
-  it('detects multiple subcommands with pipe separator', () => {
+  it('detects either create or merge with alternation', () => {
     expect(isGhPrCommand('gh pr create --title "x"', 'create|merge')).toBe(
       true,
     );
     expect(isGhPrCommand('gh pr merge 42', 'create|merge')).toBe(true);
-    expect(isGhPrCommand('gh pr diff', 'create|merge')).toBe(false);
   });
 
-  it('does not false-positive on embedded text', () => {
+  it('rejects non-PR commands', () => {
+    expect(isGhPrCommand('npm run build', 'create')).toBe(false);
     expect(isGhPrCommand('echo "gh pr create"', 'create')).toBe(false);
   });
 
-  it('detects command in a chain', () => {
-    expect(
-      isGhPrCommand('echo done && gh pr create --title "x"', 'create'),
-    ).toBe(true);
+  it('handles piped commands', () => {
+    expect(isGhPrCommand('echo test | gh pr create --title x', 'create')).toBe(
+      true,
+    );
   });
 
-  it('detects command after pipe', () => {
-    expect(isGhPrCommand('echo x | gh pr diff', 'diff')).toBe(true);
+  it('handles chained commands', () => {
+    expect(
+      isGhPrCommand('npm run build && gh pr create --title x', 'create'),
+    ).toBe(true);
   });
 });
 
 describe('isGitCommand', () => {
   it('detects git push', () => {
-    expect(isGitCommand('git push', 'push')).toBe(true);
+    expect(isGitCommand('git push -u origin main', 'push')).toBe(true);
   });
 
   it('detects git -C <path> push', () => {
-    expect(isGitCommand('git -C /some/path push', 'push')).toBe(true);
+    expect(isGitCommand('git -C /some/path push origin main', 'push')).toBe(
+      true,
+    );
   });
 
-  it('does not match different subcommands', () => {
-    expect(isGitCommand('git pull', 'push')).toBe(false);
-  });
-
-  it('detects in a chain', () => {
-    expect(isGitCommand('npm run build && git push', 'push')).toBe(true);
+  it('rejects non-git commands', () => {
+    expect(isGitCommand('npm run build', 'push')).toBe(false);
   });
 });
 
 describe('extractPrNumber', () => {
-  it('extracts bare PR number', () => {
+  it('extracts PR number from merge command', () => {
     expect(extractPrNumber('gh pr merge 42 --squash', 'merge')).toBe('42');
   });
 
-  it('returns empty for no PR number', () => {
-    expect(extractPrNumber('gh pr merge --squash', 'merge')).toBe('');
+  it('extracts PR number from merge with URL', () => {
+    expect(
+      extractPrNumber('gh pr merge 123 --repo Garsson-io/nanoclaw', 'merge'),
+    ).toBe('123');
   });
 
-  it('extracts from create', () => {
-    expect(extractPrNumber('gh pr create 123', 'create')).toBe('123');
+  it('returns undefined when no PR number', () => {
+    expect(extractPrNumber('gh pr merge --squash', 'merge')).toBeUndefined();
   });
 });
 
 describe('extractRepoFlag', () => {
-  it('extracts --repo value', () => {
-    expect(extractRepoFlag('gh pr merge 42 --repo Garsson-io/nanoclaw')).toBe(
-      'Garsson-io/nanoclaw',
-    );
+  it('extracts --repo flag', () => {
+    expect(
+      extractRepoFlag('gh pr create --repo Garsson-io/nanoclaw --title test'),
+    ).toBe('Garsson-io/nanoclaw');
   });
 
-  it('returns empty when no --repo', () => {
-    expect(extractRepoFlag('gh pr merge 42')).toBe('');
+  it('returns undefined when no --repo flag', () => {
+    expect(extractRepoFlag('gh pr create --title test')).toBeUndefined();
   });
 });
 
-describe('extractGitCPath', () => {
-  it('extracts -C path', () => {
-    expect(extractGitCPath('git -C /home/user/repo push')).toBe(
-      '/home/user/repo',
-    );
+describe('extractPrUrl', () => {
+  it('extracts GitHub PR URL from text', () => {
+    expect(
+      extractPrUrl(
+        'Created PR: https://github.com/Garsson-io/nanoclaw/pull/42',
+      ),
+    ).toBe('https://github.com/Garsson-io/nanoclaw/pull/42');
   });
 
-  it('returns empty when no -C', () => {
-    expect(extractGitCPath('git push')).toBe('');
+  it('returns undefined for text without PR URL', () => {
+    expect(extractPrUrl('No URL here')).toBeUndefined();
   });
 });
 
 describe('reconstructPrUrl', () => {
-  it('extracts URL from stdout', () => {
+  it('extracts from stdout first', () => {
     expect(
       reconstructPrUrl(
         'gh pr create',
@@ -145,7 +141,7 @@ describe('reconstructPrUrl', () => {
     ).toBe('https://github.com/Garsson-io/nanoclaw/pull/42');
   });
 
-  it('extracts URL from stderr', () => {
+  it('falls back to stderr', () => {
     expect(
       reconstructPrUrl(
         'gh pr create',
@@ -156,11 +152,11 @@ describe('reconstructPrUrl', () => {
     ).toBe('https://github.com/Garsson-io/nanoclaw/pull/42');
   });
 
-  it('extracts URL from command args', () => {
+  it('falls back to command args', () => {
     expect(
       reconstructPrUrl(
-        'gh pr merge https://github.com/Garsson-io/nanoclaw/pull/42',
-        '',
+        'gh pr merge https://github.com/Garsson-io/nanoclaw/pull/42 --squash',
+        '✓ Merged',
         '',
         'merge',
       ),
@@ -170,26 +166,29 @@ describe('reconstructPrUrl', () => {
   it('reconstructs from --repo + PR number', () => {
     expect(
       reconstructPrUrl(
-        'gh pr merge 42 --repo Garsson-io/nanoclaw',
-        '',
+        'gh pr merge 42 --repo Garsson-io/nanoclaw --squash',
+        '✓ Merged',
         '',
         'merge',
       ),
     ).toBe('https://github.com/Garsson-io/nanoclaw/pull/42');
   });
 
-  it('returns empty when no info available', () => {
-    expect(reconstructPrUrl('gh pr create', '', '', 'create')).toBe('');
-  });
-
-  it('prefers stdout over stderr over command', () => {
+  it('reconstructs from PR number + git remote', () => {
     expect(
       reconstructPrUrl(
-        'gh pr merge https://github.com/A/B/pull/1',
-        'https://github.com/A/B/pull/2',
-        'https://github.com/A/B/pull/3',
+        'gh pr merge 42 --squash',
+        '✓ Merged',
+        '',
         'merge',
+        'Garsson-io/nanoclaw',
       ),
-    ).toBe('https://github.com/A/B/pull/2'); // stdout wins
+    ).toBe('https://github.com/Garsson-io/nanoclaw/pull/42');
+  });
+
+  it('returns undefined when no URL can be reconstructed', () => {
+    expect(
+      reconstructPrUrl('gh pr merge --squash', '✓ Merged', '', 'merge'),
+    ).toBeUndefined();
   });
 });

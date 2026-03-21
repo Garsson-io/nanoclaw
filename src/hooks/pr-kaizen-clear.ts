@@ -1,37 +1,28 @@
-#!/usr/bin/env npx tsx
 /**
  * pr-kaizen-clear.ts — Clears the PR kaizen gate on valid impediment declarations.
  *
- * Port of .claude/kaizen/hooks/pr-kaizen-clear.sh (290 lines) to TypeScript.
  * PostToolUse hook on Bash — always exits 0 (state management, not blocking).
  *
  * Triggers:
  *   1. echo "KAIZEN_IMPEDIMENTS: [...]" — structured impediment declaration
  *   2. echo "KAIZEN_NO_ACTION [category]: <reason>" — restricted bypass
  *
- * Improvements over bash:
- * - Native JSON parsing (no jq pipelines or sed extraction)
- * - Typed validation with clear error messages
- * - No pipe-splitting corruption (IFS='|' read bug)
- * - Proper blocklist checking without per-pattern grep
- * - Atomic state file operations
+ * Part of kAIzen Agent Control Flow — see .claude/kaizen/README.md
+ * Migration: kaizen #320 (Phase 3 of #223)
  */
 
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import {
-  readHookInput,
-  exitCode,
-  emit,
-  exitHook,
-  currentBranch,
-} from './hook-utils.js';
+import { execSync } from 'node:child_process';
+import { appendFileSync, mkdirSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { type HookInput, readHookInput, writeHookOutput } from './hook-io.js';
 import { stripHeredocBody } from './parse-command.js';
 import {
-  findStateWithStatusAnyBranch,
+  DEFAULT_STATE_DIR,
   clearStateWithStatusAnyBranch,
+  findNewestStateWithStatusAnyBranch,
   markReflectionDone,
-  autoCloseKaizenIssues,
+  prUrlToStateKey,
 } from './state-utils.js';
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -48,87 +39,62 @@ interface Impediment {
 
 // ── Audit logging ────────────────────────────────────────────────────
 
-import { fileURLToPath } from 'node:url';
-const __hookDirname = path.dirname(fileURLToPath(import.meta.url));
-const HOOK_DIR = path.resolve(__hookDirname, '../../.claude/kaizen');
-const AUDIT_DIR = path.join(HOOK_DIR, 'audit');
+const __hookDirname = dirname(fileURLToPath(import.meta.url));
+const AUDIT_DIR = resolve(__hookDirname, '../../.claude/kaizen/audit');
+
+function currentBranch(): string {
+  try {
+    return execSync('git rev-parse --abbrev-ref HEAD', {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+  } catch {
+    return 'unknown';
+  }
+}
+
+function logAudit(file: string, line: string): void {
+  try {
+    mkdirSync(AUDIT_DIR, { recursive: true });
+    appendFileSync(join(AUDIT_DIR, file), line);
+  } catch {}
+}
 
 function logNoAction(category: string, reason: string, prUrl: string): void {
-  const branch = currentBranch();
-  const timestamp = new Date().toISOString();
-  const line = `${timestamp} | branch=${branch} | category=${category} | pr=${prUrl} | reason=${reason}\n`;
-  try {
-    fs.mkdirSync(AUDIT_DIR, { recursive: true });
-    fs.appendFileSync(path.join(AUDIT_DIR, 'no-action.log'), line);
-  } catch {}
+  const ts = new Date().toISOString();
+  logAudit(
+    'no-action.log',
+    `${ts} | branch=${currentBranch()} | category=${category} | pr=${prUrl} | reason=${reason}\n`,
+  );
 }
 
 function logWaiver(
   desc: string,
   reason: string,
-  findingType: string,
+  type: string,
   prUrl: string,
 ): void {
-  const branch = currentBranch();
-  const timestamp = new Date().toISOString();
-  const line = `${timestamp} | branch=${branch} | type=${findingType} | pr=${prUrl} | desc=${desc} | reason=${reason}\n`;
-  try {
-    fs.mkdirSync(AUDIT_DIR, { recursive: true });
-    fs.appendFileSync(path.join(AUDIT_DIR, 'waiver.log'), line);
-  } catch {}
-}
-
-// ── Waiver quality enforcement ───────────────────────────────────────
-
-const WAIVER_BLOCKLIST: string[] = [
-  'low frequency',
-  'rare enough',
-  'rarely happens',
-  'infrequent',
-  'overengineering',
-  'over-engineering',
-  'not worth',
-  'too much work',
-  'too much effort',
-  'self-correct',
-  'self correct',
-  'acceptable tradeoff',
-  'acceptable trade-off',
-  'minor enough',
-  'not important enough',
-  "won't happen again",
-  'unlikely to recur',
-  'edge case',
-];
-
-function checkWaiverBlocklist(reason: string): string | null {
-  const lower = reason.toLowerCase();
-  for (const pattern of WAIVER_BLOCKLIST) {
-    if (lower.includes(pattern)) return pattern;
-  }
-  return null;
+  const ts = new Date().toISOString();
+  logAudit(
+    'waiver.log',
+    `${ts} | branch=${currentBranch()} | type=${type} | pr=${prUrl} | desc=${desc} | reason=${reason}\n`,
+  );
 }
 
 // ── Validation ───────────────────────────────────────────────────────
 
-const STANDARD_DISPOSITIONS = new Set([
-  'filed',
-  'incident',
-  'fixed-in-pr',
-  'waived',
-]);
-const META_DISPOSITIONS = new Set(['filed', 'fixed-in-pr', 'waived']);
+/** Dispositions valid per finding type (kaizen #198: waived eliminated). */
+const META_DISPOSITIONS = new Set(['filed', 'fixed-in-pr']);
 const POSITIVE_DISPOSITIONS = new Set([
   'filed',
   'incident',
   'fixed-in-pr',
-  'waived',
   'no-action',
 ]);
+const STANDARD_DISPOSITIONS = new Set(['filed', 'incident', 'fixed-in-pr']);
 
 function validateImpediments(items: Impediment[]): string[] {
   const errors: string[] = [];
-
   for (const item of items) {
     const desc = item.impediment || item.finding || '';
     const disposition = item.disposition ?? '';
@@ -143,16 +109,23 @@ function validateImpediments(items: Impediment[]): string[] {
       continue;
     }
 
-    // Type-aware disposition validation (kaizen #162, #205, #213)
+    // Waived eliminated (kaizen #198)
+    if (disposition === 'waived') {
+      errors.push(
+        `disposition "waived" is no longer accepted (kaizen #198). If "${desc}" is real friction, file it. If not, reclassify as {"type": "positive", "disposition": "no-action", "reason": "..."}.`,
+      );
+      continue;
+    }
+
     if (type === 'meta' && !META_DISPOSITIONS.has(disposition)) {
       errors.push(
-        `meta-finding "${desc}" has disposition "${disposition}" \u2014 meta-findings must be "filed" (with ref), "fixed-in-pr", or "waived" (with reason). If it is truly not actionable, use "waived" and explain why.`,
+        `meta-finding "${desc}" has disposition "${disposition}" \u2014 must be "filed" or "fixed-in-pr". Reclassify as "positive" with "no-action" if not actionable.`,
       );
       continue;
     }
     if (type === 'positive' && !POSITIVE_DISPOSITIONS.has(disposition)) {
       errors.push(
-        `invalid disposition "${disposition}" for: ${desc} (must be filed|incident|fixed-in-pr|waived|no-action)`,
+        `invalid disposition "${disposition}" for: ${desc} (must be filed|incident|fixed-in-pr|no-action)`,
       );
       continue;
     }
@@ -162,106 +135,79 @@ function validateImpediments(items: Impediment[]): string[] {
       !STANDARD_DISPOSITIONS.has(disposition)
     ) {
       errors.push(
-        `invalid disposition "${disposition}" for: ${desc} (must be filed|incident|fixed-in-pr|waived)`,
+        `invalid disposition "${disposition}" for impediment: ${desc} (must be filed|incident|fixed-in-pr). File it or reclassify as "positive" if not real friction.`,
       );
       continue;
     }
 
-    // Ref requirement for filed/incident
     if ((disposition === 'filed' || disposition === 'incident') && !item.ref) {
       errors.push(
         `disposition "${disposition}" requires "ref" field for: ${desc}`,
       );
     }
-
-    // Reason requirement for waived/no-action
-    if (
-      (disposition === 'waived' || disposition === 'no-action') &&
-      !item.reason
-    ) {
+    if (disposition === 'no-action' && !item.reason) {
       errors.push(
-        `disposition "${disposition}" requires "reason" field for: ${desc}`,
+        `disposition "no-action" requires "reason" field for: ${desc}`,
       );
     }
   }
-
-  return errors;
-}
-
-function validateWaiverQuality(
-  items: Impediment[],
-  gatePrUrl: string,
-): string[] {
-  const errors: string[] = [];
-
-  const waivedItems = items.filter((i) => i.disposition === 'waived');
-  for (const item of waivedItems) {
-    const desc = item.impediment || item.finding || '';
-    const reason = item.reason ?? '';
-    const type = item.type ?? '';
-
-    // Check blocklist
-    const matched = checkWaiverBlocklist(reason);
-    if (matched) {
-      errors.push(
-        `waiver for "${desc}" uses blocklisted rationalization "${matched}". Filing an issue is not implementing a fix \u2014 if the observation is true, file it. Reconsider: is this actually not worth a 2-minute issue?`,
-      );
-    }
-
-    // Meta-findings require impact_minutes (kaizen #280)
-    if (type === 'meta') {
-      if (item.impact_minutes === undefined || item.impact_minutes === null) {
-        errors.push(
-          `meta-finding "${desc}" waived without impact_minutes. Add "impact_minutes": N (estimated minutes of agent/human time wasted per occurrence). If impact >= 5, file instead of waiving.`,
-        );
-      } else if (item.impact_minutes >= 5) {
-        errors.push(
-          `meta-finding "${desc}" has impact_minutes=${item.impact_minutes} (>= 5 min/occurrence) \u2014 too high to waive. File it: \`gh issue create --repo Garsson-io/kaizen ...\``,
-        );
-      }
-    }
-
-    // Log all waivers to audit trail
-    logWaiver(desc, reason, type || 'impediment', gatePrUrl);
-  }
-
   return errors;
 }
 
 // ── JSON extraction ──────────────────────────────────────────────────
 
-/**
- * Extract the KAIZEN_IMPEDIMENTS JSON from stdout or command line.
- * Handles: "KAIZEN_IMPEDIMENTS: [...]", "KAIZEN_IMPEDIMENTS: [] reason"
- * Returns { json, emptyReason } where emptyReason is set for "[] reason" format.
- */
 function extractImpedimentsJson(
   stdout: string,
   cmdLine: string,
+  fullCommand: string,
 ): { json: unknown[] | null; emptyReason: string } {
-  // Find raw text after "KAIZEN_IMPEDIMENTS:"
-  let rawAfterPrefix = '';
+  let raw = '';
+
+  // Try stdout
   if (stdout) {
-    const match = stdout.match(/KAIZEN_IMPEDIMENTS:\s*([\s\S]*)/);
-    if (match) rawAfterPrefix = match[1].replace(/\n/g, ' ').trim();
-  }
-  if (!rawAfterPrefix) {
-    const match = cmdLine.match(/KAIZEN_IMPEDIMENTS:\s*([\s\S]*)/);
-    if (match) rawAfterPrefix = match[1].replace(/\n/g, ' ').trim();
+    const m = stdout.match(/KAIZEN_IMPEDIMENTS:\s*([\s\S]*)/);
+    if (m) raw = m[1].replace(/\n/g, ' ').trim();
   }
 
-  if (!rawAfterPrefix) return { json: null, emptyReason: '' };
+  // Fallback: stdout as raw JSON array (kaizen #313)
+  if (!raw && stdout) {
+    const trimmed = stdout.replace(/\n/g, ' ').trim();
+    try {
+      if (Array.isArray(JSON.parse(trimmed))) raw = trimmed;
+    } catch {}
+  }
 
-  // Try parsing as-is
+  // Fallback: heredoc body from full command (kaizen #313)
+  if (!raw && fullCommand) {
+    const heredocMatch = fullCommand.match(
+      /<<.*?IMPEDIMENTS\n([\s\S]*?)\nIMPEDIMENTS/,
+    );
+    if (heredocMatch) {
+      const body = heredocMatch[1].replace(/\n/g, ' ').trim();
+      try {
+        if (Array.isArray(JSON.parse(body))) raw = body;
+      } catch {}
+    }
+  }
+
+  // Fallback: cmdLine inline
+  if (!raw) {
+    const m = cmdLine.match(/KAIZEN_IMPEDIMENTS:\s*([\s\S]*)/);
+    if (m) raw = m[1].replace(/\n/g, ' ').trim();
+  }
+
+  if (!raw) return { json: null, emptyReason: '' };
+
+  // Try full parse
   try {
-    const parsed = JSON.parse(rawAfterPrefix);
+    const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) return { json: parsed, emptyReason: '' };
   } catch {}
 
-  // Check for "[] reason text" format
-  const emptyArrayMatch = rawAfterPrefix.match(/^\[\]\s*(.*)/);
-  if (emptyArrayMatch) {
-    const reason = emptyArrayMatch[1]
+  // "[] reason" format
+  const emptyMatch = raw.match(/^\[\]\s*(.*)/);
+  if (emptyMatch) {
+    const reason = emptyMatch[1]
       .trim()
       .replace(/^['"]/, '')
       .replace(/['"]$/, '')
@@ -272,7 +218,7 @@ function extractImpedimentsJson(
   return { json: null, emptyReason: '' };
 }
 
-// ── KAIZEN_NO_ACTION handling ────────────────────────────────────────
+// ── KAIZEN_NO_ACTION ─────────────────────────────────────────────────
 
 const VALID_NO_ACTION_CATEGORIES = new Set([
   'docs-only',
@@ -283,127 +229,82 @@ const VALID_NO_ACTION_CATEGORIES = new Set([
   'trivial-refactor',
 ]);
 
-interface NoActionResult {
-  category: string;
-  reason: string;
-}
-
 function extractNoAction(
   stdout: string,
   cmdLine: string,
-): NoActionResult | null {
-  // Try extracting from stdout, then command line
-  const sources = [stdout, cmdLine].filter(Boolean);
-
-  for (const src of sources) {
-    const match = src.match(/KAIZEN_NO_ACTION\s*\[([a-z-]+)\]\s*:\s*(.*)/);
-    if (match) {
+): { category: string; reason: string } | null {
+  for (const src of [stdout, cmdLine].filter(Boolean)) {
+    const m = src.match(/KAIZEN_NO_ACTION\s*\[([a-z-]+)\]\s*:\s*(.*)/);
+    if (m) {
       return {
-        category: match[1],
-        reason: match[2]
-          .trim()
-          .replace(/^['"]/, '')
-          .replace(/['"]$/, '')
-          .trim(),
+        category: m[1],
+        reason: m[2].trim().replace(/^['"]/, '').replace(/['"]$/, '').trim(),
       };
     }
   }
-
   return null;
 }
 
-// ── Main ─────────────────────────────────────────────────────────────
+// ── Core logic (extracted for testability) ───────────────────────────
 
-function main(): void {
-  const input = readHookInput();
+export function processHookInput(
+  input: HookInput,
+  options: { stateDir?: string } = {},
+): string | null {
+  if (input.tool_name !== 'Bash') return null;
 
-  // Only process Bash tool calls
-  if (input.tool_name !== 'Bash') exitHook(0);
-  if (exitCode(input) !== 0) exitHook(0);
+  const exitCode = String(input.tool_response?.exit_code ?? '0');
+  if (exitCode !== '0') return null;
 
-  const command = input.tool_input.command ?? '';
-  const stdout = input.tool_response.stdout ?? '';
+  const command = input.tool_input?.command ?? '';
+  const stdout = input.tool_response?.stdout ?? '';
   const cmdLine = stripHeredocBody(command);
+  const stateDir =
+    options.stateDir ?? process.env.STATE_DIR ?? DEFAULT_STATE_DIR;
 
-  // Check if there's an active PR kaizen gate (kaizen #239)
-  const gateState = findStateWithStatusAnyBranch('needs_pr_kaizen');
-  if (!gateState) exitHook(0);
+  // Check for active kaizen gate
+  const gateState = findNewestStateWithStatusAnyBranch(
+    'needs_pr_kaizen',
+    stateDir,
+  );
+  if (!gateState) return null;
 
   const gatePrUrl = gateState.prUrl;
   let shouldClear = false;
   let clearReason = '';
   let allPassive = false;
+  const output: string[] = [];
 
   // ── Trigger 1: KAIZEN_IMPEDIMENTS ──────────────────────────────
   if (
     /KAIZEN_IMPEDIMENTS:/.test(cmdLine) ||
     /KAIZEN_IMPEDIMENTS:/.test(stdout)
   ) {
-    const { json, emptyReason } = extractImpedimentsJson(stdout, cmdLine);
+    const { json, emptyReason } = extractImpedimentsJson(
+      stdout,
+      cmdLine,
+      command,
+    );
 
     if (json === null) {
-      emit(`
-KAIZEN_IMPEDIMENTS: Invalid JSON. Expected a JSON array, e.g.:
-  echo 'KAIZEN_IMPEDIMENTS: []'
-  or
-  echo 'KAIZEN_IMPEDIMENTS:' && cat <<'IMPEDIMENTS'
-  [{"impediment": "...", "disposition": "filed", "ref": "#NNN"}]
-  IMPEDIMENTS
-`);
-      exitHook(0);
-    }
-
-    if (!Array.isArray(json)) {
-      emit(`
-KAIZEN_IMPEDIMENTS: Expected a JSON array, got a different type.
-  Use [] for no impediments, or [{"impediment": "...", ...}, ...] for a list.
-`);
-      exitHook(0);
+      return '\nKAIZEN_IMPEDIMENTS: Invalid JSON. Expected a JSON array.\n';
     }
 
     if (json.length === 0) {
-      // Empty array requires a reason (kaizen #140)
       if (!emptyReason) {
-        emit(`
-KAIZEN_IMPEDIMENTS: Empty array requires a reason.
-  Provide a brief justification after the empty array:
-  echo 'KAIZEN_IMPEDIMENTS: [] straightforward bug fix, no process issues'
-
-  If your reflection identified ANY concrete improvement, use the full
-  structured format with dispositions instead of an empty array.
-`);
-        exitHook(0);
+        return "\nKAIZEN_IMPEDIMENTS: Empty array requires a reason.\n  echo 'KAIZEN_IMPEDIMENTS: [] straightforward bug fix'\n";
       }
-
       logNoAction('empty-array', emptyReason, gatePrUrl);
       shouldClear = true;
       clearReason = `no impediments identified (${emptyReason})`;
     } else {
-      // Validate each entry
       const items = json as Impediment[];
-      const validationErrors = validateImpediments(items);
-
-      if (validationErrors.length > 0) {
-        emit(
-          `\nKAIZEN_IMPEDIMENTS: Validation failed:\n${validationErrors.join('\n')}\n\nFix the issues and resubmit.\n`,
-        );
-        exitHook(0);
+      const errors = validateImpediments(items);
+      if (errors.length > 0) {
+        return `\nKAIZEN_IMPEDIMENTS: Validation failed:\n${errors.join('\n')}\n\nFix the issues and resubmit.\n`;
       }
 
-      // Waiver quality enforcement (kaizen #280, #258, #198)
-      const waiverErrors = validateWaiverQuality(items, gatePrUrl);
-      if (waiverErrors.length > 0) {
-        emit(
-          `\nKAIZEN_IMPEDIMENTS: Waiver quality check failed (kaizen #280):\n${waiverErrors.join('\n')}\n\nKnown anti-patterns:\n- "Low frequency" ignores impact-per-occurrence. A 15-min blocker that happens once a week is worth filing.\n- "Overengineering" confuses filing with implementing. Filing takes 2 min; implementation is a separate decision.\n- "Self-correcting" assumes future agents improve without evidence. They don't \u2014 that's why this check exists.\n\nFix the issues and resubmit. To file: \`gh issue create --repo Garsson-io/kaizen --title "[LN] description" --label kaizen,level-N,area/...\`\n`,
-        );
-        exitHook(0);
-      }
-
-      // All-passive advisory (kaizen #205)
-      allPassive = items.every(
-        (i) => i.disposition === 'waived' || i.disposition === 'no-action',
-      );
-
+      allPassive = items.every((i) => i.disposition === 'no-action');
       shouldClear = true;
       clearReason = `${items.length} finding(s) addressed`;
     }
@@ -417,34 +318,13 @@ KAIZEN_IMPEDIMENTS: Empty array requires a reason.
     const noAction = extractNoAction(stdout, cmdLine);
 
     if (!noAction?.category) {
-      emit(`
-KAIZEN_NO_ACTION: Missing category. Format: KAIZEN_NO_ACTION [category]: reason
-  Valid categories: ${Array.from(VALID_NO_ACTION_CATEGORIES).join(', ')}
-
-  Example: echo 'KAIZEN_NO_ACTION [docs-only]: updated README formatting'
-
-  KAIZEN_NO_ACTION is for trivial changes only. If your reflection
-  identified ANY concrete improvement, use KAIZEN_IMPEDIMENTS instead.
-`);
-      exitHook(0);
+      return `\nKAIZEN_NO_ACTION: Missing category.\n  Valid: ${Array.from(VALID_NO_ACTION_CATEGORIES).join(', ')}\n`;
     }
-
     if (!VALID_NO_ACTION_CATEGORIES.has(noAction.category)) {
-      emit(`
-KAIZEN_NO_ACTION: Invalid category "${noAction.category}".
-  Valid categories: ${Array.from(VALID_NO_ACTION_CATEGORIES).join(', ')}
-
-  Example: echo 'KAIZEN_NO_ACTION [docs-only]: updated README formatting'
-`);
-      exitHook(0);
+      return `\nKAIZEN_NO_ACTION: Invalid category "${noAction.category}".\n  Valid: ${Array.from(VALID_NO_ACTION_CATEGORIES).join(', ')}\n`;
     }
-
     if (!noAction.reason) {
-      emit(`
-KAIZEN_NO_ACTION: Missing reason after category.
-  Format: KAIZEN_NO_ACTION [${noAction.category}]: your reason here
-`);
-      exitHook(0);
+      return `\nKAIZEN_NO_ACTION: Missing reason.\n  Format: KAIZEN_NO_ACTION [${noAction.category}]: your reason\n`;
     }
 
     logNoAction(noAction.category, noAction.reason, gatePrUrl);
@@ -452,35 +332,112 @@ KAIZEN_NO_ACTION: Missing reason after category.
     clearReason = `no action needed [${noAction.category}]: ${noAction.reason}`;
   }
 
-  // ── Clear gate if valid ────────────────────────────────────────
+  // ── Clear gate ─────────────────────────────────────────────────
   if (shouldClear) {
     if (allPassive) {
-      emit(`
-All findings waived \u2014 none filed or fixed-in-pr.
-"Every failure is a gift \u2014 if you file the issue."
-Are any of these actionable at L2+? If so, file them before proceeding.
-`);
+      output.push(
+        '\nAll findings classified as no-action \u2014 none filed or fixed-in-pr.\n"Every failure is a gift \u2014 if you file the issue."\n',
+      );
     }
 
-    clearStateWithStatusAnyBranch('needs_pr_kaizen', gatePrUrl);
-    markReflectionDone(gatePrUrl);
+    clearStateWithStatusAnyBranch(
+      'needs_pr_kaizen',
+      stateDir,
+      undefined,
+      gatePrUrl,
+    );
+    markReflectionDone(gatePrUrl, currentBranch(), stateDir);
 
-    // Auto-close referenced kaizen issues if PR is merged (kaizen #283)
+    // Auto-close kaizen issues (best-effort)
     try {
-      const closedCount = autoCloseKaizenIssues(gatePrUrl);
-      if (closedCount > 0) {
-        emit(
-          `Auto-closed ${closedCount} kaizen issue(s) referenced in ${gatePrUrl}\n`,
+      autoCloseKaizenIssues(gatePrUrl);
+    } catch {}
+
+    output.push(
+      `\nPR kaizen gate cleared (${clearReason}). You may proceed with other work.\n`,
+    );
+    return output.join('');
+  }
+
+  return null;
+}
+
+/** Auto-close kaizen issues referenced in a merged PR body. */
+function autoCloseKaizenIssues(prUrl: string): void {
+  const prNum = prUrl.match(/(\d+)$/)?.[1];
+  const repo = prUrl.match(/github\.com\/([^/]+\/[^/]+)\/pull/)?.[1];
+  if (!prNum || !repo) return;
+
+  let prState: string;
+  try {
+    prState = execSync(
+      `gh pr view ${prNum} --repo "${repo}" --json state --jq .state`,
+      {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      },
+    ).trim();
+  } catch {
+    return;
+  }
+  if (prState !== 'MERGED') return;
+
+  let prBody: string;
+  try {
+    prBody = execSync(
+      `gh pr view ${prNum} --repo "${repo}" --json body --jq .body`,
+      {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      },
+    ).trim();
+  } catch {
+    return;
+  }
+
+  const issueNums = new Set<string>();
+  for (const m of prBody.matchAll(/Garsson-io\/kaizen[#/issues/]*(\d+)/g))
+    issueNums.add(m[1]);
+  for (const m of prBody.matchAll(
+    /github\.com\/Garsson-io\/kaizen\/issues\/(\d+)/g,
+  ))
+    issueNums.add(m[1]);
+
+  for (const num of issueNums) {
+    try {
+      const state = execSync(
+        `gh issue view ${num} --repo Garsson-io/kaizen --json state --jq .state`,
+        {
+          encoding: 'utf-8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+        },
+      ).trim();
+      if (state === 'OPEN') {
+        execSync(
+          `gh issue close ${num} --repo Garsson-io/kaizen --comment "Auto-closed: PR merged (${prUrl})"`,
+          {
+            stdio: ['pipe', 'pipe', 'pipe'],
+          },
         );
       }
     } catch {}
-
-    emit(
-      `\nPR kaizen gate cleared (${clearReason}). You may proceed with other work.\n`,
-    );
   }
-
-  exitHook(0);
 }
 
-main();
+// ── Main entry point ─────────────────────────────────────────────────
+
+async function main(): Promise<void> {
+  const input = await readHookInput();
+  if (!input) process.exit(0);
+
+  const output = processHookInput(input);
+  if (output) writeHookOutput(output);
+  process.exit(0);
+}
+
+if (
+  process.argv[1]?.endsWith('pr-kaizen-clear.ts') ||
+  process.argv[1]?.endsWith('pr-kaizen-clear.js')
+) {
+  main().catch(() => process.exit(0));
+}
