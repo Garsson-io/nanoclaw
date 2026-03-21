@@ -53,6 +53,7 @@ RUN apt-get update && apt-get install -y \
 # Vertical-specific system deps: add new RUN layers here (don't modify the layer above).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     xvfb \
+    fonts-noto-core \
     && rm -rf /var/lib/apt/lists/*
 
 # Set Chromium path for agent-browser
