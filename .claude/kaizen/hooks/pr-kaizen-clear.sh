@@ -417,6 +417,12 @@ ADVISORY
 
   # Auto-close referenced kaizen issues if PR is merged (kaizen #283)
   auto_close_kaizen_issues "$GATE_PR_URL" 2>/dev/null || true
+
+  # Write per-PR reflection marker (kaizen #288)
+  # Prevents the gate from re-firing for this PR during post-merge cleanup
+  if [ -n "$GATE_PR_URL" ]; then
+    mark_reflection_done "$GATE_PR_URL"
+  fi
   cat <<EOF
 
 PR kaizen gate cleared ($CLEAR_REASON). You may proceed with other work.
