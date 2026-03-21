@@ -15,7 +15,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       should_report: ${{ steps.check.outputs.should_report }}
-      pr_count: ${{ steps.check.outputs.pr_count }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -49,8 +48,14 @@ jobs:
           cache: npm
       - run: npm ci
 
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
       - name: Generate and post progress report
         env:
           GH_TOKEN: ${{ github.token }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Claude subscription auth — set via:
+          #   gh secret set CLAUDE_ACCESS_TOKEN --repo Garsson-io/nanoclaw
+          # Get your token: claude config get oauthAccessToken
+          CLAUDE_ACCESS_TOKEN: ${{ secrets.CLAUDE_ACCESS_TOKEN }}
         run: npx tsx scripts/progress-report.ts
