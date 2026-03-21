@@ -189,5 +189,62 @@ else
   ((FAIL++))
 fi
 
+
+echo ""
+echo "=== TS wrapper: STATE_DIR env var isolation ==="
+
+# Verify that the TS wrapper (kaizen-reflect-ts.sh) respects STATE_DIR env var.
+# This is the fix for kaizen #340: smoke tests should not pollute the real state dir.
+
+TS_HOOK="$(dirname "$0")/../kaizen-reflect-ts.sh"
+TS_ISOLATED_DIR="$TEST_STATE_DIR/ts-isolated"
+mkdir -p "$TS_ISOLATED_DIR"
+
+# Check that TS wrapper exists
+if [ -f "$TS_HOOK" ]; then
+  # Run the TS hook with an isolated STATE_DIR
+  TS_INPUT=$(jq -n \
+    --arg cmd "gh pr create --title 'test isolation' --body 'body'" \
+    --arg out "https://github.com/Garsson-io/nanoclaw/pull/999" '{
+    tool_name: "Bash",
+    tool_input: { command: $cmd },
+    tool_response: { stdout: $out, stderr: "", exit_code: 0 }
+  }')
+
+  TS_OUTPUT=$(echo "$TS_INPUT" | STATE_DIR="$TS_ISOLATED_DIR" SEND_TELEGRAM_IPC_DISABLED=true bash "$TS_HOOK" 2>/dev/null)
+  TS_EXIT=$?
+
+  # State file should go to isolated dir, NOT to /tmp/.pr-review-state
+  ISOLATED_STATE_COUNT=$(find "$TS_ISOLATED_DIR" -name "pr-kaizen-*" 2>/dev/null | wc -l | tr -d ' ')
+  REAL_STATE_LEAK=$(find /tmp/.pr-review-state -name "*nanoclaw_999" 2>/dev/null | wc -l | tr -d ' ')
+
+  if [ "$ISOLATED_STATE_COUNT" -gt 0 ]; then
+    echo "  PASS: TS hook wrote state to isolated dir"
+    ((PASS++))
+  else
+    # TS wrapper may not be available (tsx not installed) — skip gracefully
+    if [ "$TS_EXIT" -ne 0 ] && [ -z "$TS_OUTPUT" ]; then
+      echo "  SKIP: TS wrapper not available (tsx may not be installed)"
+    else
+      echo "  FAIL: TS hook did not write state to isolated dir"
+      ((FAIL++))
+    fi
+  fi
+
+  if [ "$REAL_STATE_LEAK" -eq 0 ]; then
+    echo "  PASS: no state leaked to real state dir"
+    ((PASS++))
+  else
+    echo "  FAIL: state leaked to /tmp/.pr-review-state!"
+    ((FAIL++))
+    # Clean up the leak
+    find /tmp/.pr-review-state -name "*nanoclaw_999" -delete 2>/dev/null
+  fi
+
+  rm -rf "$TS_ISOLATED_DIR"
+else
+  echo "  SKIP: kaizen-reflect-ts.sh not found"
+fi
+
 teardown
 print_results

@@ -356,7 +356,8 @@ async function main(): Promise<void> {
   const input = await readHookInput();
   if (!input) process.exit(0);
 
-  const output = processHookInput(input);
+  const stateDir = process.env.STATE_DIR ?? undefined;
+  const output = processHookInput(input, { stateDir });
   if (output) {
     writeHookOutput(output);
   }
