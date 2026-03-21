@@ -233,12 +233,64 @@ vi.mock('./send-response.js', () => ({
   SendResponseDeps: undefined,
 }));
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import {
   makeResponseDeps,
   buildAckPrefix,
   detectDevSafeWord,
 } from './index.js';
 import type { Channel } from './types.js';
+
+// ---------------------------------------------------------------------------
+// Mock-parity lint (kaizen #346): Auto-detect when index.ts imports diverge
+// from vi.mock() declarations in this file. Prevents silent test breakage
+// when new imports are added to index.ts.
+// ---------------------------------------------------------------------------
+
+/** Extract local module specifiers imported by index.ts. */
+function getIndexImports(): string[] {
+  const content = readFileSync(join(__dirname, 'index.ts'), 'utf-8');
+  const modules = new Set<string>();
+  // Match: import ... from './foo.js'  AND  import './foo.js'
+  const fromPattern = /from\s+['"](\.\/[^'"]+)['"]/g;
+  const barePattern = /^import\s+['"](\.\/[^'"]+)['"]/gm;
+  let match;
+  while ((match = fromPattern.exec(content)) !== null) modules.add(match[1]);
+  while ((match = barePattern.exec(content)) !== null) modules.add(match[1]);
+  return [...modules];
+}
+
+/** Extract module specifiers that have vi.mock() declarations in this file. */
+function getMockedModules(): string[] {
+  const content = readFileSync(__filename, 'utf-8');
+  const modules = new Set<string>();
+  const pattern = /vi\.mock\(\s*['"](\.\/[^'"]+)['"]/g;
+  let match;
+  while ((match = pattern.exec(content)) !== null) modules.add(match[1]);
+  return [...modules];
+}
+
+// Modules that are type-only imports or don't need mocking
+const MOCK_EXCLUSIONS = new Set([
+  './types.js', // type-only import, no runtime side effects
+  './router-types.js', // type-only import
+]);
+
+describe('mock-parity lint (kaizen #346)', () => {
+  test('every index.ts import has a vi.mock() in this file', () => {
+    const indexImports = getIndexImports();
+    const mockedModules = new Set(getMockedModules());
+    const unmocked = indexImports.filter(
+      (mod) => !mockedModules.has(mod) && !MOCK_EXCLUSIONS.has(mod),
+    );
+    expect(
+      unmocked,
+      `index.ts imports these modules but they have no vi.mock() in this test file: ${unmocked.join(', ')}. Add vi.mock('${unmocked[0]}', () => ({})) or add to MOCK_EXCLUSIONS if type-only.`,
+    ).toEqual([]);
+  });
+});
 
 describe('buildAckPrefix', () => {
   // INVARIANT: Case prefix must be a single-line prefix (space-separated, no newline)
