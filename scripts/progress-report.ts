@@ -3,19 +3,21 @@
  * progress-report.ts — Automated system progress report.
  *
  * Gathers PR/issue/test data mechanistically via gh CLI,
- * calls Claude API for narrative analysis, posts to GitHub Discussions.
+ * calls Claude (Sonnet, subscription auth) for narrative analysis,
+ * posts to GitHub Discussions on the kaizen repo.
  *
  * Usage:
  *   npx tsx scripts/progress-report.ts                    # generate and post
  *   npx tsx scripts/progress-report.ts --check-threshold  # exit 0 if ≥10 PRs, 1 if not
  *   npx tsx scripts/progress-report.ts --dry-run          # print report without posting
  *
- * Requires:
- *   ANTHROPIC_API_KEY — for Claude API narrative generation
- *   GH_TOKEN or gh CLI auth — for data gathering and posting
+ * Auth:
+ *   CLAUDE_CODE_OAUTH_TOKEN — Claude subscription token (from `claude setup-token`)
+ *   GH_PAT — GitHub PAT with discussion:write scope on kaizen repo (for cross-repo posting)
+ *   GH_TOKEN — fallback for same-repo operations (data gathering)
  */
 
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
 import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -38,9 +40,14 @@ interface RawData {
   prBreakdown: Record<string, number>;
 }
 
-function gh(cmd: string): string {
+function gh(cmd: string, token?: string): string {
   try {
-    return execSync(`gh ${cmd}`, { encoding: 'utf8', timeout: 30_000 }).trim();
+    const env = token ? { ...process.env, GH_TOKEN: token } : undefined;
+    return execSync(`gh ${cmd}`, {
+      encoding: 'utf8',
+      timeout: 30_000,
+      env,
+    }).trim();
   } catch (e: any) {
     console.error(`gh command failed: gh ${cmd.slice(0, 80)}`);
     return '';
@@ -79,7 +86,7 @@ function gatherData(): RawData {
   );
   const openIssueCount = openJson ? JSON.parse(openJson).length : 0;
 
-  // Diff stats (get the oldest merged PR's merge base)
+  // Diff stats
   let diffStats = { filesChanged: 0, insertions: 0, deletions: 0 };
   if (mergedPRs.length > 0) {
     try {
@@ -132,11 +139,10 @@ function loadSpiritDocs(): string {
   return docs.join('\n\n');
 }
 
-// ── Narrative Generation (Claude API) ───────────────────────────────────
+// ── Narrative Generation (Claude CLI, subscription auth) ────────────────
 
 async function generateNarrative(data: RawData): Promise<string> {
-  // Use claude CLI with subscription auth (not raw API key).
-  // The CLI is authed via CLAUDE_ACCESS_TOKEN in CI, or local OAuth.
+  // Check claude CLI is available
   try {
     execSync('claude --version', { encoding: 'utf8', timeout: 5_000 });
   } catch {
@@ -174,9 +180,9 @@ Write a progress report that combines hard data with narrative storytelling. Inc
 
 3. **The Philosophy** — What does this period reveal about autonomous improvement? Reference specific PRs as evidence. Draw connections between seemingly unrelated changes. What pattern is emerging that the individual PRs don't see? Connect to the Zen of Kaizen principles where they apply naturally (not forced): compound interest, enforcement over instructions, specs as hypotheses, etc.
 
-4. **The Horizon** — Where is the system on its L0→L8 journey? What moved? What's the frontier? What's the next wall to hit?
+4. **The Horizon** — Where is the system on its L0-L8 journey? What moved? What is the frontier? What is the next wall to hit?
 
-5. **The Gaps** — What's conspicuously absent? What should have happened but didn't? What's the system avoiding?
+5. **The Gaps** — What is conspicuously absent? What should have happened but did not? What is the system avoiding?
 
 **Style:** Write like a thoughtful engineering retrospective crossed with a philosophical diary. Concrete (reference PR numbers, specific changes) but reflective (what does it mean?). The reader should feel the momentum AND understand exactly what shipped. Avoid corporate-speak and filler. Be honest about failures and gaps.
 
@@ -185,19 +191,58 @@ Write a progress report that combines hard data with narrative storytelling. Inc
 ${spirit}`;
 
   try {
-    // Use claude CLI with Sonnet for quality narrative.
-    // Auth: subscription token via CLAUDE_ACCESS_TOKEN (CI) or local OAuth.
-    // --dangerously-skip-permissions: non-interactive (CI context)
-    // --max-turns 1: single response, no tool use needed
-    const result = execSync(
-      `claude -p ${JSON.stringify(prompt)} --model claude-sonnet-4-6 --output-format text --max-turns 1 --dangerously-skip-permissions`,
-      { encoding: 'utf8', timeout: 120_000, maxBuffer: 1024 * 1024 },
+    // Pipe prompt via stdin to avoid shell quoting issues.
+    // The prompt contains backticks, quotes, newlines that break CLI args.
+    // Auth: CLAUDE_CODE_OAUTH_TOKEN env var (subscription, set in CI secrets)
+    const result = spawnSync(
+      'claude',
+      [
+        '-p',
+        '--model',
+        'claude-sonnet-4-6',
+        '--output-format',
+        'text',
+        '--max-turns',
+        '1',
+        '--dangerously-skip-permissions',
+      ],
+      {
+        input: prompt,
+        encoding: 'utf8',
+        timeout: 300_000, // 5 min — large prompt with 100+ PRs needs time
+        maxBuffer: 2 * 1024 * 1024,
+      },
     );
-    if (!result.trim()) {
+
+    if (result.error) {
+      throw result.error;
+    }
+
+    // claude CLI writes "Reached max turns" to stderr — this is informational, not an error
+    if (result.status !== 0) {
+      const stderr = result.stderr || '';
+      // Filter out the "Reached max turns" info message
+      const realErrors = stderr
+        .split('\n')
+        .filter((l) => l && !l.includes('Reached max turns'))
+        .join('\n');
+      if (realErrors) {
+        console.error(`claude CLI stderr: ${realErrors.slice(0, 300)}`);
+      }
+      // If we got stdout despite non-zero exit, use it (max-turns exit is normal)
+      if (result.stdout?.trim()) {
+        return result.stdout.trim();
+      }
+      console.error(`claude CLI exited ${result.status} with no output`);
+      return generateTemplateReport(data);
+    }
+
+    const output = result.stdout?.trim();
+    if (!output) {
       console.error('Empty claude CLI response');
       return generateTemplateReport(data);
     }
-    return result.trim();
+    return output;
   } catch (e: any) {
     console.error(
       `claude CLI failed: ${e.message?.split('\n')[0] || 'unknown error'}`,
@@ -240,18 +285,28 @@ function generateTemplateReport(data: RawData): string {
 |----|-------|------|
 ${prLines}
 
-_This is a template report. Set ANTHROPIC_API_KEY for AI-generated narrative analysis._`;
+_This is a template report. Install claude CLI and set CLAUDE_CODE_OAUTH_TOKEN for AI-generated narrative._`;
 }
 
 // ── Post to GitHub Discussions ──────────────────────────────────────────
 
 function postDiscussion(title: string, body: string): string {
+  // Use GH_PAT for cross-repo discussion posting (github.token is repo-scoped)
+  const pat = process.env.GH_PAT;
+  if (!pat) {
+    console.error(
+      'GH_PAT not set — cannot post cross-repo discussion. Set via: gh secret set GH_PAT',
+    );
+    return '';
+  }
+
   const repoId = gh(
     `api graphql -f query='{ repository(owner:"Garsson-io", name:"kaizen") { id } }' --jq '.data.repository.id'`,
+    pat,
   );
 
   if (!repoId) {
-    console.error('Could not get repo ID');
+    console.error('Could not get kaizen repo ID');
     return '';
   }
 
@@ -261,6 +316,7 @@ function postDiscussion(title: string, body: string): string {
         discussion { url }
       }
     }' -f repoId="${repoId}" -f categoryId="${DISCUSSION_CATEGORY_ID}" -f title=${JSON.stringify(title)} -f body=${JSON.stringify(body)}`,
+    pat,
   );
 
   try {
@@ -303,14 +359,16 @@ async function main() {
     return;
   }
 
+  // Always print report to stdout (CI logs) regardless of posting success
+  console.log(report);
+
   const url = postDiscussion(title, report);
   if (url) {
-    console.log(`Posted: ${url}`);
+    console.log(`\nPosted: ${url}`);
   } else {
-    console.error('Failed to post discussion');
-    // Still print the report to stdout for CI logs
-    console.log(report);
-    process.exit(1);
+    console.error('\nFailed to post discussion — report printed above');
+    // Don't exit 1 — the narrative was generated successfully,
+    // only the posting failed. The report is in the CI logs.
   }
 }
 
