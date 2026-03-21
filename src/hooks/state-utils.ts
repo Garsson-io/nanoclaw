@@ -30,10 +30,7 @@ export function stateDir(): string {
 }
 /** @deprecated Use stateDir() — this export exists for backward compat. */
 export const STATE_DIR = '/tmp/.pr-review-state';
-export const MAX_STATE_AGE = parseInt(
-  process.env.MAX_STATE_AGE ?? '7200',
-  10,
-);
+export const MAX_STATE_AGE = parseInt(process.env.MAX_STATE_AGE ?? '7200', 10);
 
 // ── State file types ─────────────────────────────────────────────────
 
@@ -83,7 +80,11 @@ export function writeStateFile(
 }
 
 /** Append a key=value line to a state file. */
-export function appendStateFile(filePath: string, key: string, value: string): void {
+export function appendStateFile(
+  filePath: string,
+  key: string,
+  value: string,
+): void {
   fs.appendFileSync(filePath, `${key}=${value}\n`);
 }
 
@@ -331,9 +332,7 @@ export function autoCloseKaizenIssues(prUrl: string): number {
   if (!prUrl) return 0;
 
   const prNumMatch = prUrl.match(/(\d+)$/);
-  const repoMatch = prUrl.match(
-    /https:\/\/github\.com\/([^/]+\/[^/]+)\/pull/,
-  );
+  const repoMatch = prUrl.match(/https:\/\/github\.com\/([^/]+\/[^/]+)\/pull/);
   if (!prNumMatch || !repoMatch) return 0;
 
   const prNum = prNumMatch[1];

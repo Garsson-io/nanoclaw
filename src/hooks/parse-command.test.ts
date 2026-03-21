@@ -55,7 +55,9 @@ describe('isGhPrCommand', () => {
   });
 
   it('detects multiple subcommands with pipe separator', () => {
-    expect(isGhPrCommand('gh pr create --title "x"', 'create|merge')).toBe(true);
+    expect(isGhPrCommand('gh pr create --title "x"', 'create|merge')).toBe(
+      true,
+    );
     expect(isGhPrCommand('gh pr merge 42', 'create|merge')).toBe(true);
     expect(isGhPrCommand('gh pr diff', 'create|merge')).toBe(false);
   });
@@ -65,7 +67,9 @@ describe('isGhPrCommand', () => {
   });
 
   it('detects command in a chain', () => {
-    expect(isGhPrCommand('echo done && gh pr create --title "x"', 'create')).toBe(true);
+    expect(
+      isGhPrCommand('echo done && gh pr create --title "x"', 'create'),
+    ).toBe(true);
   });
 
   it('detects command after pipe', () => {
@@ -119,7 +123,9 @@ describe('extractRepoFlag', () => {
 
 describe('extractGitCPath', () => {
   it('extracts -C path', () => {
-    expect(extractGitCPath('git -C /home/user/repo push')).toBe('/home/user/repo');
+    expect(extractGitCPath('git -C /home/user/repo push')).toBe(
+      '/home/user/repo',
+    );
   });
 
   it('returns empty when no -C', () => {

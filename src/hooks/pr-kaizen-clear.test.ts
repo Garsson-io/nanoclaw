@@ -201,9 +201,7 @@ describe('pr-kaizen-clear: validation', () => {
   });
 
   it('rejects filed without ref', () => {
-    const json = JSON.stringify([
-      { impediment: 'test', disposition: 'filed' },
-    ]);
+    const json = JSON.stringify([{ impediment: 'test', disposition: 'filed' }]);
     const output = runHook(impedimentsInput(json));
     expect(output).toContain('requires "ref" field');
   });
@@ -436,9 +434,7 @@ describe('pr-kaizen-clear: KAIZEN_NO_ACTION', () => {
 describe('pr-kaizen-clear: edge cases', () => {
   it('exits silently when no gate is active', () => {
     // Remove the gate
-    fs.unlinkSync(
-      path.join(testStateDir, 'pr-kaizen-Garsson-io_nanoclaw_42'),
-    );
+    fs.unlinkSync(path.join(testStateDir, 'pr-kaizen-Garsson-io_nanoclaw_42'));
 
     const output = runHook(
       impedimentsInput(

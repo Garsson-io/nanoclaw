@@ -77,9 +77,7 @@ function prMergeInput(prUrl: string): object {
 }
 
 function hasKaizenState(): boolean {
-  return fs
-    .readdirSync(testStateDir)
-    .some((f) => f.startsWith('pr-kaizen-'));
+  return fs.readdirSync(testStateDir).some((f) => f.startsWith('pr-kaizen-'));
 }
 
 function getKaizenState(): Record<string, string> {
@@ -87,10 +85,7 @@ function getKaizenState(): Record<string, string> {
     .readdirSync(testStateDir)
     .filter((f) => f.startsWith('pr-kaizen-'));
   if (files.length === 0) return {};
-  const content = fs.readFileSync(
-    path.join(testStateDir, files[0]),
-    'utf-8',
-  );
+  const content = fs.readFileSync(path.join(testStateDir, files[0]), 'utf-8');
   const state: Record<string, string> = {};
   for (const line of content.split('\n')) {
     const eq = line.indexOf('=');
@@ -101,16 +96,12 @@ function getKaizenState(): Record<string, string> {
 
 describe('kaizen-reflect: gh pr create', () => {
   it('creates state file with needs_pr_kaizen status', () => {
-    runHook(
-      prCreateInput('https://github.com/Garsson-io/nanoclaw/pull/42'),
-    );
+    runHook(prCreateInput('https://github.com/Garsson-io/nanoclaw/pull/42'));
     expect(hasKaizenState()).toBe(true);
 
     const state = getKaizenState();
     expect(state.STATUS).toBe('needs_pr_kaizen');
-    expect(state.PR_URL).toBe(
-      'https://github.com/Garsson-io/nanoclaw/pull/42',
-    );
+    expect(state.PR_URL).toBe('https://github.com/Garsson-io/nanoclaw/pull/42');
     expect(state.BRANCH).toBeTruthy();
   });
 
@@ -151,9 +142,7 @@ describe('kaizen-reflect: gh pr create', () => {
 
 describe('kaizen-reflect: gh pr merge', () => {
   it('creates state file on merge', () => {
-    runHook(
-      prMergeInput('https://github.com/Garsson-io/nanoclaw/pull/42'),
-    );
+    runHook(prMergeInput('https://github.com/Garsson-io/nanoclaw/pull/42'));
     expect(hasKaizenState()).toBe(true);
   });
 

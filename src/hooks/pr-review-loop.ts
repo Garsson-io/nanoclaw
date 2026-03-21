@@ -53,7 +53,11 @@ const MAX_ROUNDS = 4;
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-function printChecklist(prUrl: string, round: string, maxRounds: number): string {
+function printChecklist(
+  prUrl: string,
+  round: string,
+  maxRounds: number,
+): string {
   return `
 Use the /review-pr skill for the full checklist. Run \`/review-pr ${prUrl}\` now.
 
@@ -269,9 +273,10 @@ Track your round: "ROUND N/${MAX_ROUNDS}: [reviewing|issues found|clean]"
     const SMALL_DIFF_THRESHOLD = 15;
     if (diffLines > 0 && diffLines <= SMALL_DIFF_THRESHOLD) {
       // Small diff — abbreviated review
-      const diffPreview = git(
-        `diff ${lastSha}..HEAD -- . ':!*.lock'`,
-      ).slice(0, 3000);
+      const diffPreview = git(`diff ${lastSha}..HEAD -- . ':!*.lock'`).slice(
+        0,
+        3000,
+      );
 
       writeStateFile(stateFilePath, {
         PR_URL: prUrl,

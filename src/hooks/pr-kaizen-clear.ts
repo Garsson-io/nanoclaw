@@ -53,11 +53,7 @@ const __hookDirname = path.dirname(fileURLToPath(import.meta.url));
 const HOOK_DIR = path.resolve(__hookDirname, '../../.claude/kaizen');
 const AUDIT_DIR = path.join(HOOK_DIR, 'audit');
 
-function logNoAction(
-  category: string,
-  reason: string,
-  prUrl: string,
-): void {
+function logNoAction(category: string, reason: string, prUrl: string): void {
   const branch = currentBranch();
   const timestamp = new Date().toISOString();
   const line = `${timestamp} | branch=${branch} | category=${category} | pr=${prUrl} | reason=${reason}\n`;
@@ -130,9 +126,7 @@ const POSITIVE_DISPOSITIONS = new Set([
   'no-action',
 ]);
 
-function validateImpediments(
-  items: Impediment[],
-): string[] {
+function validateImpediments(items: Impediment[]): string[] {
   const errors: string[] = [];
 
   for (const item of items) {
@@ -174,10 +168,7 @@ function validateImpediments(
     }
 
     // Ref requirement for filed/incident
-    if (
-      (disposition === 'filed' || disposition === 'incident') &&
-      !item.ref
-    ) {
+    if ((disposition === 'filed' || disposition === 'incident') && !item.ref) {
       errors.push(
         `disposition "${disposition}" requires "ref" field for: ${desc}`,
       );
@@ -305,9 +296,7 @@ function extractNoAction(
   const sources = [stdout, cmdLine].filter(Boolean);
 
   for (const src of sources) {
-    const match = src.match(
-      /KAIZEN_NO_ACTION\s*\[([a-z-]+)\]\s*:\s*(.*)/,
-    );
+    const match = src.match(/KAIZEN_NO_ACTION\s*\[([a-z-]+)\]\s*:\s*(.*)/);
     if (match) {
       return {
         category: match[1],
@@ -346,7 +335,10 @@ function main(): void {
   let allPassive = false;
 
   // ── Trigger 1: KAIZEN_IMPEDIMENTS ──────────────────────────────
-  if (/KAIZEN_IMPEDIMENTS:/.test(cmdLine) || /KAIZEN_IMPEDIMENTS:/.test(stdout)) {
+  if (
+    /KAIZEN_IMPEDIMENTS:/.test(cmdLine) ||
+    /KAIZEN_IMPEDIMENTS:/.test(stdout)
+  ) {
     const { json, emptyReason } = extractImpedimentsJson(stdout, cmdLine);
 
     if (json === null) {
@@ -483,7 +475,9 @@ Are any of these actionable at L2+? If so, file them before proceeding.
       }
     } catch {}
 
-    emit(`\nPR kaizen gate cleared (${clearReason}). You may proceed with other work.\n`);
+    emit(
+      `\nPR kaizen gate cleared (${clearReason}). You may proceed with other work.\n`,
+    );
   }
 
   exitHook(0);

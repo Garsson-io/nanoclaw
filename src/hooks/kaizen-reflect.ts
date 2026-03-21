@@ -50,8 +50,7 @@ function reflectionPrompt(
   changedFiles: string,
   mc: string,
 ): string {
-  const eventLabel =
-    event === 'create' ? 'Post-PR Creation' : 'Post-Merge';
+  const eventLabel = event === 'create' ? 'Post-PR Creation' : 'Post-Merge';
   const extraMergeSteps =
     event === 'merge'
       ? `

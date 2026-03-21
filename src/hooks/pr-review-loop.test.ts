@@ -52,12 +52,15 @@ afterEach(() => {
 function runHook(input: object): string {
   const json = JSON.stringify(input);
   try {
-    return execSync(`echo '${json.replace(/'/g, "'\\''")}' | npx tsx "${HOOK_PATH}"`, {
-      encoding: 'utf-8',
-      env: { ...process.env, STATE_DIR: testStateDir },
-      stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: 15000,
-    }).trim();
+    return execSync(
+      `echo '${json.replace(/'/g, "'\\''")}' | npx tsx "${HOOK_PATH}"`,
+      {
+        encoding: 'utf-8',
+        env: { ...process.env, STATE_DIR: testStateDir },
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: 15000,
+      },
+    ).trim();
   } catch (err: any) {
     // Hook always exits 0, but if it exits 0 with output, execSync still works
     return err.stdout?.trim?.() ?? '';
@@ -97,14 +100,22 @@ function prCreateInput(prUrl: string): object {
 function gitPushInput(): object {
   return {
     tool_input: { command: 'git push' },
-    tool_response: { stdout: 'Everything up-to-date', stderr: '', exit_code: '0' },
+    tool_response: {
+      stdout: 'Everything up-to-date',
+      stderr: '',
+      exit_code: '0',
+    },
   };
 }
 
 function prDiffInput(prUrl: string): object {
   return {
     tool_input: { command: `gh pr diff ${prUrl}` },
-    tool_response: { stdout: 'diff --git a/foo b/foo', stderr: '', exit_code: '0' },
+    tool_response: {
+      stdout: 'diff --git a/foo b/foo',
+      stderr: '',
+      exit_code: '0',
+    },
   };
 }
 
@@ -145,7 +156,11 @@ describe('pr-review-loop: PR create', () => {
   it('exits silently when no PR URL in output', () => {
     const output = runHook({
       tool_input: { command: 'gh pr create --title test' },
-      tool_response: { stdout: 'some error output', stderr: '', exit_code: '0' },
+      tool_response: {
+        stdout: 'some error output',
+        stderr: '',
+        exit_code: '0',
+      },
     });
     expect(output).toBe('');
   });
@@ -156,9 +171,7 @@ describe('pr-review-loop: two repos', () => {
     runHook(
       prCreateInput('https://github.com/Garsson-io/garsson-prints/pull/2'),
     );
-    runHook(
-      prCreateInput('https://github.com/Garsson-io/nanoclaw/pull/40'),
-    );
+    runHook(prCreateInput('https://github.com/Garsson-io/nanoclaw/pull/40'));
 
     expect(
       fs.existsSync(path.join(testStateDir, 'Garsson-io_garsson-prints_2')),
@@ -277,9 +290,7 @@ describe('pr-review-loop: gh pr diff', () => {
       BRANCH: branch,
     });
 
-    runHook(
-      prDiffInput('https://github.com/Garsson-io/nanoclaw/pull/201'),
-    );
+    runHook(prDiffInput('https://github.com/Garsson-io/nanoclaw/pull/201'));
 
     const state = readState('Garsson-io_nanoclaw_201');
     expect(state.LAST_REVIEWED_SHA).toBeTruthy();
@@ -319,9 +330,7 @@ describe('pr-review-loop: gh pr merge', () => {
     runHook(prMergeInput('https://github.com/Garsson-io/nanoclaw/pull/42'));
     const state = readState('post-merge-Garsson-io_nanoclaw_42');
     expect(state.STATUS).toBe('needs_post_merge');
-    expect(state.PR_URL).toBe(
-      'https://github.com/Garsson-io/nanoclaw/pull/42',
-    );
+    expect(state.PR_URL).toBe('https://github.com/Garsson-io/nanoclaw/pull/42');
   });
 
   it('cleans up review state file on merge', () => {

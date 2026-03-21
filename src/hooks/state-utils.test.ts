@@ -63,9 +63,7 @@ describe('readStateFile / writeStateFile', () => {
 
     const state = readStateFile(filePath);
     expect(state).not.toBeNull();
-    expect(state!.PR_URL).toBe(
-      'https://github.com/Garsson-io/nanoclaw/pull/1',
-    );
+    expect(state!.PR_URL).toBe('https://github.com/Garsson-io/nanoclaw/pull/1');
     expect(state!.ROUND).toBe('2');
     expect(state!.STATUS).toBe('needs_review');
     expect(state!.BRANCH).toBe('test-branch');
