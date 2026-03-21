@@ -104,12 +104,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "./.claude/kaizen/hooks/pr-review-loop.sh",
+            "command": "./.claude/kaizen/hooks/pr-review-loop-ts.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "./.claude/kaizen/hooks/kaizen-reflect.sh",
+            "command": "./.claude/kaizen/hooks/kaizen-reflect-ts.sh",
             "timeout": 10
           },
           {
@@ -119,7 +119,7 @@
           },
           {
             "type": "command",
-            "command": "./.claude/kaizen/hooks/pr-kaizen-clear.sh",
+            "command": "./.claude/kaizen/hooks/pr-kaizen-clear-ts.sh",
             "timeout": 10
           },
           {

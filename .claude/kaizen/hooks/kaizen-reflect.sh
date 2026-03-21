@@ -1,4 +1,8 @@
 #!/bin/bash
+# DEACTIVATED — Migrated to TypeScript: src/hooks/kaizen-reflect.ts
+# Wrapper: .claude/kaizen/hooks/kaizen-reflect-ts.sh
+# Migration: Garsson-io/kaizen#320, docs/hook-language-boundaries.md Phase 3
+#
 # Part of kAIzen Agent Control Flow — see .claude/kaizen/README.md
 # kaizen-reflect.sh — Level 2 kaizen enforcement (Issue #9)
 # Triggers after `gh pr create` or `gh pr merge` to prompt structured
