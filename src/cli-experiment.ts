@@ -16,6 +16,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { execSync } from 'child_process';
+import YAML from 'yaml';
 
 // --- Types ---
 
@@ -85,94 +86,21 @@ export function parseFrontmatter(content: string): {
     throw new Error('Invalid experiment file: no YAML frontmatter found');
   }
 
-  const yamlBlock = match[1];
+  const parsed = YAML.parse(match[1]);
   const body = match[2];
 
-  // Simple YAML parser for our known flat structure
-  const fm: Record<string, unknown> = {};
-  const measurements: ExperimentMeasurement[] = [];
-  let inMeasurements = false;
-  let currentMeasurement: Partial<ExperimentMeasurement> | null = null;
-
-  for (const line of yamlBlock.split('\n')) {
-    if (line.match(/^measurements:\s*$/)) {
-      inMeasurements = true;
-      continue;
-    }
-
-    if (inMeasurements) {
-      const itemMatch = line.match(/^\s+-\s+name:\s*"?(.*?)"?\s*$/);
-      if (itemMatch) {
-        if (currentMeasurement) {
-          measurements.push(currentMeasurement as ExperimentMeasurement);
-        }
-        currentMeasurement = { name: itemMatch[1] };
-        continue;
-      }
-      const fieldMatch = line.match(/^\s+(\w+):\s*"?(.*?)"?\s*$/);
-      if (fieldMatch && currentMeasurement) {
-        const val = fieldMatch[2];
-        (currentMeasurement as Record<string, unknown>)[fieldMatch[1]] =
-          val === 'null' ? null : val;
-        continue;
-      }
-      // End of measurements block
-      if (!line.match(/^\s/) && line.trim() !== '') {
-        inMeasurements = false;
-        if (currentMeasurement) {
-          measurements.push(currentMeasurement as ExperimentMeasurement);
-          currentMeasurement = null;
-        }
-      }
-    }
-
-    if (!inMeasurements) {
-      const kvMatch = line.match(/^(\w+):\s*"?(.*?)"?\s*$/);
-      if (kvMatch) {
-        const val = kvMatch[2];
-        if (val === 'null') fm[kvMatch[1]] = null;
-        else if (val.match(/^\d+$/) && kvMatch[1] === 'issue')
-          fm[kvMatch[1]] = parseInt(val, 10);
-        else fm[kvMatch[1]] = val;
-      }
-    }
-  }
-
-  if (currentMeasurement) {
-    measurements.push(currentMeasurement as ExperimentMeasurement);
-  }
-
   return {
-    frontmatter: { ...fm, measurements } as unknown as ExperimentFrontmatter,
+    frontmatter: {
+      ...parsed,
+      measurements: parsed.measurements ?? [],
+    } as ExperimentFrontmatter,
     body,
   };
 }
 
 export function serializeFrontmatter(fm: ExperimentFrontmatter): string {
-  const lines = [
-    '---',
-    `id: ${fm.id}`,
-    `title: "${fm.title}"`,
-    `hypothesis: "${fm.hypothesis}"`,
-    `falsification: "${fm.falsification}"`,
-    `pattern: ${fm.pattern}`,
-    `status: ${fm.status}`,
-    `issue: ${fm.issue ?? 'null'}`,
-    `created: ${fm.created}`,
-    `completed: ${fm.completed ?? 'null'}`,
-    `result: ${fm.result ?? 'null'}`,
-    'measurements:',
-  ];
-
-  for (const m of fm.measurements) {
-    lines.push(`  - name: "${m.name}"`);
-    lines.push(`    method: "${m.method}"`);
-    lines.push(`    expected: "${m.expected}"`);
-    lines.push(`    actual: ${m.actual ? `"${m.actual}"` : 'null'}`);
-  }
-
-  lines.push('---');
-  return lines.join('\n');
+  const yaml = YAML.stringify(fm, { lineWidth: 0 }).trimEnd();
+  return `---\n${yaml}\n---`;
 }
 
 export function getNextExpId(dir: string): string {
