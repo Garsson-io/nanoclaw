@@ -27,6 +27,7 @@ ENFORCE_PR_REVIEW="$HOOKS_DIR/enforce-pr-review.sh"
 ENFORCE_PR_REVIEW_TOOLS="$HOOKS_DIR/enforce-pr-review-tools.sh"
 PR_REVIEW_LOOP="$HOOKS_DIR/pr-review-loop.sh"
 KAIZEN_REFLECT="$HOOKS_DIR/kaizen-reflect.sh"
+ENFORCE_KAIZEN_STOP="$HOOKS_DIR/enforce-kaizen-stop.sh"
 
 setup_test_env
 
@@ -65,6 +66,12 @@ run_pretool_tool() {
     input=$(jq -n --arg tool "$tool_name" '{tool_name: $tool, tool_input: {}}')
   fi
   echo "$input" | bash "$hook" 2>/dev/null
+}
+
+# Helper: run Stop hook
+run_stop_hook() {
+  local hook="$1"
+  echo '{}' | bash "$hook" 2>/dev/null
 }
 
 # Helper: run PostToolUse hook simulating a successful Bash command
@@ -551,6 +558,94 @@ OUTPUT=$(auto_close_kaizen_issues "")
 assert_eq "auto-close: no-op for empty URL" "" "$OUTPUT"
 
 rm -rf "$AUTOCLOSE_MOCK_DIR"
+
+
+# ================================================================
+# INTERACTION PAIR 6: enforce-kaizen-stop blocks Stop during kaizen gate (#312)
+# ================================================================
+
+echo ""
+echo "=== PAIR 6: enforce-kaizen-stop blocks Stop during kaizen gate (#312) ==="
+echo ""
+
+echo "--- 6a: Stop blocked when needs_pr_kaizen gate is active ---"
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/60"
+
+# INVARIANT: Stop hook must block when kaizen reflection is pending.
+# This closes the gap where agents could exit without reflecting.
+OUTPUT=$(run_stop_hook "$ENFORCE_KAIZEN_STOP")
+if is_blocked "$OUTPUT"; then
+  echo "  PASS: stop blocked during kaizen gate"
+  ((PASS++))
+else
+  echo "  FAIL: stop NOT blocked during kaizen gate"
+  ((FAIL++))
+fi
+assert_contains "stop mentions PR URL" "pull/60" "$OUTPUT"
+
+echo ""
+echo "--- 6b: Stop allowed after gate is cleared ---"
+
+# Clear the gate via KAIZEN_IMPEDIMENTS
+CLEAR_CMD="echo 'KAIZEN_IMPEDIMENTS: [] test clear'"
+OUTPUT=$(run_posttool_bash "$PR_KAIZEN_CLEAR" "$CLEAR_CMD" "KAIZEN_IMPEDIMENTS: [] test clear")
+assert_contains "gate cleared" "gate cleared" "$OUTPUT"
+
+# Now stop should be allowed
+OUTPUT=$(run_stop_hook "$ENFORCE_KAIZEN_STOP")
+if [ -z "$OUTPUT" ]; then
+  echo "  PASS: stop allowed after gate cleared"
+  ((PASS++))
+else
+  echo "  FAIL: stop still blocked after gate cleared"
+  ((FAIL++))
+fi
+
+echo ""
+echo "--- 6c: Full lifecycle: create gate → block stop → clear → allow stop ---"
+
+setup
+# Step 1: Create kaizen gate
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/61"
+
+# Step 2: Verify stop is blocked
+OUTPUT=$(run_stop_hook "$ENFORCE_KAIZEN_STOP")
+assert_eq "lifecycle: stop blocked" "true" "$(echo "$OUTPUT" | jq -r '.decision == "block"' 2>/dev/null || echo false)"
+
+# Step 3: Verify PreToolUse gate also blocks
+OUTPUT=$(run_pretool_bash "$ENFORCE_PR_KAIZEN" "npm run build")
+assert_contains "lifecycle: PreToolUse also blocks" "BLOCKED" "$OUTPUT"
+
+# Step 4: Clear gate
+CLEAR_CMD="echo 'KAIZEN_IMPEDIMENTS: [] lifecycle test'"
+OUTPUT=$(run_posttool_bash "$PR_KAIZEN_CLEAR" "$CLEAR_CMD" "KAIZEN_IMPEDIMENTS: [] lifecycle test")
+assert_contains "lifecycle: gate cleared" "gate cleared" "$OUTPUT"
+
+# Step 5: Both stop and PreToolUse now allow
+OUTPUT=$(run_stop_hook "$ENFORCE_KAIZEN_STOP")
+assert_eq "lifecycle: stop allowed" "" "$OUTPUT"
+
+OUTPUT=$(run_pretool_bash "$ENFORCE_PR_KAIZEN" "npm run build")
+assert_eq "lifecycle: PreToolUse allows" "" "$OUTPUT"
+
+echo ""
+echo "--- 6d: Cross-worktree: stop not blocked by other branch gate ---"
+
+setup
+create_pr_kaizen_state "https://github.com/Garsson-io/nanoclaw/pull/62" "wt/other-branch"
+
+# INVARIANT: Stop hooks use branch-scoped lookup. A gate from another
+# worktree must not block this session's stop.
+OUTPUT=$(run_stop_hook "$ENFORCE_KAIZEN_STOP")
+if [ -z "$OUTPUT" ]; then
+  echo "  PASS: cross-branch gate does not block stop"
+  ((PASS++))
+else
+  echo "  FAIL: cross-branch gate incorrectly blocks stop"
+  ((FAIL++))
+fi
 
 teardown
 print_results
