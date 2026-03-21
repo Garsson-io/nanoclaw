@@ -210,3 +210,38 @@ clear_all_states_with_status() {
   done < <(list_state_files_for_current_worktree)
   if [ "$cleared" = true ]; then return 0; else return 1; fi
 }
+
+# Per-PR reflection markers (kaizen #288)
+# Tracks whether kaizen reflection was already submitted for a given PR,
+# preventing the gate from re-firing during post-merge cleanup.
+#
+# Marker files: $STATE_DIR/kaizen-done-<PR-key>
+# Contains: PR_URL, BRANCH, TIMESTAMP
+# Cleaned up by staleness check (MAX_STATE_AGE) via is_state_for_current_worktree.
+
+# Mark that kaizen reflection is complete for a PR.
+# Usage: mark_reflection_done "$PR_URL"
+mark_reflection_done() {
+  local pr_url="$1"
+  local key
+  key=$(pr_url_to_state_key "$pr_url")
+  local branch
+  branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+  local marker_file="$STATE_DIR/kaizen-done-$key"
+  mkdir -p "$STATE_DIR" 2>/dev/null
+  printf 'PR_URL=%s\nBRANCH=%s\nTIMESTAMP=%s\nSTATUS=reflected\n' \
+    "$pr_url" "$branch" "$(date +%s)" > "$marker_file"
+  chmod 600 "$marker_file" 2>/dev/null
+}
+
+# Check if kaizen reflection was already done for a PR.
+# Returns 0 if already reflected (skip gate), 1 if not.
+# Respects worktree isolation and staleness.
+# Usage: if is_reflection_done "$PR_URL"; then exit 0; fi
+is_reflection_done() {
+  local pr_url="$1"
+  local key
+  key=$(pr_url_to_state_key "$pr_url")
+  local marker_file="$STATE_DIR/kaizen-done-$key"
+  is_state_for_current_worktree "$marker_file"
+}

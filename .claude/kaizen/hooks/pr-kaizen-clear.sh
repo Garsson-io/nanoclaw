@@ -412,6 +412,12 @@ ADVISORY
   fi
 
   clear_state_with_status "needs_pr_kaizen"
+
+  # Write per-PR reflection marker (kaizen #288)
+  # Prevents the gate from re-firing for this PR during post-merge cleanup
+  if [ -n "$GATE_PR_URL" ]; then
+    mark_reflection_done "$GATE_PR_URL"
+  fi
   cat <<EOF
 
 PR kaizen gate cleared ($CLEAR_REASON). You may proceed with other work.

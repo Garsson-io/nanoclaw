@@ -5,6 +5,9 @@
 # kaizen reflection. Outputs reflection prompts on stdout so the agent
 # sees them in the transcript (PostToolUse exit 0 → stdout shown).
 #
+# Per-PR state tracking (kaizen #288): Once reflection is submitted for a PR,
+# subsequent events (merge) skip the gate. Marker files in STATE_DIR track this.
+#
 # Runs as PostToolUse hook on Bash tool calls.
 # Always exits 0 — this is advisory, not blocking.
 
@@ -53,6 +56,10 @@ if [ "$IS_CREATE" = true ]; then
   source "$(dirname "$0")/lib/state-utils.sh"
   # Guard: skip state file if PR URL is empty (kaizen #111)
   if [ -z "$PR_URL" ]; then
+    exit 0
+  fi
+  # Skip gate if reflection already done for this PR (kaizen #288)
+  if is_reflection_done "$PR_URL"; then
     exit 0
   fi
   mkdir -p "$STATE_DIR" 2>/dev/null
@@ -127,15 +134,24 @@ if [ "$IS_MERGE" = true ]; then
   if [ -z "$PR_URL" ]; then
     exit 0
   fi
-  mkdir -p "$STATE_DIR" 2>/dev/null
-  chmod 700 "$STATE_DIR" 2>/dev/null
-  KAIZEN_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
-  KAIZEN_STATE_FILE="$STATE_DIR/pr-kaizen-$(pr_url_to_state_key "$PR_URL")"
-  printf 'PR_URL=%s\nSTATUS=%s\nBRANCH=%s\n' \
-    "$PR_URL" "needs_pr_kaizen" "$KAIZEN_BRANCH" > "$KAIZEN_STATE_FILE"
-  chmod 600 "$KAIZEN_STATE_FILE" 2>/dev/null
 
-  cat <<REFLECT
+  # Check if reflection already done for this PR (kaizen #288)
+  # If so, skip the gate but still send the Telegram notification below.
+  REFLECTION_ALREADY_DONE=false
+  if is_reflection_done "$PR_URL"; then
+    REFLECTION_ALREADY_DONE=true
+  fi
+
+  if [ "$REFLECTION_ALREADY_DONE" = false ]; then
+    mkdir -p "$STATE_DIR" 2>/dev/null
+    chmod 700 "$STATE_DIR" 2>/dev/null
+    KAIZEN_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+    KAIZEN_STATE_FILE="$STATE_DIR/pr-kaizen-$(pr_url_to_state_key "$PR_URL")"
+    printf 'PR_URL=%s\nSTATUS=%s\nBRANCH=%s\n' \
+      "$PR_URL" "needs_pr_kaizen" "$KAIZEN_BRANCH" > "$KAIZEN_STATE_FILE"
+    chmod 600 "$KAIZEN_STATE_FILE" 2>/dev/null
+
+    cat <<REFLECT
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🔄 KAIZEN REFLECTION — Post-Merge (background)
@@ -196,9 +212,26 @@ Valid categories: docs-only, formatting, typo, config-only, test-only, trivial-r
 - Delete merged branch and worktree
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 REFLECT
+  else
+    # Reflection already done — just show post-merge reminder (kaizen #288)
+    cat <<REFLECT
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ KAIZEN REFLECTION — Already completed for this PR
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Kaizen reflection was already submitted for $PR_URL.
+No additional reflection gate — proceed with post-merge steps:
+- Follow Post-Merge deployment procedure in CLAUDE.md
+- Sync main: \`git -C $MAIN_CHECKOUT fetch origin main && git -C $MAIN_CHECKOUT merge --ff-only origin/main\`
+- Close resolved kaizen issues
+- Delete merged branch and worktree
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REFLECT
+  fi
 
   # Send Telegram notification to leads (Kaizen #31 — L2 escalation from L1 instructions)
-  # Extract PR title from the merge output or via gh pr view
+  # Always fires on merge, regardless of reflection state
   PR_TITLE=""
   PR_NUM=$(echo "$PR_URL" | grep -oE '[0-9]+$')
   REPO=$(echo "$PR_URL" | sed -n 's|https://github.com/\([^/]*/[^/]*\)/pull/.*|\1|p')
