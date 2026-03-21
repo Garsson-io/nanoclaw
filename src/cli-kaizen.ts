@@ -69,6 +69,8 @@ export interface CaseCreateDeps {
   resolveWorktree: typeof resolveExistingWorktree;
   insert: typeof insertCase;
   getActiveByIssue: typeof getActiveCasesByGithubIssue;
+  getActiveCases: typeof getActiveCases;
+  getIssue: typeof getGitHubIssue;
   detectWorktree: typeof detectCurrentWorktree;
   getActiveByBranch: typeof getActiveCaseByBranch;
 }
@@ -81,6 +83,8 @@ const defaultDeps: CaseCreateDeps = {
   resolveWorktree: resolveExistingWorktree,
   insert: insertCase,
   getActiveByIssue: getActiveCasesByGithubIssue,
+  getActiveCases,
+  getIssue: getGitHubIssue,
   detectWorktree: detectCurrentWorktree,
   getActiveByBranch: getActiveCaseByBranch,
 };
@@ -135,6 +139,60 @@ export async function handleCaseCreate(
         `Error: Kaizen #${githubIssue} already has active case(s): ${names}\nPass --allow-duplicate to override.`,
       );
       process.exit(1);
+    }
+  }
+
+  // Area-overlap detection: warn if another active dev case works on same area (kaizen #374)
+  if (githubIssue && caseType === 'dev') {
+    try {
+      // Get all active dev cases with github issues (excluding current issue)
+      const allActive = deps.getActiveCases();
+      const otherDevCases = allActive.filter(
+        (c) =>
+          c.type === 'dev' &&
+          c.github_issue &&
+          c.github_issue !== githubIssue &&
+          ['active', 'blocked'].includes(c.status),
+      );
+
+      if (otherDevCases.length > 0) {
+        // Fetch area labels for new issue
+        const newIssueResult = await deps.getIssue({
+          owner,
+          repo,
+          issueNumber: githubIssue,
+        });
+        const newAreas =
+          newIssueResult.issue?.labels
+            ?.filter((l) => l.name.startsWith('area/'))
+            .map((l) => l.name) ?? [];
+
+        if (newAreas.length > 0) {
+          // Check each active dev case for area overlap
+          for (const activeCase of otherDevCases) {
+            const activeIssueResult = await deps.getIssue({
+              owner,
+              repo,
+              issueNumber: activeCase.github_issue!,
+            });
+            const activeAreas =
+              activeIssueResult.issue?.labels
+                ?.filter((l) => l.name.startsWith('area/'))
+                .map((l) => l.name) ?? [];
+
+            const overlap = newAreas.filter((a) => activeAreas.includes(a));
+            if (overlap.length > 0) {
+              console.error(
+                `⚠️  DOMAIN OVERLAP: kaizen #${githubIssue} shares area(s) [${overlap.join(', ')}] with active case "${activeCase.name}" (kaizen #${activeCase.github_issue}).` +
+                  `\n   Risk: parallel edits in the same domain may cause merge conflicts.` +
+                  `\n   Consider coordinating or waiting for the other case to complete.`,
+              );
+            }
+          }
+        }
+      }
+    } catch {
+      // Area overlap check is advisory — don't block case creation on failures
     }
   }
 
