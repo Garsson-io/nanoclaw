@@ -1,0 +1,30 @@
+{
+  "host": {
+    "name": "nanoclaw",
+    "repo": "Garsson-io/nanoclaw",
+    "description": "Agent orchestration harness with channels, routing, and case management",
+    "caseCli": "npx tsx src/cli-cases.ts"
+  },
+  "kaizen": {
+    "repo": "Garsson-io/kaizen",
+    "issueLabel": "kaizen"
+  },
+  "taxonomy": {
+    "levels": ["level-1", "level-2", "level-3"],
+    "areas": ["hooks", "skills", "cases", "container", "deploy", "testing", "worktree"],
+    "areaPrefix": "area/",
+    "epicPrefix": "epic/",
+    "horizonPrefix": "horizon/",
+    "horizons": ["reliability", "growth", "dx", "security", "autonomous-ops"]
+  },
+  "policies": {
+    "localFile": ".claude/kaizen/policies-local.md"
+  },
+  "notifications": {
+    "channel": "telegram",
+    "config": {
+      "ipcDir": "data/ipc/main/messages",
+      "groupJid": "tg:-5128317012"
+    }
+  }
+}

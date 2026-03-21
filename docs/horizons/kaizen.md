@@ -1,1 +1,0 @@
-../../.claude/kaizen/horizon.md

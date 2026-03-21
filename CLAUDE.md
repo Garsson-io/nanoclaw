@@ -68,29 +68,29 @@ Key pattern: `mcp-*` (container) → `ipc-*` (handlers) → `{domain}.ts` (model
 | `/contribute-skill` | Build and submit a new skill to the NanoClaw ecosystem                                                                |
 | `/qodo-pr-resolver` | Fetch and fix Qodo PR review issues interactively or in batch                                                         |
 | `/get-qodo-rules`   | Load org- and repo-level coding rules from Qodo before code tasks                                                     |
-| `/kaizen`           | Recursive process improvement — escalation framework (Level 1→2→3)                                                    |
-| `/pick-work`        | Intelligently select next kaizen issue — filters claimed, balances epic momentum vs diversity                         |
-| `/gap-analysis`     | Strategic analysis of kaizen backlog — finds tooling/testing gaps, horizon concentration, unnamed dimensions          |
-| `/make-a-dent`      | Autonomous deep-dive — fix root cause category behind repeated issues, add interaction tests, ship one high-impact PR |
-| `/audit-issues`     | Periodic issue taxonomy audit — label coverage, epic health, incident density, horizon distribution                   |
+| `/kaizen-reflect`   | Recursive process improvement — escalation framework (Level 1→2→3)                                                    |
+| `/kaizen-pick`      | Intelligently select next kaizen issue — filters claimed, balances epic momentum vs diversity                         |
+| `/kaizen-gaps`      | Strategic analysis of kaizen backlog — finds tooling/testing gaps, horizon concentration, unnamed dimensions          |
+| `/kaizen-deep-dive` | Autonomous deep-dive — fix root cause category behind repeated issues, add interaction tests, ship one high-impact PR |
+| `/kaizen-audit-issues` | Periodic issue taxonomy audit — label coverage, epic health, incident density, horizon distribution                |
 
 ### Dev work skill chain — MUST follow this workflow
 
-**Full workflow docs:** [`.claude/kaizen/workflow.md`](.claude/kaizen/workflow.md)
+**Full workflow docs:** [`.kaizen/.claude/kaizen/workflow.md`](.kaizen/.claude/kaizen/workflow.md)
 
 Key triggers — activate the right skill for the user's intent:
 
-- "gap analysis", "analyze gaps", "tooling gaps" → `/gap-analysis`
-- "make a dent", "hero mode", "deep dive" → `/make-a-dent`
-- "what's next", "pick work", "pick a kaizen" → `/pick-work`
-- "look at issue #N", "evaluate this" → `/accept-case`
-- "lets do it", "go ahead", "build it", "ship it" → `/implement-spec`
-- **All dev work MUST be in a case.** If `/implement-spec` activates, create a case with worktree before writing any code.
+- "gap analysis", "analyze gaps", "tooling gaps" → `/kaizen-gaps`
+- "make a dent", "hero mode", "deep dive" → `/kaizen-deep-dive`
+- "what's next", "pick work", "pick a kaizen" → `/kaizen-pick`
+- "look at issue #N", "evaluate this" → `/kaizen-evaluate`
+- "lets do it", "go ahead", "build it", "ship it" → `/kaizen-implement`
+- **All dev work MUST be in a case.** If `/kaizen-implement` activates, create a case with worktree before writing any code.
 - **Kaizen issue lifecycle:** `status:active`/`status:done` labels are auto-synced by `case-backend-github.ts`. Collision detection in `ipc-cases.ts` blocks duplicate case creation for the same issue.
 
 ## The Zen of Kaizen
 
-Run `/zen` to see the full commentary ([`.claude/kaizen/zen.md`](.claude/kaizen/zen.md)).
+Run `/kaizen-zen` to see the full commentary ([`.kaizen/.claude/kaizen/zen.md`](.kaizen/.claude/kaizen/zen.md)).
 
 ## Dev Agent Policies
 
@@ -109,17 +109,17 @@ These policies were learned from past mistakes. Follow them strictly.
 
 11. **`--dangerously-skip-permissions` does NOT bypass hooks.** It auto-approves built-in tool permission prompts, but custom hooks (PreToolUse deny, PostToolUse gates) still fire and enforce. Use `--bare` to skip hooks entirely (also skips CLAUDE.md, skills, LSP). See kaizen #353.
 
-**Kaizen enforcement policies (#12-19):** See [`.claude/kaizen/policies.md`](.claude/kaizen/policies.md) — recursive kaizen, hooks infrastructure, MCP enforcement, security files, worktree isolation, co-commit tests, smoke tests ship with feature, hook language boundaries.
+**Kaizen enforcement policies:** Generic policies in [`.kaizen/.claude/kaizen/policies.md`](.kaizen/.claude/kaizen/policies.md). NanoClaw-specific policies in [`.claude/kaizen/policies-local.md`](.claude/kaizen/policies-local.md).
 
 ## Verification Discipline
 
-**Read [`.claude/kaizen/verification.md`](.claude/kaizen/verification.md)** before writing fixes or tests. Covers: path tracing (mandatory before any fix), invariant statements (mandatory before tests), runtime artifact verification, smoke tests.
+**Read [`.kaizen/.claude/kaizen/verification.md`](.kaizen/.claude/kaizen/verification.md)** before writing fixes or tests. Covers: path tracing (mandatory before any fix), invariant statements (mandatory before tests), runtime artifact verification, smoke tests.
 
 ## Kaizen Backlog
 
-Future work tracked as GitHub Issues in [`Garsson-io/kaizen`](https://github.com/Garsson-io/kaizen). Dev agents file via `case_suggest_dev` MCP tool. Host-side skills use `npx tsx src/cli-kaizen.ts list|view|case-create`.
+Future work tracked as GitHub Issues in [`Garsson-io/kaizen`](https://github.com/Garsson-io/kaizen). Dev agents file via `case_suggest_dev` MCP tool. Host-side case ops use `npx tsx src/cli-cases.ts case-create|case-list|case-by-branch|case-update-status`.
 
-**Issue taxonomy:** See [`docs/issue-taxonomy.md`](docs/issue-taxonomy.md) for labeling requirements, epic lifecycle policy, and incident recording format. Every issue MUST have: `kaizen` + level (`level-1`/`level-2`/`level-3`) + area (`area/hooks`, `area/skills`, etc.). Epics are directions that stay open; specs are deliverables that close when shipped.
+**Issue taxonomy:** See [`.kaizen/docs/issue-taxonomy.md`](.kaizen/docs/issue-taxonomy.md) for labeling requirements, epic lifecycle policy, and incident recording format. Every issue MUST have: `kaizen` + level (`level-1`/`level-2`/`level-3`) + area (`area/hooks`, `area/skills`, etc.). Epics are directions that stay open; specs are deliverables that close when shipped.
 
 ## Merging PRs & Post-Merge Deploy
 
@@ -132,10 +132,10 @@ Key points: Use `gh pr merge --squash --delete-branch --auto`. Monitor CI with `
 SQLite at `store/messages.db`. Uses `better-sqlite3` (NOT `sqlite3` CLI). **For cases, use the CLI:**
 
 ```bash
-npx tsx src/cli-kaizen.ts case-list                              # all cases
-npx tsx src/cli-kaizen.ts case-list --status active,blocked       # filter by status
-npx tsx src/cli-kaizen.ts case-by-branch <branch-name>            # find case for a branch
-npx tsx src/cli-kaizen.ts case-update-status <name> <status>      # update case status
+npx tsx src/cli-cases.ts case-list                              # all cases
+npx tsx src/cli-cases.ts case-list --status active,blocked       # filter by status
+npx tsx src/cli-cases.ts case-by-branch <branch-name>            # find case for a branch
+npx tsx src/cli-cases.ts case-update-status <name> <status>      # update case status
 ```
 
 For other tables: `node -e "const db=require('better-sqlite3')('store/messages.db'); ..."`
