@@ -960,7 +960,7 @@ async function main(): Promise<void> {
       } else {
         await channel.sendMessage(
           chatJid,
-          `Remote Control failed: ${result.error}`,
+          `Remote Control failed: ${(result as { error: string }).error}`,
         );
       }
     } else {
@@ -968,7 +968,7 @@ async function main(): Promise<void> {
       if (result.ok) {
         await channel.sendMessage(chatJid, 'Remote Control session ended.');
       } else {
-        await channel.sendMessage(chatJid, result.error);
+        await channel.sendMessage(chatJid, (result as { error: string }).error);
       }
     }
   }

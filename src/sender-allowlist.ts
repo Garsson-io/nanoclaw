@@ -50,7 +50,7 @@ export function loadSenderAllowlist(
   }
 
   try {
-    return SenderAllowlistConfigSchema.parse(parsed);
+    return SenderAllowlistConfigSchema.parse(parsed) as SenderAllowlistConfig;
   } catch (err) {
     logger.warn(
       {
