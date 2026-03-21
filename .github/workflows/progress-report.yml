@@ -8,7 +8,6 @@ on:
 
 permissions:
   contents: read
-  discussions: write
 
 jobs:
   check-threshold:
@@ -54,8 +53,8 @@ jobs:
       - name: Generate and post progress report
         env:
           GH_TOKEN: ${{ github.token }}
-          # Claude subscription auth — set via:
-          #   claude setup-token  (generates long-lived OAuth token, valid 1 year)
-          #   gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo Garsson-io/nanoclaw
+          # Claude subscription auth (from `claude setup-token`)
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # GitHub PAT with discussion:write scope on kaizen repo (cross-repo posting)
+          GH_PAT: ${{ secrets.GH_PAT }}
         run: npx tsx scripts/progress-report.ts
