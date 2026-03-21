@@ -85,9 +85,9 @@ Structure the issue body with:
 1. **Context section** — what you did, what you found, why you need input
 2. **How to respond** — two options: fill CSV or answer inline
 3. **File links** — direct links to docs, CSV, raw data in the repo
-4. **Embedded screenshots** — use raw GitHub URLs:
+4. **Embedded screenshots** — for private repos, use the blob URL with `?raw=true` (NOT `raw.githubusercontent.com` which breaks for private repos):
    ```
-   ![Description](https://raw.githubusercontent.com/{org}/{repo}/main/docs/screenshots/{file}.png)
+   ![Description](https://github.com/{org}/{repo}/blob/main/docs/screenshots/{file}.png?raw=true)
    ```
 5. **Fillable tables** — with checkbox characters (☐) for quick inline answers
 6. **Specific questions** — numbered, with options, not open-ended
