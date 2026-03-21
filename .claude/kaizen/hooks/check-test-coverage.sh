@@ -107,9 +107,26 @@ Before proceeding, ensure:
 
 This check prevents the 'all tests pass but none test the fix' pattern."
 
+# Build pre-filled test-exceptions block (kaizen #204)
+# Agents waste CI cycles because they don't know the exact format.
+# Output a ready-to-paste block they can add to the PR body.
+EXCEPTION_LINES=$(echo -e "$UNCOVERED" | sed 's/^  - //' | grep -v '^$' |   sed 's/$/:  <reason why no tests needed>/' || true)
+
 # Advisory warning for both create and merge (CI enforces the real gate)
 echo "$MSG" >&2
 echo "" >&2
+if [ -n "$EXCEPTION_LINES" ]; then
+  cat >&2 <<EXCEPTION_BLOCK
+If these files genuinely don't need test changes, add this to the PR body:
+
+```test-exceptions
+$EXCEPTION_LINES
+```
+
+Replace <reason> with a specific justification (e.g., "constant change", "covered by existing X tests").
+EXCEPTION_BLOCK
+  echo "" >&2
+fi
 if [ "$IS_MERGE" = true ]; then
   echo "⚠️  CI pr-policy check will block merge if tests are missing." >&2
 else

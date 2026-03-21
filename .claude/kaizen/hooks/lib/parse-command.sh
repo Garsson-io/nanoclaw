@@ -39,12 +39,24 @@ is_gh_pr_command() {
 
 # Check if a command line contains an actual `git <subcommand>` invocation.
 # Same segment-splitting logic as is_gh_pr_command.
+# Handles `git -C <path> <subcommand>` by skipping the -C flag and its argument.
 # Usage: is_git_command "$CMD_LINE" "push"
 is_git_command() {
   local cmd_line="$1"
   local subcommand="$2"
+  # Match both `git push` and `git -C /some/path push`
   echo "$cmd_line" | sed 's/[|;&]\{1,\}/\n/g' | sed 's/^[[:space:]]*//' | \
-    grep -qE "^git[[:space:]]+${subcommand}"
+    grep -qE "^git[[:space:]]+(-C[[:space:]]+[^[:space:]]+[[:space:]]+)?${subcommand}"
+}
+
+# Extract the -C <path> argument from a git command, if present.
+# Returns the path if found, empty string otherwise.
+# Usage: TARGET_DIR=$(extract_git_c_path "$CMD_LINE")
+extract_git_c_path() {
+  local cmd_line="$1"
+  echo "$cmd_line" | sed 's/[|;&]\{1,\}/\n/g' | sed 's/^[[:space:]]*//' | \
+    grep -E '^git[[:space:]]+-C' | \
+    sed -n 's/^git[[:space:]]\{1,\}-C[[:space:]]\{1,\}\([^[:space:]]\{1,\}\).*/\1/p' | head -1
 }
 
 # Extract PR number from a gh pr <subcommand> invocation.

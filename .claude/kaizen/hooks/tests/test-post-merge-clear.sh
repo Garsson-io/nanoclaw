@@ -243,3 +243,19 @@ fi
 
 teardown
 print_results
+
+echo ""
+echo "=== /kaizen clears ALL stacked post-merge states (kaizen #279) ==="
+
+reset_state
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+create_post_merge_state "https://github.com/Garsson-io/nanoclaw/pull/200" "needs_post_merge" "$CURRENT_BRANCH"
+create_post_merge_state "https://github.com/Garsson-io/nanoclaw/pull/201" "needs_post_merge" "$CURRENT_BRANCH"
+create_post_merge_state "https://github.com/Garsson-io/nanoclaw/pull/202" "needs_post_merge" "$CURRENT_BRANCH"
+
+OUTPUT=$(echo '{"tool_name":"Skill","tool_input":{"skill":"kaizen"},"tool_response":{}}' | bash "$HOOK" 2>/dev/null)
+assert_contains "output mentions all pending PRs cleared" "all pending PRs" "$OUTPUT"
+
+# Verify all states are cleared
+REMAINING=$(find_all_states_with_status "needs_post_merge" 2>/dev/null)
+assert_eq "all three post-merge states cleared" "" "$REMAINING"

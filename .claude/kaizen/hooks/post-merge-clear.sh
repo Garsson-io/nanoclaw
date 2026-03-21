@@ -25,10 +25,12 @@ TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
 if [ "$TOOL_NAME" = "Skill" ]; then
   SKILL_NAME=$(echo "$INPUT" | jq -r '.tool_input.skill // empty')
   if [ "$SKILL_NAME" = "kaizen" ]; then
-    if clear_state_with_status "needs_post_merge"; then
+    # Clear ALL pending post-merge states at once (kaizen #279).
+    # One /kaizen invocation covers all PRs merged in this session.
+    if clear_all_states_with_status "needs_post_merge"; then
       cat <<EOF
 
-Post-merge gate cleared. The /kaizen reflection satisfies the post-merge workflow requirement.
+Post-merge gate cleared (all pending PRs). The /kaizen reflection satisfies the post-merge workflow requirement.
 
 Remember to also:
 - Mark the case as done (if applicable)
