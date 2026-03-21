@@ -70,11 +70,69 @@ export function extractPrNumber(
 }
 
 /**
+ * Extract the -C <path> argument from a git command, if present.
+ * Bash equivalent: extract_git_c_path()
+ */
+export function extractGitCPath(cmdLine: string): string | undefined {
+  const segments = splitCommandSegments(cmdLine);
+  for (const seg of segments) {
+    const match = seg.match(/^git\s+-C\s+(\S+)/);
+    if (match) return match[1];
+  }
+  return undefined;
+}
+
+/**
  * Extract --repo flag value from a command line.
  */
 export function extractRepoFlag(cmdLine: string): string | undefined {
   const match = cmdLine.match(/--repo\s+(\S+)/);
   return match?.[1];
+}
+
+/**
+ * Detect the GitHub repo (owner/name) from a git remote URL string.
+ * Handles both HTTPS and SSH URLs.
+ * Bash equivalent: detect_gh_repo() — but takes a URL string instead of
+ * calling git directly, to keep this module pure (no child_process).
+ */
+export function detectGhRepo(remoteUrl: string): string | undefined {
+  const match = remoteUrl.match(/github\.com[:/]([^/]+\/[^/.]+)/);
+  return match?.[1];
+}
+
+/**
+ * Get changed files for a PR command.
+ * For merge: returns files from `gh pr diff --name-only`.
+ * For create: returns files from `git diff --name-only main...HEAD`.
+ *
+ * Bash equivalent: get_pr_changed_files() — but takes an executor function
+ * instead of calling shell commands directly.
+ */
+export function getPrChangedFiles(
+  cmdLine: string,
+  isMerge: boolean,
+  executor: (cmd: string) => string,
+): string[] {
+  if (isMerge) {
+    const prNum = extractPrNumber(cmdLine, 'merge');
+    const repo = extractRepoFlag(cmdLine);
+    const repoFlag = repo ? `--repo ${repo}` : '';
+    const prArg = prNum ?? '';
+
+    let result = executor(`gh pr diff ${prArg} --name-only ${repoFlag}`.trim());
+    if (!result) {
+      result = executor('git diff --name-only main...HEAD');
+    }
+    return result
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
+  }
+  return executor('git diff --name-only main...HEAD')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
 }
 
 /**
