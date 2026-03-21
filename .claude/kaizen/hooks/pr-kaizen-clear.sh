@@ -414,6 +414,8 @@ ADVISORY
   fi
 
   clear_state_with_status_any_branch "needs_pr_kaizen" "$GATE_PR_URL"
+  # Mark this PR as reflected so duplicate gates are prevented (kaizen #288)
+  mark_reflection_done "$GATE_PR_URL"
 
   # Auto-close referenced kaizen issues if PR is merged (kaizen #283)
   auto_close_kaizen_issues "$GATE_PR_URL" 2>/dev/null || true
