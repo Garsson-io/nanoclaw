@@ -185,3 +185,212 @@ export function isReflectionDone(
   }
   return true;
 }
+
+// ---------------------------------------------------------------------------
+// Branch-scoped state queries (parity with bash state-utils.sh — kaizen #333)
+// ---------------------------------------------------------------------------
+
+/**
+ * List state files for the current worktree (branch-scoped, non-stale).
+ * Bash equivalent: list_state_files_for_current_worktree()
+ */
+export function listStateFilesForCurrentWorktree(
+  currentBranch: string,
+  stateDir: string = DEFAULT_STATE_DIR,
+  maxAge: number = DEFAULT_MAX_STATE_AGE,
+): string[] {
+  if (!existsSync(stateDir)) return [];
+  const now = Date.now() / 1000;
+  const files: string[] = [];
+
+  for (const entry of readdirSync(stateDir)) {
+    const filepath = join(stateDir, entry);
+    if (isStateForCurrentWorktree(filepath, now, currentBranch, maxAge)) {
+      files.push(filepath);
+    }
+  }
+  return files;
+}
+
+/** Result from state file queries — PR_URL and STATUS. */
+export interface StateQueryResult {
+  prUrl: string;
+  status: string;
+  filepath: string;
+}
+
+/**
+ * Find the first state file with a given STATUS for the current branch.
+ * Bash equivalent: find_state_with_status()
+ */
+export function findStateWithStatus(
+  wantedStatus: string,
+  currentBranch: string,
+  stateDir: string = DEFAULT_STATE_DIR,
+  maxAge: number = DEFAULT_MAX_STATE_AGE,
+): StateQueryResult | null {
+  for (const filepath of listStateFilesForCurrentWorktree(
+    currentBranch,
+    stateDir,
+    maxAge,
+  )) {
+    const state = parseStateFile(readFileSync(filepath, 'utf-8'));
+    if (state.STATUS === wantedStatus) {
+      return { prUrl: state.PR_URL ?? '', status: state.STATUS, filepath };
+    }
+  }
+  return null;
+}
+
+/**
+ * Clear the first state file matching a given STATUS for the current branch.
+ * Bash equivalent: clear_state_with_status()
+ */
+export function clearStateWithStatus(
+  wantedStatus: string,
+  currentBranch: string,
+  stateDir: string = DEFAULT_STATE_DIR,
+  maxAge: number = DEFAULT_MAX_STATE_AGE,
+): boolean {
+  const result = findStateWithStatus(
+    wantedStatus,
+    currentBranch,
+    stateDir,
+    maxAge,
+  );
+  if (!result) return false;
+  try {
+    unlinkSync(result.filepath);
+  } catch {
+    /* ignore */
+  }
+  return true;
+}
+
+/**
+ * Find ALL state files matching a given STATUS for the current branch.
+ * Bash equivalent: find_all_states_with_status()
+ */
+export function findAllStatesWithStatus(
+  wantedStatus: string,
+  currentBranch: string,
+  stateDir: string = DEFAULT_STATE_DIR,
+  maxAge: number = DEFAULT_MAX_STATE_AGE,
+): StateQueryResult[] {
+  const results: StateQueryResult[] = [];
+  for (const filepath of listStateFilesForCurrentWorktree(
+    currentBranch,
+    stateDir,
+    maxAge,
+  )) {
+    const state = parseStateFile(readFileSync(filepath, 'utf-8'));
+    if (state.STATUS === wantedStatus) {
+      results.push({
+        prUrl: state.PR_URL ?? '',
+        status: state.STATUS,
+        filepath,
+      });
+    }
+  }
+  return results;
+}
+
+/**
+ * Clear ALL state files matching a given STATUS for the current branch.
+ * Bash equivalent: clear_all_states_with_status()
+ */
+export function clearAllStatesWithStatus(
+  wantedStatus: string,
+  currentBranch: string,
+  stateDir: string = DEFAULT_STATE_DIR,
+  maxAge: number = DEFAULT_MAX_STATE_AGE,
+): number {
+  let cleared = 0;
+  for (const result of findAllStatesWithStatus(
+    wantedStatus,
+    currentBranch,
+    stateDir,
+    maxAge,
+  )) {
+    try {
+      unlinkSync(result.filepath);
+      cleared++;
+    } catch {
+      /* ignore */
+    }
+  }
+  return cleared;
+}
+
+// ---------------------------------------------------------------------------
+// Cross-branch state queries (any branch — kaizen #239, #125)
+// ---------------------------------------------------------------------------
+
+/**
+ * Find the first state file with a given STATUS across all branches.
+ * Bash equivalent: find_state_with_status_any_branch()
+ */
+export function findStateWithStatusAnyBranch(
+  wantedStatus: string,
+  stateDir: string = DEFAULT_STATE_DIR,
+  maxAge: number = DEFAULT_MAX_STATE_AGE,
+): StateQueryResult | null {
+  for (const filepath of listStateFilesAnyBranch(stateDir, maxAge)) {
+    const state = parseStateFile(readFileSync(filepath, 'utf-8'));
+    if (state.STATUS === wantedStatus) {
+      return { prUrl: state.PR_URL ?? '', status: state.STATUS, filepath };
+    }
+  }
+  return null;
+}
+
+/**
+ * Clear state with given STATUS across all branches.
+ * Optional prUrl filter: only clear the file matching both STATUS and PR_URL.
+ * Bash equivalent: clear_state_with_status_any_branch()
+ */
+export function clearStateWithStatusAnyBranch(
+  wantedStatus: string,
+  stateDir: string = DEFAULT_STATE_DIR,
+  maxAge: number = DEFAULT_MAX_STATE_AGE,
+  specificPrUrl?: string,
+): boolean {
+  for (const filepath of listStateFilesAnyBranch(stateDir, maxAge)) {
+    const state = parseStateFile(readFileSync(filepath, 'utf-8'));
+    if (state.STATUS !== wantedStatus) continue;
+    if (specificPrUrl && state.PR_URL !== specificPrUrl) continue;
+    try {
+      unlinkSync(filepath);
+    } catch {
+      /* ignore */
+    }
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Find the NEWEST state file with a given STATUS across all branches.
+ * When multiple match, returns the most recently modified one.
+ * Bash equivalent: find_newest_state_with_status_any_branch()
+ */
+export function findNewestStateWithStatusAnyBranch(
+  wantedStatus: string,
+  stateDir: string = DEFAULT_STATE_DIR,
+  maxAge: number = DEFAULT_MAX_STATE_AGE,
+): StateQueryResult | null {
+  let newest: StateQueryResult | null = null;
+  let newestMtime = 0;
+
+  for (const filepath of listStateFilesAnyBranch(stateDir, maxAge)) {
+    const state = parseStateFile(readFileSync(filepath, 'utf-8'));
+    if (state.STATUS !== wantedStatus) continue;
+
+    const mtime = statSync(filepath).mtimeMs;
+    if (mtime > newestMtime) {
+      newestMtime = mtime;
+      newest = { prUrl: state.PR_URL ?? '', status: state.STATUS, filepath };
+    }
+  }
+  return newest;
+}
