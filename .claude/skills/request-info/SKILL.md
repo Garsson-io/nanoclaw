@@ -104,6 +104,43 @@ Commit the CSV, screenshots, and documentation to the repo BEFORE creating/updat
 - Repo docs reference the issue number
 - CSV filename matches the issue topic
 
+## Processing Responses — MANDATORY
+
+When stakeholder responses come back (filled CSV, comments, documents):
+
+### Rule 1: Use a proper CSV parser — NEVER hand-parse
+
+```javascript
+// WRONG — strips empty columns, shifts positional data
+const cols = line.split(',').filter(c => c); // BUG: "","","x" becomes ["x"]
+
+// RIGHT — use a real parser that preserves column positions
+const { parse } = require('csv-parse/sync');
+const records = parse(csvContent, { columns: true, bom: true, skip_empty_lines: true });
+// Each record is { "Action": "...", "Autonomous?": "", "Never Automate?": "x" }
+```
+
+This is not optional. A hand-rolled parser once inverted an entire permission model — 21 "Never automate" actions were classified as "Autonomous" because `.filter(c => c)` collapsed empty columns.
+
+### Rule 2: Explain back BEFORE acting
+
+After parsing responses, ALWAYS present a summary to the user before creating configs, PRs, or code:
+
+> "Here's what I understood from your answers:
+> - 0 autonomous actions
+> - 17 actions need Liraz's approval
+> - 21 actions are forbidden
+> Does this match your intent?"
+
+Wait for confirmation. Then build.
+
+### Rule 3: Install the parser
+
+Add `csv-parse` to the tools that process questionnaire responses:
+```bash
+npm install csv-parse  # in the vertical's tools/
+```
+
 ## Template: Issue Body Structure
 
 ```markdown
@@ -159,3 +196,5 @@ The Roeto workflow prioritization (garsson-insurance#14) is the reference implem
 - **Don't ask one question per issue** — batch related questions into one well-organized issue
 - **Don't forget screenshots** — a picture of the UI element is worth 100 words of description
 - **Don't use English-only** — if the stakeholders work in Hebrew, include Hebrew labels alongside English
+- **Don't hand-parse CSV** — use `csv-parse` or equivalent. Empty columns WILL be silently dropped
+- **Don't act on parsed data without confirming** — always explain back what you understood first
