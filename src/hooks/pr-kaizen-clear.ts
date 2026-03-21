@@ -288,10 +288,11 @@ function defaultPostComment(prUrl: string, comment: string): void {
   const prNum = prUrl.match(/(\d+)$/)?.[1];
   const repo = prUrl.match(/github\.com\/([^/]+\/[^/]+)\/pull/)?.[1];
   if (!prNum || !repo) return;
-  execSync(
-    `gh pr comment ${prNum} --repo "${repo}" --body "$(cat <<'KAIZEN_EOF'\n${comment}\nKAIZEN_EOF\n)"`,
-    { stdio: ['pipe', 'pipe', 'pipe'], timeout: 15000 },
-  );
+  execSync(`gh pr comment ${prNum} --repo "${repo}" --body-file -`, {
+    input: comment,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    timeout: 15000,
+  });
 }
 
 // ── Core logic (extracted for testability) ───────────────────────────
