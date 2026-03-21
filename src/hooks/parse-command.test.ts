@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  detectGhRepo,
+  extractGitCPath,
   extractPrNumber,
   extractPrUrl,
   extractRepoFlag,
+  getPrChangedFiles,
   isGhPrCommand,
   isGitCommand,
   reconstructPrUrl,
@@ -126,6 +129,78 @@ describe('extractPrUrl', () => {
 
   it('returns undefined for text without PR URL', () => {
     expect(extractPrUrl('No URL here')).toBeUndefined();
+  });
+});
+
+describe('extractGitCPath', () => {
+  it('extracts -C path from git command', () => {
+    expect(extractGitCPath('git -C /some/path push origin main')).toBe(
+      '/some/path',
+    );
+  });
+
+  it('returns undefined when no -C flag', () => {
+    expect(extractGitCPath('git push origin main')).toBeUndefined();
+  });
+
+  it('handles piped commands', () => {
+    expect(extractGitCPath('echo test | git -C /foo status')).toBe('/foo');
+  });
+});
+
+describe('detectGhRepo', () => {
+  it('detects repo from HTTPS URL', () => {
+    expect(detectGhRepo('https://github.com/Garsson-io/nanoclaw.git')).toBe(
+      'Garsson-io/nanoclaw',
+    );
+  });
+
+  it('detects repo from SSH URL', () => {
+    expect(detectGhRepo('git@github.com:Garsson-io/nanoclaw.git')).toBe(
+      'Garsson-io/nanoclaw',
+    );
+  });
+
+  it('returns undefined for non-GitHub URL', () => {
+    expect(detectGhRepo('https://gitlab.com/foo/bar.git')).toBeUndefined();
+  });
+});
+
+describe('getPrChangedFiles', () => {
+  it('uses gh pr diff for merge commands', () => {
+    const executor = (cmd: string) => {
+      if (cmd.includes('gh pr diff')) return 'file1.ts\nfile2.ts\n';
+      return '';
+    };
+    const files = getPrChangedFiles(
+      'gh pr merge 42 --repo Garsson-io/nanoclaw',
+      true,
+      executor,
+    );
+    expect(files).toEqual(['file1.ts', 'file2.ts']);
+  });
+
+  it('falls back to git diff when gh pr diff returns empty', () => {
+    const executor = (cmd: string) => {
+      if (cmd.includes('gh pr diff')) return '';
+      if (cmd.includes('git diff')) return 'fallback.ts\n';
+      return '';
+    };
+    const files = getPrChangedFiles('gh pr merge 42', true, executor);
+    expect(files).toEqual(['fallback.ts']);
+  });
+
+  it('uses git diff for create commands', () => {
+    const executor = (cmd: string) => {
+      if (cmd.includes('git diff')) return 'new-file.ts\n';
+      return '';
+    };
+    const files = getPrChangedFiles(
+      'gh pr create --title test',
+      false,
+      executor,
+    );
+    expect(files).toEqual(['new-file.ts']);
   });
 });
 
