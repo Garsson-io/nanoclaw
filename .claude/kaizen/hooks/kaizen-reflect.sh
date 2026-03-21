@@ -55,6 +55,10 @@ if [ "$IS_CREATE" = true ]; then
   if [ -z "$PR_URL" ]; then
     exit 0
   fi
+  # Skip gate if reflection was already done for this PR (kaizen #288)
+  if is_reflection_done "$PR_URL"; then
+    exit 0
+  fi
   mkdir -p "$STATE_DIR" 2>/dev/null
   chmod 700 "$STATE_DIR" 2>/dev/null
   KAIZEN_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
@@ -125,6 +129,10 @@ if [ "$IS_MERGE" = true ]; then
   source "$(dirname "$0")/lib/state-utils.sh"
   # Guard: skip state file if PR URL is empty (kaizen #111)
   if [ -z "$PR_URL" ]; then
+    exit 0
+  fi
+  # Skip gate if reflection was already done for this PR (kaizen #288)
+  if is_reflection_done "$PR_URL"; then
     exit 0
   fi
   mkdir -p "$STATE_DIR" 2>/dev/null

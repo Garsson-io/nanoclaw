@@ -345,3 +345,49 @@ auto_close_kaizen_issues() {
     echo "Auto-closed $closed_count kaizen issue(s) referenced in $pr_url"
   fi
 }
+
+# Per-PR reflection tracking (kaizen #288):
+# After a successful kaizen reflection, mark the PR as "done" so that
+# subsequent events (merge after create, or duplicate gates) don't
+# trigger another reflection gate for the same PR.
+#
+# Marker files are named: kaizen-done-<PR_KEY>
+# They use the same staleness rules as other state files.
+
+# Mark a PR's reflection as completed.
+# Usage: mark_reflection_done "$PR_URL"
+mark_reflection_done() {
+  local pr_url="$1"
+  [ -z "$pr_url" ] && return 0
+  local key
+  key=$(pr_url_to_state_key "$pr_url")
+  local branch
+  branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+  mkdir -p "$STATE_DIR" 2>/dev/null
+  printf 'PR_URL=%s\nSTATUS=kaizen_done\nBRANCH=%s\n' \
+    "$pr_url" "$branch" > "$STATE_DIR/kaizen-done-$key"
+  chmod 600 "$STATE_DIR/kaizen-done-$key" 2>/dev/null
+}
+
+# Check if a PR's reflection has already been completed.
+# Uses any-branch lookup (reflection may have been done in a different worktree).
+# Returns 0 if reflection is done, 1 if not.
+# Usage: if is_reflection_done "$PR_URL"; then skip_gate; fi
+is_reflection_done() {
+  local pr_url="$1"
+  [ -z "$pr_url" ] && return 1
+  local key
+  key=$(pr_url_to_state_key "$pr_url")
+  local marker="$STATE_DIR/kaizen-done-$key"
+  [ -f "$marker" ] || return 1
+  # Check staleness
+  local now mtime age
+  now=$(date +%s)
+  mtime=$(stat -c %Y "$marker" 2>/dev/null || stat -f %m "$marker" 2>/dev/null || echo "0")
+  age=$(( now - mtime ))
+  if [ "$age" -gt "$MAX_STATE_AGE" ]; then
+    rm -f "$marker" 2>/dev/null
+    return 1
+  fi
+  return 0
+}

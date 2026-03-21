@@ -243,4 +243,95 @@ assert_contains "clear output mentions gate cleared" "gate cleared" "$CLEAR_OUTP
 ALLOW_OUTPUT=$(echo "$BLOCK_INPUT" | PATH="$MOCK_DIR_CUSTOM:$PATH" bash "$ENFORCE_HOOK" 2>/dev/null)
 assert_eq "commands allowed after gate cleared" "" "$ALLOW_OUTPUT"
 
+
+echo ""
+echo "=== After reflection done, merge for same PR does NOT create new gate (kaizen #288) ==="
+
+setup
+setup_gh_mock "Fix auth bug"
+
+# Step 1: PR create sets gate
+CREATE_INPUT_288=$(jq -n '{
+  "tool_input": {"command": "gh pr create --title \"test\""},
+  "tool_response": {
+    "stdout": "https://github.com/Garsson-io/nanoclaw/pull/77",
+    "stderr": "",
+    "exit_code": "0"
+  }
+}')
+
+echo "$CREATE_INPUT_288" | IPC_DIR="$TEST_IPC_DIR" PATH="$MOCK_DIR_CUSTOM:$PATH" bash "$HOOK" 2>/dev/null
+
+if has_pr_kaizen_state; then
+  echo "  PASS: PR create sets gate for #77"
+  ((PASS++))
+else
+  echo "  FAIL: PR create did NOT set gate for #77"
+  ((FAIL++))
+fi
+
+# Step 2: Clear the gate via KAIZEN_NO_ACTION
+CLEAR_INPUT_288=$(jq -n '{
+  "tool_name": "Bash",
+  "tool_input": {"command": "echo '\''KAIZEN_NO_ACTION [test-only]: reflection done test'\''"},
+  "tool_response": {
+    "stdout": "KAIZEN_NO_ACTION [test-only]: reflection done test",
+    "stderr": "",
+    "exit_code": "0"
+  }
+}')
+
+echo "$CLEAR_INPUT_288" | PATH="$MOCK_DIR_CUSTOM:$PATH" bash "$CLEAR_HOOK" 2>/dev/null
+
+if ! has_pr_kaizen_state; then
+  echo "  PASS: gate cleared for #77"
+  ((PASS++))
+else
+  echo "  FAIL: gate NOT cleared for #77"
+  ((FAIL++))
+fi
+
+# Step 3: Merge same PR — should NOT create a new gate (kaizen #288)
+MERGE_288=$(jq -n '{
+  "tool_input": {"command": "gh pr merge 77 --squash"},
+  "tool_response": {
+    "stdout": "Merged https://github.com/Garsson-io/nanoclaw/pull/77",
+    "stderr": "",
+    "exit_code": "0"
+  }
+}')
+
+echo "$MERGE_288" | IPC_DIR="$TEST_IPC_DIR" PATH="$MOCK_DIR_CUSTOM:$PATH" bash "$HOOK" 2>/dev/null
+
+if ! has_pr_kaizen_state; then
+  echo "  PASS: merge of already-reflected PR does NOT create new gate (kaizen #288)"
+  ((PASS++))
+else
+  echo "  FAIL: merge of already-reflected PR created a DUPLICATE gate"
+  ((FAIL++))
+fi
+
+echo ""
+echo "=== Merge of different PR still creates gate (regression check) ==="
+
+# The kaizen-done marker is for #77. PR #88 should still get a gate.
+MERGE_NEW=$(jq -n '{
+  "tool_input": {"command": "gh pr merge 88 --squash"},
+  "tool_response": {
+    "stdout": "Merged https://github.com/Garsson-io/nanoclaw/pull/88",
+    "stderr": "",
+    "exit_code": "0"
+  }
+}')
+
+echo "$MERGE_NEW" | IPC_DIR="$TEST_IPC_DIR" PATH="$MOCK_DIR_CUSTOM:$PATH" bash "$HOOK" 2>/dev/null
+
+if has_pr_kaizen_state; then
+  echo "  PASS: different PR still gets gate"
+  ((PASS++))
+else
+  echo "  FAIL: different PR did NOT get gate"
+  ((FAIL++))
+fi
+
 print_results
