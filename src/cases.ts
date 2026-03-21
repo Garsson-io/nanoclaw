@@ -554,6 +554,7 @@ function createScratchDir(caseName: string): {
 // ---------------------------------------------------------------------------
 
 const LOCK_FILENAME = '.worktree-lock.json';
+const CONTEXT_FILENAME = '.worktree-context.json';
 const STALE_LOCK_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
 
 interface WorktreeLock {
@@ -628,6 +629,54 @@ export function checkWorktreeLock(worktreePath: string): WorktreeLock | null {
       return null;
     }
     return lock;
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Worktree context files — issue/PR tracking for /agents skill
+// ---------------------------------------------------------------------------
+
+export interface WorktreeContext {
+  issue_number?: number;
+  issue_repo?: string;
+  issue_url?: string;
+  pr_number?: number;
+  pr_url?: string;
+  pr_title?: string;
+  description?: string;
+  case_name?: string;
+  case_id?: string;
+}
+
+/**
+ * Write or merge fields into .worktree-context.json.
+ * Merges with existing content so callers can write partial updates
+ * (e.g. issue info at case creation, PR info later).
+ */
+export function writeWorktreeContext(
+  worktreePath: string,
+  context: WorktreeContext,
+): void {
+  const ctxPath = path.join(worktreePath, CONTEXT_FILENAME);
+  let existing: WorktreeContext = {};
+  try {
+    existing = JSON.parse(fs.readFileSync(ctxPath, 'utf-8'));
+  } catch {
+    // No existing file or invalid JSON — start fresh
+  }
+  const merged = { ...existing, ...context };
+  fs.writeFileSync(ctxPath, JSON.stringify(merged, null, 2) + '\n');
+}
+
+/** Read .worktree-context.json, returning null if missing or invalid. */
+export function readWorktreeContext(
+  worktreePath: string,
+): WorktreeContext | null {
+  const ctxPath = path.join(worktreePath, CONTEXT_FILENAME);
+  try {
+    return JSON.parse(fs.readFileSync(ctxPath, 'utf-8'));
   } catch {
     return null;
   }

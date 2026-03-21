@@ -121,6 +121,11 @@
             "type": "command",
             "command": "./.claude/kaizen/hooks/pr-kaizen-clear.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "./.claude/kaizen/hooks/capture-worktree-context.sh",
+            "timeout": 10
           }
         ]
       },
