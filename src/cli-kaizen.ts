@@ -69,6 +69,8 @@ export interface CaseCreateDeps {
   resolveWorktree: typeof resolveExistingWorktree;
   insert: typeof insertCase;
   getActiveByIssue: typeof getActiveCasesByGithubIssue;
+  getActiveCases: typeof getActiveCases;
+  getIssue: typeof getGitHubIssue;
   detectWorktree: typeof detectCurrentWorktree;
   getActiveByBranch: typeof getActiveCaseByBranch;
 }
@@ -81,6 +83,8 @@ const defaultDeps: CaseCreateDeps = {
   resolveWorktree: resolveExistingWorktree,
   insert: insertCase,
   getActiveByIssue: getActiveCasesByGithubIssue,
+  getActiveCases,
+  getIssue: getGitHubIssue,
   detectWorktree: detectCurrentWorktree,
   getActiveByBranch: getActiveCaseByBranch,
 };
@@ -142,7 +146,7 @@ export async function handleCaseCreate(
   if (githubIssue && caseType === 'dev') {
     try {
       // Get all active dev cases with github issues (excluding current issue)
-      const allActive = getActiveCases();
+      const allActive = deps.getActiveCases();
       const otherDevCases = allActive.filter(
         (c) =>
           c.type === 'dev' &&
@@ -153,7 +157,7 @@ export async function handleCaseCreate(
 
       if (otherDevCases.length > 0) {
         // Fetch area labels for new issue
-        const newIssueResult = await getGitHubIssue({
+        const newIssueResult = await deps.getIssue({
           owner,
           repo,
           issueNumber: githubIssue,
@@ -166,7 +170,7 @@ export async function handleCaseCreate(
         if (newAreas.length > 0) {
           // Check each active dev case for area overlap
           for (const activeCase of otherDevCases) {
-            const activeIssueResult = await getGitHubIssue({
+            const activeIssueResult = await deps.getIssue({
               owner,
               repo,
               issueNumber: activeCase.github_issue!,
