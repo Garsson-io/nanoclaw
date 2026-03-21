@@ -11,11 +11,13 @@
 source "$(dirname "$0")/test-helpers.sh"
 
 HOOK="$(dirname "$0")/../kaizen-reflect.sh"
+setup_test_env
 TEST_IPC_DIR=$(mktemp -d)
 MOCK_DIR=$(mktemp -d)
 
 cleanup() {
   rm -rf "$TEST_IPC_DIR" "$MOCK_DIR"
+  cleanup_test_env
 }
 trap cleanup EXIT
 
@@ -231,6 +233,23 @@ if [ ${#IPC_FILES[@]} -eq 1 ]; then
   fi
 else
   echo "  FAIL: no IPC file created"
+  ((FAIL++))
+fi
+
+echo ""
+echo "=== No test state files leak to real state dir (kaizen #309) ==="
+
+REAL_STATE_DIR="/tmp/.pr-review-state"
+LEAKED_FILES=$(find "$REAL_STATE_DIR" -name "pr-kaizen-*" -newer "$0" 2>/dev/null | while read -r f; do
+  grep -l "feature/test-branch" "$f" 2>/dev/null
+done)
+
+if [ -z "$LEAKED_FILES" ]; then
+  echo "  PASS: no test state files leaked to real state dir"
+  ((PASS++))
+else
+  echo "  FAIL: test state files leaked to $REAL_STATE_DIR"
+  echo "    leaked files: $LEAKED_FILES"
   ((FAIL++))
 fi
 
