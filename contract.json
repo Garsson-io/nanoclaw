@@ -123,8 +123,7 @@
       ],
       "globalNpmPackages": [
         "@anthropic-ai/claude-code",
-        "agent-browser",
-        "puppeteer-real-browser"
+        "agent-browser"
       ]
     }
   }

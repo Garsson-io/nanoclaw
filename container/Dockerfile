@@ -62,7 +62,10 @@ ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 # Global npm packages — core infrastructure, changes rarely.
 # Pin exact versions to stabilize Docker layer cache (kaizen #123).
 # To update: check `npm view <pkg> version`, update here, rebuild.
-RUN npm install -g agent-browser@0.21.2 @anthropic-ai/claude-code@2.1.79 puppeteer-real-browser@1.4.4
+RUN npm install -g agent-browser@0.21.2 @anthropic-ai/claude-code@2.1.79
+
+# Vertical-specific npm packages — Cloudflare Turnstile bypass for insurance backoffice
+RUN npm install -g puppeteer-real-browser@1.4.4
 
 # Python packages for preflight tools — vertical-specific, changes more often than globals
 RUN pip3 install --no-cache-dir --break-system-packages Pillow>=10.0 pymupdf>=1.24.0 pikepdf>=9.0
