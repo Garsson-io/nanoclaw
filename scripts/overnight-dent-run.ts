@@ -45,6 +45,8 @@ export interface BatchState {
   last_branch: string;
   last_worktree: string;
   progress_issue?: string;
+  test_task?: boolean;
+  experiment?: boolean;
 }
 
 export interface RunResult {
@@ -84,10 +86,40 @@ function getRepoRoot(): string {
 
 // ── Prompt building ──────────────────────────────────────────────────────────
 
-function buildPrompt(state: BatchState, runNum: number): string {
+export function buildPrompt(state: BatchState, runNum: number): string {
   const runTag = `${state.batch_id}/run-${runNum}`;
 
-  let prompt = `Use /make-a-dent with this guidance: ${state.guidance}
+  let prompt: string;
+
+  if (state.test_task) {
+    // Synthetic fast task for pipeline testing (kaizen #322)
+    const timestamp = new Date()
+      .toISOString()
+      .replace(/[-:T]/g, '')
+      .slice(0, 14);
+    prompt = `You are running a synthetic test task for pipeline validation.
+
+Run tag: ${runTag}
+
+## Task
+
+1. Create a new branch from HEAD: \`test-probe-${runTag.replace(/\//g, '-')}\`
+2. Create a file \`test-probe-${timestamp}.md\` with this content:
+   \`\`\`
+   # Test Probe
+   Run tag: ${runTag}
+   Timestamp: ${new Date().toISOString()}
+   \`\`\`
+3. Commit with message: "test: probe ${runTag}"
+4. Create a PR: \`gh pr create --title "test: probe ${runTag}" --body "Synthetic test task for pipeline validation. Run tag: ${runTag}" --repo Garsson-io/nanoclaw\`
+5. Queue auto-merge: \`gh pr merge <url> --repo Garsson-io/nanoclaw --squash --delete-branch --auto\`
+
+Do not ask for confirmation. Complete all steps.`;
+  } else {
+    prompt = `Use /make-a-dent with this guidance: ${state.guidance}`;
+  }
+
+  prompt += `
 
 Run tag: ${runTag}
 Include this run tag in any PR descriptions or commit messages you create.
@@ -192,6 +224,13 @@ export function extractArtifacts(text: string, result: RunResult): void {
   )) {
     if (!result.issuesClosed.includes(m[1])) result.issuesClosed.push(m[1]);
   }
+  // Extract kaizen issue references from PR titles, commit messages, and agent text (kaizen #299)
+  // Pattern: "kaizen #N" — common in PR titles like "fix: xyz (kaizen #204)"
+  // These indicate the issue is being addressed even without explicit "closes #N"
+  for (const m of text.matchAll(/kaizen\s+#(\d+)/gi)) {
+    const ref = `#${m[1]}`;
+    if (!result.issuesClosed.includes(ref)) result.issuesClosed.push(ref);
+  }
   for (const m of text.matchAll(/case[:\s]+(\d{6}-\d{4}-[\w-]+)/g)) {
     if (!result.cases.includes(m[1])) result.cases.push(m[1]);
   }
@@ -263,6 +302,31 @@ function ghExec(cmd: string): string {
       `  [hygiene] warning: ${cmd.slice(0, 80)}… → ${e.message?.split('\n')[0] || 'failed'}`,
     );
     return '';
+  }
+}
+
+export type MergeStatus =
+  | 'merged'
+  | 'auto_queued'
+  | 'open'
+  | 'closed'
+  | 'unknown';
+
+export function checkMergeStatus(prUrl: string): MergeStatus {
+  const m = prUrl.match(/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/);
+  if (!m) return 'unknown';
+  try {
+    const json = ghExec(
+      `gh pr view ${m[2]} --repo ${m[1]} --json state,mergeStateStatus,autoMergeRequest`,
+    );
+    if (!json) return 'unknown';
+    const data = JSON.parse(json);
+    if (data.state === 'MERGED') return 'merged';
+    if (data.state === 'CLOSED') return 'closed';
+    if (data.autoMergeRequest) return 'auto_queued';
+    return 'open';
+  } catch {
+    return 'unknown';
   }
 }
 
@@ -614,6 +678,16 @@ async function main(): Promise<void> {
   const progressIssue = ensureBatchProgressIssue(state, stateFile);
   labelArtifacts(result);
   queueAutoMerge(result);
+
+  // Check merge status of each PR (kaizen #322)
+  for (const pr of result.prs) {
+    const status = checkMergeStatus(pr);
+    console.log(`  [merge-tracking] ${pr}: ${status}`);
+    if (state.experiment) {
+      appendFileSync(logFile, `merge_status=${pr} ${status}\n`);
+    }
+  }
+
   updateBatchProgressIssue(progressIssue, runNum, exitCode, duration, result);
 
   // ── Update state ─────────────────────────────────────────────────────────

@@ -84,6 +84,8 @@ UNIT_TESTS=(
   "$SCRIPT_DIR/test-waiver-quality.sh"
   "$SCRIPT_DIR/test-block-git-rebase.sh"
   "$SCRIPT_DIR/test-squash-merge-safety.sh"
+  "$SCRIPT_DIR/test-capture-worktree-context.sh"
+  "$SCRIPT_DIR/test-enforce-kaizen-stop.sh"
 )
 
 # Bash harness tests (integration + interaction tests)
@@ -95,6 +97,8 @@ BASH_HARNESS_TESTS=(
   "$SCRIPT_DIR/test-hook-interaction-matrix.sh"
   "$SCRIPT_DIR/test-integration-pr-lifecycle.sh"
   "$SCRIPT_DIR/test-claude-wt.sh"
+  "$SCRIPT_DIR/test-worktree-context-integration.sh"
+  "$SCRIPT_DIR/test-integration-kaizen-lifecycle.sh"
   "$SCRIPT_DIR/../../../../scripts/tests/test-resolve-cli-kaizen.sh"
 )
 
