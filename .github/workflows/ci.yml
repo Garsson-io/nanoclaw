@@ -40,73 +40,8 @@ jobs:
       - name: Tests (shell scripts)
         run: bash scripts/run-all-tests.sh
 
-  e2e:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0  # Needed for git diff in path filter
-
-      - name: Check if E2E-relevant files changed
-        id: filter
-        run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            # For push to main, check changed files in the push
-            CHANGED=$(git diff --name-only HEAD~1...HEAD 2>/dev/null || echo "")
-            if [ -z "$CHANGED" ] || echo "$CHANGED" | grep -qE '^(container/|src/|package\.json|package-lock\.json|tests/e2e/|vitest\.config\.e2e\.ts)'; then
-              echo "relevant=true" >> "$GITHUB_OUTPUT"
-              echo "E2E-relevant files changed (or first push) — will run E2E tests."
-            else
-              echo "relevant=false" >> "$GITHUB_OUTPUT"
-              echo "No E2E-relevant files changed — skipping E2E tests."
-            fi
-          else
-            # For PRs, compare base to head
-            BASE=${{ github.event.pull_request.base.sha }}
-            HEAD=${{ github.event.pull_request.head.sha }}
-            CHANGED=$(git diff --name-only "$BASE"..."$HEAD")
-
-            if echo "$CHANGED" | grep -qE '^(container/|src/|package\.json|package-lock\.json|tests/e2e/|vitest\.config\.e2e\.ts)'; then
-              echo "relevant=true" >> "$GITHUB_OUTPUT"
-              echo "E2E-relevant files changed — will run E2E tests."
-            else
-              echo "relevant=false" >> "$GITHUB_OUTPUT"
-              echo "No E2E-relevant files changed — skipping E2E tests."
-            fi
-          fi
-
-      - uses: actions/setup-node@v6
-        if: steps.filter.outputs.relevant == 'true'
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install dependencies
-        if: steps.filter.outputs.relevant == 'true'
-        run: npm ci
-
-      - name: Build agent-runner dist
-        if: steps.filter.outputs.relevant == 'true'
-        run: npm run build
-
-      - name: Set up Docker Buildx
-        if: steps.filter.outputs.relevant == 'true'
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build container image
-        if: steps.filter.outputs.relevant == 'true'
-        uses: docker/build-push-action@v6
-        with:
-          context: ./container
-          load: true
-          tags: nanoclaw-agent:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Run E2E tests
-        if: steps.filter.outputs.relevant == 'true'
-        run: npx vitest run --config vitest.config.e2e.ts
+  # e2e: temporarily disabled during kaizen split (kaizen #398)
+  # Will be re-enabled after Phase 5 of kaizen split (#395)
 
   pr-policy:
     if: github.event_name == 'pull_request_target'
