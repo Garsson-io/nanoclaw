@@ -8,6 +8,7 @@ import {
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  DEFAULT_STATE_DIR,
   isReflectionDone,
   listStateFilesAnyBranch,
   markReflectionDone,
@@ -30,6 +31,13 @@ afterEach(() => {
   if (existsSync(TEST_STATE_DIR)) {
     rmSync(TEST_STATE_DIR, { recursive: true });
   }
+});
+
+describe('DEFAULT_STATE_DIR', () => {
+  it('is a string path', () => {
+    expect(typeof DEFAULT_STATE_DIR).toBe('string');
+    expect(DEFAULT_STATE_DIR.length).toBeGreaterThan(0);
+  });
 });
 
 describe('prUrlToStateKey', () => {
