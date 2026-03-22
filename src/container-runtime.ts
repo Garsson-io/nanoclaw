@@ -72,7 +72,16 @@ export function ensureContainerRuntimeRunning(): void {
     });
     logger.debug('Container runtime already running');
   } catch (err) {
-    logger.error({ err }, 'Failed to reach container runtime');
+    const stderr =
+      err instanceof Error && 'stderr' in err
+        ? Buffer.isBuffer((err as { stderr: unknown }).stderr)
+          ? (err as { stderr: Buffer }).stderr.toString().trim()
+          : String((err as { stderr: unknown }).stderr).trim()
+        : undefined;
+    logger.error(
+      { reason: stderr || (err instanceof Error ? err.message : String(err)) },
+      'Failed to reach container runtime',
+    );
     console.error(
       '\n╔════════════════════════════════════════════════════════════════╗',
     );
@@ -181,6 +190,9 @@ export function cleanupOrphans(): void {
       );
     }
   } catch (err) {
-    logger.warn({ err }, 'Failed to clean up orphaned containers');
+    logger.warn(
+      { reason: err instanceof Error ? err.message : String(err) },
+      'Failed to clean up orphaned containers',
+    );
   }
 }
