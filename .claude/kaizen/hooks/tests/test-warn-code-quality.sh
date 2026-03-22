@@ -166,3 +166,71 @@ echo "$INPUT" | bash "$HOOK" >/dev/null 2>&1
 assert_eq "PR create exits 0" "0" "$?"
 
 print_results
+
+# --- DRY enforcement tests (appended) ---
+echo ""
+echo "=== DRY enforcement: inline SCRIPT_DIR/PROJECT_ROOT ==="
+
+# Test 13: Hook wrapper with inline SCRIPT_DIR — WARNING
+echo "13. Hook wrapper with inline SCRIPT_DIR (not using shared lib)"
+mkdir -p "$REPO_DIR/.claude/kaizen/hooks"
+cat > "$REPO_DIR/.claude/kaizen/hooks/my-new-hook.sh" << 'EOF'
+#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+echo "doing stuff"
+EOF
+git add .claude/kaizen/hooks/my-new-hook.sh
+OUTPUT=$(run_commit_hook)
+assert_contains "warns on inline SCRIPT_DIR" "resolve-project-root.sh" "$OUTPUT"
+git reset -q HEAD .claude/kaizen/hooks/my-new-hook.sh
+
+# Test 14: Hook wrapper using shared lib — no warning
+echo "14. Hook wrapper using resolve-project-root.sh (no warning)"
+cat > "$REPO_DIR/.claude/kaizen/hooks/good-hook.sh" << 'EOF'
+#!/bin/bash
+source "$(dirname "$0")/lib/resolve-project-root.sh"
+echo "doing stuff"
+EOF
+git add .claude/kaizen/hooks/good-hook.sh
+OUTPUT=$(run_commit_hook)
+assert_not_contains "no DRY warning for shared lib" "resolve-project-root.sh" "$OUTPUT"
+git reset -q HEAD .claude/kaizen/hooks/good-hook.sh
+
+# Test 15: Test files with SCRIPT_DIR — no warning
+echo "15. Test files with SCRIPT_DIR are exempt"
+mkdir -p "$REPO_DIR/.claude/kaizen/hooks/tests"
+cat > "$REPO_DIR/.claude/kaizen/hooks/tests/test-my-hook.sh" << 'EOF'
+#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/../lib/something.sh"
+EOF
+git add .claude/kaizen/hooks/tests/test-my-hook.sh
+OUTPUT=$(run_commit_hook)
+assert_not_contains "test files exempt from DRY check" "resolve-project-root.sh" "$OUTPUT"
+git reset -q HEAD .claude/kaizen/hooks/tests/test-my-hook.sh
+
+# Test 16: Lib files with SCRIPT_DIR — no warning
+echo "16. Lib files with SCRIPT_DIR are exempt"
+mkdir -p "$REPO_DIR/.claude/kaizen/hooks/lib"
+cat > "$REPO_DIR/.claude/kaizen/hooks/lib/my-util.sh" << 'EOF'
+#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+EOF
+git add .claude/kaizen/hooks/lib/my-util.sh
+OUTPUT=$(run_commit_hook)
+assert_not_contains "lib files exempt from DRY check" "resolve-project-root.sh" "$OUTPUT"
+git reset -q HEAD .claude/kaizen/hooks/lib/my-util.sh
+
+# Test 17: Non-hook .sh files — no warning
+echo "17. Non-hook .sh files are not checked"
+mkdir -p "$REPO_DIR/scripts"
+cat > "$REPO_DIR/scripts/build.sh" << 'EOF'
+#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+EOF
+git add scripts/build.sh
+OUTPUT=$(run_commit_hook)
+assert_not_contains "non-hook scripts exempt" "resolve-project-root.sh" "$OUTPUT"
+git reset -q HEAD scripts/build.sh
