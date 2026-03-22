@@ -218,7 +218,9 @@ export function getAllCases(): Case[] {
 
 export function getCasesByStatus(status: Case['status']): Case[] {
   return db
-    .prepare('SELECT * FROM cases WHERE status = ? ORDER BY last_activity_at ASC')
+    .prepare(
+      'SELECT * FROM cases WHERE status = ? ORDER BY last_activity_at ASC',
+    )
     .all(status) as Case[];
 }
 
