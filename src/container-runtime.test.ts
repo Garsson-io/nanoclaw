@@ -80,6 +80,42 @@ describe('ensureContainerRuntimeRunning', () => {
     );
     expect(logger.error).toHaveBeenCalled();
   });
+
+  it('logs sanitized reason string instead of raw error with Buffers', () => {
+    const execError = new Error(
+      'Command failed: docker info\n/bin/sh: 1: docker: not found\n',
+    );
+    Object.assign(execError, {
+      status: 127,
+      stderr: Buffer.from('/bin/sh: 1: docker: not found\n'),
+      stdout: Buffer.from(''),
+      output: [
+        null,
+        Buffer.from(''),
+        Buffer.from('/bin/sh: 1: docker: not found\n'),
+      ],
+    });
+    mockExecSync.mockImplementationOnce(() => {
+      throw execError;
+    });
+
+    expect(() => ensureContainerRuntimeRunning()).toThrow();
+
+    const logArg = (logger.error as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(logArg).toEqual({ reason: '/bin/sh: 1: docker: not found' });
+    expect(logArg).not.toHaveProperty('err');
+  });
+
+  it('falls back to error message when stderr is missing', () => {
+    mockExecSync.mockImplementationOnce(() => {
+      throw new Error('Connection refused');
+    });
+
+    expect(() => ensureContainerRuntimeRunning()).toThrow();
+
+    const logArg = (logger.error as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(logArg).toEqual({ reason: 'Connection refused' });
+  });
 });
 
 // --- cleanupOrphans ---
@@ -130,7 +166,7 @@ describe('cleanupOrphans', () => {
     cleanupOrphans(); // should not throw
 
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ err: expect.any(Error) }),
+      { reason: 'docker not available' },
       'Failed to clean up orphaned containers',
     );
   });
