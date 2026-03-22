@@ -46,7 +46,7 @@ notify() {
     return 0
   fi
   # Source the Telegram IPC helper
-  local ipc_lib="$PROJECT_ROOT/.claude/kaizen/hooks/lib/send-telegram-ipc.sh"
+  local ipc_lib="$PROJECT_ROOT/.kaizen/.claude/hooks/lib/send-notification.sh"
   if [ -f "$ipc_lib" ]; then
     CLAUDE_PROJECT_DIR="$PROJECT_ROOT" source "$ipc_lib"
     send_telegram_ipc "$text" || log "WARNING: Telegram notification failed"
