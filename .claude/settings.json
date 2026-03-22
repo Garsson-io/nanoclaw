@@ -126,6 +126,11 @@
             "type": "command",
             "command": "./.claude/kaizen/hooks/capture-worktree-context.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "./.claude/kaizen/hooks/check-superseded-pr.sh",
+            "timeout": 15
           }
         ]
       },
