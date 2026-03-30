@@ -101,6 +101,25 @@ if $IS_PR && command -v npx >/dev/null 2>&1; then
   fi
 fi
 
+# Check 4: DRY enforcement for bash wrapper boilerplate (kaizen #365)
+# Detect inline SCRIPT_DIR/PROJECT_ROOT in hook wrappers that should use resolve-project-root.sh
+if $IS_COMMIT; then
+HOOK_FILES=$(echo "$CHANGED_FILES" | grep -E '^\.claude/kaizen/hooks/[^/]+\.sh$' | grep -v 'lib/' || true)
+
+if [ -n "$HOOK_FILES" ]; then
+  while IFS= read -r HOOK_FILE; do
+    [ -f "$HOOK_FILE" ] || continue
+    # Skip lib files themselves
+    echo "$HOOK_FILE" | grep -q '/lib/' && continue
+    # Check for inline path resolution that should use the shared lib
+    if grep -qE '^\s*(SCRIPT_DIR|PROJECT_ROOT)=' "$HOOK_FILE" && \
+       ! grep -q 'resolve-project-root.sh' "$HOOK_FILE"; then
+      WARNINGS="${WARNINGS}  🔄 $(basename "$HOOK_FILE"): inline SCRIPT_DIR/PROJECT_ROOT — use source lib/resolve-project-root.sh instead\n"
+    fi
+  done <<< "$HOOK_FILES"
+fi
+fi
+
 # Output warnings
 if [ -n "$WARNINGS" ]; then
   if $IS_COMMIT; then

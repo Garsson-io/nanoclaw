@@ -165,4 +165,45 @@ INPUT=$(jq -n '{"tool_input":{"command":"gh pr create --title test"}}')
 echo "$INPUT" | bash "$HOOK" >/dev/null 2>&1
 assert_eq "PR create exits 0" "0" "$?"
 
+echo ""
+echo "=== DRY enforcement (kaizen #365) ==="
+
+# Test 13: Hook wrapper with inline SCRIPT_DIR but no resolve-project-root.sh — warns
+echo "13. Warns on inline SCRIPT_DIR without shared lib"
+mkdir -p "$REPO_DIR/.claude/kaizen/hooks"
+cat > "$REPO_DIR/.claude/kaizen/hooks/bad-wrapper.sh" << 'HOOKEOF'
+#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+exec echo "hello"
+HOOKEOF
+git add .claude/kaizen/hooks/bad-wrapper.sh
+OUTPUT=$(run_commit_hook)
+assert_contains "warns on inline SCRIPT_DIR" "resolve-project-root.sh" "$OUTPUT"
+git reset -q HEAD .claude/kaizen/hooks/bad-wrapper.sh
+
+# Test 14: Hook wrapper with shared lib — no warning
+echo "14. No warning when using shared lib"
+cat > "$REPO_DIR/.claude/kaizen/hooks/good-wrapper.sh" << 'HOOKEOF'
+#!/bin/bash
+source "$(dirname "$0")/lib/resolve-project-root.sh"
+exec echo "hello"
+HOOKEOF
+git add .claude/kaizen/hooks/good-wrapper.sh
+OUTPUT=$(run_commit_hook)
+assert_not_contains "no warning with shared lib" "resolve-project-root.sh" "$OUTPUT"
+git reset -q HEAD .claude/kaizen/hooks/good-wrapper.sh
+
+# Test 15: Non-hook files with SCRIPT_DIR — no warning (only hooks checked)
+echo "15. Non-hook files not checked"
+cat > "$REPO_DIR/src/helper.sh" << 'HOOKEOF'
+#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+echo "hello"
+HOOKEOF
+git add src/helper.sh
+OUTPUT=$(run_commit_hook)
+assert_not_contains "non-hook not warned" "resolve-project-root.sh" "$OUTPUT"
+git reset -q HEAD src/helper.sh
+
 print_results

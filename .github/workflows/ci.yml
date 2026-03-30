@@ -37,6 +37,59 @@ jobs:
       - name: Tests (agent-runner)
         run: cd container/agent-runner && npx vitest run
 
+      - name: Validate smoke test state isolation (kaizen #373)
+        run: |
+          ERRORS=0
+          # Check TS test files that reference the default state dir without using tmpDir/STATE_DIR
+          for f in $(grep -rl '/tmp/\.pr-review-state' src/ --include='*.test.ts' 2>/dev/null); do
+            # Allow if file also sets up tmpDir or overrides STATE_DIR
+            if ! grep -qE '(mkdtempSync|tmpDir|STATE_DIR)' "$f"; then
+              echo "::error::$f references /tmp/.pr-review-state without state isolation (kaizen #373)"
+              ERRORS=$((ERRORS + 1))
+            fi
+          done
+          # Check shell test files
+          for f in $(grep -rl '/tmp/\.pr-review-state' .claude/kaizen/hooks/tests/ --include='*.sh' 2>/dev/null); do
+            # Allow if file uses TEST_STATE_DIR or STATE_DIR override, or is a leak-detection check
+            if ! grep -qE '(TEST_STATE_DIR|STATE_DIR=|setup_test_env|leak)' "$f"; then
+              echo "::error::$f references /tmp/.pr-review-state without state isolation (kaizen #373)"
+              ERRORS=$((ERRORS + 1))
+            fi
+          done
+          if [ "$ERRORS" -gt 0 ]; then
+            echo "::error::$ERRORS test file(s) use production state directory without isolation"
+            exit 1
+          fi
+          echo "Smoke test state isolation validated."
+
+      - name: Validate hook file syntax (kaizen #372)
+        run: |
+          ERRORS=0
+          # Extract all command paths from settings.json hooks
+          for cmd in $(jq -r '.. | .command? // empty' .claude/settings.json); do
+            if [ ! -f "$cmd" ]; then
+              echo "::error::Hook file missing: $cmd"
+              ERRORS=$((ERRORS + 1))
+            elif ! bash -n "$cmd" 2>/tmp/hook-syntax-err; then
+              echo "::error::Hook syntax error in $cmd:"
+              cat /tmp/hook-syntax-err
+              ERRORS=$((ERRORS + 1))
+            fi
+          done
+          # Also check shared lib files sourced by hooks
+          for lib in .claude/kaizen/hooks/lib/*.sh; do
+            if ! bash -n "$lib" 2>/tmp/hook-syntax-err; then
+              echo "::error::Hook lib syntax error in $lib:"
+              cat /tmp/hook-syntax-err
+              ERRORS=$((ERRORS + 1))
+            fi
+          done
+          if [ "$ERRORS" -gt 0 ]; then
+            echo "::error::$ERRORS hook file(s) have syntax errors — this would cause session deadlock (#371)"
+            exit 1
+          fi
+          echo "All hook files validated successfully."
+
       - name: Tests (shell scripts)
         run: bash scripts/run-all-tests.sh
 

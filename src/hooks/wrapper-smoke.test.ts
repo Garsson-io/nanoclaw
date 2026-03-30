@@ -83,6 +83,79 @@ function runWrapper(
   }
 }
 
+describe('wrapper resilience: wrappers exit 0 even with broken source (kaizen #371)', () => {
+  let brokenLibDir: string;
+  let brokenWrapper: string;
+
+  beforeEach(() => {
+    brokenLibDir = fs.mkdtempSync(path.join(os.tmpdir(), 'broken-lib-'));
+    // Create a resolve-project-root.sh with merge conflict markers
+    const libDir = path.join(brokenLibDir, 'lib');
+    fs.mkdirSync(libDir);
+    fs.writeFileSync(
+      path.join(libDir, 'resolve-project-root.sh'),
+      `#!/bin/bash
+<<<<<<< HEAD
+SCRIPT_DIR="old version"
+=======
+SCRIPT_DIR="new version"
+>>>>>>> branch
+PROJECT_ROOT="broken"
+`,
+    );
+
+    // Create a wrapper that sources the broken lib
+    brokenWrapper = path.join(brokenLibDir, 'test-wrapper.sh');
+    fs.writeFileSync(
+      brokenWrapper,
+      `#!/bin/bash
+# Subshell ensures exit 0 is always reachable even if source fails (kaizen #371)
+(source "$(dirname "$0")/lib/resolve-project-root.sh" && exec echo "should not reach") 2>/dev/null
+exit 0
+`,
+    );
+    fs.chmodSync(brokenWrapper, 0o755);
+  });
+
+  afterEach(() => {
+    fs.rmSync(brokenLibDir, { recursive: true, force: true });
+  });
+
+  it('exits 0 when sourced lib has merge conflict markers', () => {
+    const result = execSync(`bash "${brokenWrapper}"`, {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: 5000,
+    });
+    // Should produce no output (the exec inside the subshell fails silently)
+    expect(result.trim()).toBe('');
+  });
+
+  it('exits 0 when sourced lib is missing entirely', () => {
+    fs.rmSync(path.join(brokenLibDir, 'lib'), { recursive: true, force: true });
+    const result = execSync(`bash "${brokenWrapper}"`, {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: 5000,
+    });
+    expect(result.trim()).toBe('');
+  });
+
+  for (const wrapper of [
+    'pr-review-loop-ts.sh',
+    'pr-kaizen-clear-ts.sh',
+    'kaizen-reflect-ts.sh',
+  ]) {
+    it(`${wrapper} uses resilient subshell pattern`, () => {
+      const content = fs.readFileSync(path.join(HOOKS_DIR, wrapper), 'utf-8');
+      // Must use (source ... && exec ...) pattern, not bare source
+      expect(content).toMatch(/\(source .* && exec .*\)/);
+      // Must have exit 0 after the subshell
+      expect(content).toMatch(/\)\s*2>\/dev\/null\nexit 0/);
+    });
+  }
+});
+
 const NOOP_INPUT = {
   tool_input: { command: 'echo hello' },
   tool_response: { stdout: 'hello', stderr: '', exit_code: '0' },
