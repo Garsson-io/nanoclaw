@@ -8,6 +8,7 @@
  *   npx tsx src/cli-kaizen.ts view <number>
  *   npx tsx src/cli-kaizen.ts case-create --description "..." --type dev [--github-issue N] [--name "..."]
  *     [--worktree-path PATH --branch-name BRANCH]  (adopt existing worktree)
+ *   npx tsx src/cli-kaizen.ts pr-cleanup [--dry-run]
  */
 
 import fs from 'fs';
@@ -37,6 +38,7 @@ import {
   updateCase,
 } from './cases.js';
 import type { Case, CaseStatus, CaseType } from './cases.js';
+import { createGitHubDeps, runPrCleanup } from './pr-cleanup.js';
 import { resolveProjectRoot } from './resolve-project-root.js';
 
 const { owner, repo } = DEV_CASE_ISSUE_REPO;
@@ -405,6 +407,7 @@ async function main(): Promise<void> {
     console.error(
       '  npx tsx src/cli-kaizen.ts case-update-status <name> <status>',
     );
+    console.error('  npx tsx src/cli-kaizen.ts pr-cleanup [--dry-run]');
     process.exit(1);
   }
 
@@ -456,10 +459,28 @@ async function main(): Promise<void> {
     }
 
     console.log(JSON.stringify(result.issue, null, 2));
+  } else if (command === 'pr-cleanup') {
+    const dryRun = args.includes('--dry-run');
+    const deps = createGitHubDeps();
+    const results = await runPrCleanup('Garsson-io', 'nanoclaw', deps, dryRun);
+
+    if (results.length === 0) {
+      console.log('No superseded PRs found.');
+    } else {
+      for (const r of results) {
+        const issueList = r.closedIssues.map((n) => `#${n}`).join(', ');
+        console.log(
+          `${dryRun ? '[DRY RUN] Would close' : 'Closed'} PR #${r.prNumber}: ${r.title} (kaizen ${issueList})`,
+        );
+      }
+      console.log(
+        `\n${dryRun ? 'Would close' : 'Closed'} ${results.length} superseded PR(s).`,
+      );
+    }
   } else {
     console.error(`Unknown command: ${command}`);
     console.error(
-      'Available commands: list, view, case-create, case-list, case-by-branch, case-update-status',
+      'Available commands: list, view, case-create, case-list, case-by-branch, case-update-status, pr-cleanup',
     );
     process.exit(1);
   }
