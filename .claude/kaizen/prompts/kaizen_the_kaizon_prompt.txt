@@ -1,0 +1,23 @@
+Strengthen the kaizen system itself. Priority order:
+
+  1. HIGHEST: Fix kaizen waiver quality (#280) — agents waive meta-findings too easily. Add enforcement so 'low frequency' is
+  not accepted when impact-per-occurrence is high. This happens almost every session.
+
+  2. Hook evolution: hooks are in bash but bash is fragile (heredoc quoting, no JSON parsing, no structured data). Evaluate
+  moving hooks to a better language or at least adding a shared library for common patterns (JSON read/write, state
+  management, PR detection).
+
+  3. Hook QoL: look at open kaizen issues in area/hooks — fix concrete bugs, add missing tests, improve error messages.
+
+  4. Testing evolution: interaction tests between hooks, test coverage for the kaizen skill chain, test the trampoline
+  self-update mechanism.
+
+  5. Anything else that makes the kaizen system more reliable, self-improving, and autonomous.
+
+  Work on whatever has the highest compound impact. Fix symptoms AND categories."
+
+for each PR, work on it to completion, merge it. 
+track your work with todos, make sure all todos are finished.
+you will receive kaizen reflections. track any kaizen reflection as todo, filing them as issues
+you will get a post completion meta reflection. track the post completion meta reflection to post them
+open an issue tracking your work progress, keep updating it at milestones. track constantly updating it as todo
